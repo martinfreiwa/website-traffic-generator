@@ -8,8 +8,8 @@ System-wide communication tool to alert users about maintenance, features, or is
 
 ## Features
 *   [x] **Create Broadcast**: WYSIWYG editor for announcement content.
-*   [ ] **Targeting**: Send to "All Users", "Active Projects", or "Free Tier".
-*   [ ] **Scheduling**: Set start and end times for banner visibility.
+*   [x] **Targeting**: Send to "All Users", "Active Projects", or "Free Tier".
+*   [x] **Scheduling**: Set start and end times for banner visibility.
 
 ## Planned Improvements
 ### Core Functionality (Must Have)

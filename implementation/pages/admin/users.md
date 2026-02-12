@@ -7,13 +7,13 @@
 Full control over user accounts.
 
 ## Features
-*   [ ] **User List**: Filter by joined date, status, email.
-*   [ ] **User Edit**:
-    *   Change password/email.
-    *   Add/Remove credits manually.
-    *   Ban/Suspend user.
-    *   View user's projects.
-    *   Impersonate user (Login as User).
+*   [x] **User List**: Filter by joined date, status, email.
+*   [x] **User Edit**:
+    *   [x] Change password/email.
+    *   [x] Add/Remove credits manually.
+    *   [x] Ban/Suspend user.
+    *   [x] View user's projects.
+    *   [x] Impersonate user (Login as User).
 
 ## Planned Improvements
 *   [ ] **Bulk Email**: Send announcements to selected users.
