@@ -1,0 +1,13 @@
+# KiloCode Ignore Rules
+# This file defines patterns for files that KiloCode can edit
+# By default, all files are editable unless specified otherwise
+
+# Allow all files by default
+# This file exists to enable file editing capabilities
+
+# Uncomment lines below to restrict editing:
+# *.key
+# *.pem
+# *.env
+# secrets/
+# credentials/

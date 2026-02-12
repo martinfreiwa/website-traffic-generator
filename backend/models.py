@@ -1,68 +1,90 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, JSON
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, JSON, Float, Text
 from sqlalchemy.orm import relationship
 from database import Base
 import datetime
+import uuid
+
+def generate_uuid():
+    return str(uuid.uuid4())
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    email = Column(String, unique=True, index=True)
+    password_hash = Column(String)
+    role = Column(String, default="user") # 'user', 'admin'
+    balance = Column(Float, default=0.00)
+    api_key = Column(String, unique=True, nullable=True)
+    
+    # Affiliate Info
+    affiliate_code = Column(String, unique=True, nullable=True)
+    referred_by = Column(String, ForeignKey("users.id"), nullable=True)
+    
+    status = Column(String, default="active") # 'active', 'suspended'
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    # Extended Profile
+    phone = Column(String, nullable=True)
+    company = Column(String, nullable=True)
+    vat_id = Column(String, nullable=True)
+    address = Column(String, nullable=True)
+    city = Column(String, nullable=True)
+    country = Column(String, nullable=True)
+
+    projects = relationship("Project", back_populates="user")
+    transactions = relationship("Transaction", back_populates="user")
+    # Self-referential relationship for affiliates
+    referrer = relationship("User", remote_side=[id], backref="referrals")
+
+class AffiliateEarnings(Base):
+    __tablename__ = "affiliate_earnings"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    referrer_id = Column(String, ForeignKey("users.id"))
+    referee_id = Column(String, ForeignKey("users.id")) # The user who bought creates
+    transaction_id = Column(String, ForeignKey("transactions.id"))
+    amount = Column(Float)
+    status = Column(String, default="pending") # 'pending', 'paid'
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 class Project(Base):
     __tablename__ = "projects"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"))
     name = Column(String, index=True)
-    description = Column(String, nullable=True)
-    is_active = Column(Boolean, default=True)
+    status = Column(String, default="active") # 'active', 'stopped', 'completed'
+    plan_type = Column(String, default="Custom")
     
-    # Scheduling
-    start_date = Column(DateTime, nullable=True)
-    end_date = Column(DateTime, nullable=True)
-    active_hours_start = Column(Integer, nullable=True) # 0-23
-    active_hours_end = Column(Integer, nullable=True)   # 0-23
-    
-    # Configuration
-    visitors_per_min = Column(Integer, default=100)
-    mode = Column(String, default="direct_hit") # "visit" or "direct_hit"
-    returning_visitor_pct = Column(Integer, default=0)
-    bounce_rate_pct = Column(Integer, default=0)
-    referrer = Column(String, default="")
-    
-    # Phase 3: Targeting & Sources
-    target_country = Column(String, nullable=True) # ISO code
-    target_state = Column(String, nullable=True)   # State name or code
-    target_city = Column(String, nullable=True)    # City name or code
-    traffic_source_preset = Column(String, default="direct") # "direct", "organic", "social"
-    utm_tags = Column(JSON, nullable=True) # {source, medium, campaign, content, term}
-    device_distribution = Column(JSON, nullable=True) # {desktop, mobile, tablet}
-    enable_circadian_rhythm = Column(Boolean, default=False)
-    daily_visitor_limit = Column(Integer, nullable=True)
+    # High Level Constraints (for easy querying without parsing JSON)
+    daily_limit = Column(Integer, default=0)
+    total_target = Column(Integer, default=0)
     hits_today = Column(Integer, default=0)
-    is_dry_run = Column(Boolean, default=False)
-    tier = Column(String, default="professional") # "economy", "professional"
+    total_hits = Column(Integer, default=0)
+    expires_at = Column(DateTime, nullable=True)
     
-    targets = relationship("Target", back_populates="project", cascade="all, delete-orphan")
+    # THE CORE CONFIG
+    # Stores the full ProjectSettings object from frontend
+    settings = Column(JSON, nullable=False) 
+    
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    last_run = Column(DateTime, nullable=True)
-
-class Target(Base):
-    __tablename__ = "targets"
-
-    id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id"))
-    url = Column(String)
-    title = Column(String, nullable=True)
-    tid = Column(String, nullable=True) # GA4 Tracking ID
     
-    project = relationship("Project", back_populates="targets")
-    funnel_steps = relationship("FunnelStep", back_populates="target", cascade="all, delete-orphan")
+    user = relationship("User", back_populates="projects")
+    traffic_logs = relationship("TrafficLog", back_populates="project")
 
-class FunnelStep(Base):
-    __tablename__ = "funnel_steps"
+class Transaction(Base):
+    __tablename__ = "transactions"
 
-    id = Column(Integer, primary_key=True, index=True)
-    target_id = Column(Integer, ForeignKey("targets.id"))
-    url = Column(String)
-    title = Column(String, nullable=True)
-    order = Column(Integer, default=0)
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"))
+    type = Column(String) # 'credit', 'debit', 'bonus'
+    amount = Column(Float)
+    description = Column(String, nullable=True)
+    status = Column(String, default="completed")
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
     
-    target = relationship("Target", back_populates="funnel_steps")
+    user = relationship("User", back_populates="transactions")
 
 class Proxy(Base):
     __tablename__ = "proxies"
@@ -79,10 +101,58 @@ class TrafficLog(Base):
     __tablename__ = "traffic_log"
 
     id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    project_id = Column(String, ForeignKey("projects.id"), nullable=True)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
     url = Column(String)
-    event_type = Column(String) # e.g. "page_view", "session_start"
+    event_type = Column(String) # "hit", "visit"
     status = Column(String) # "success", "failure"
+    country = Column(String, nullable=True)
+    ip = Column(String, nullable=True)
     proxy = Column(String, nullable=True)
-    tid = Column(String, nullable=True)
+    
+    project = relationship("Project", back_populates="traffic_logs")
+class Ticket(Base):
+    __tablename__ = "tickets"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"))
+    subject = Column(String)
+    status = Column(String, default="open") # 'open', 'in-progress', 'closed'
+    priority = Column(String, default="low") # 'low', 'medium', 'high'
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    messages = Column(JSON, default=[]) # List of {sender: 'user'|'admin', text: str, date: str}
+
+    user = relationship("User", backref="tickets")
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"))
+    title = Column(String)
+    message = Column(String)
+    type = Column(String, default="info") # 'info', 'success', 'warning', 'error'
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    user = relationship("User", backref="notifications")
+
+class SystemSettings(Base):
+    __tablename__ = "system_settings"
+
+    id = Column(Integer, primary_key=True)
+    settings = Column(JSON, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+class Broadcast(Base):
+    __tablename__ = "broadcasts"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    title = Column(String, nullable=False)
+    message = Column(String, nullable=False)
+    type = Column(String, default="info")  # 'info', 'warning', 'critical', 'success'
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)
+    action_url = Column(String, nullable=True)
+    action_text = Column(String, nullable=True)

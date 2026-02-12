@@ -3,12 +3,19 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
 
-# For now we use SQLite to ensure it works out-of-the-box. 
-# In production, this would be a PostgreSQL URL.
+# Default to local SQLite for easier local development
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./traffic_nexus.db")
 
+connect_args = {}
+if "sqlite" in SQLALCHEMY_DATABASE_URL:
+    connect_args = {"check_same_thread": False}
+
 engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in SQLALCHEMY_DATABASE_URL else {}
+    SQLALCHEMY_DATABASE_URL,
+    connect_args=connect_args,
+    pool_size=20,
+    max_overflow=40,
+    pool_recycle=3600
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

@@ -150,23 +150,30 @@ For `AdminLiveUsers.tsx` to work:
 ## 5. Implementation Roadmap
 
 ### Phase 1: Foundation (Days 1-2)
-- [ ] Initialize PostgreSQL DB with schemas above.
-- [ ] Create `main.py` endpoints for Auth (JWT) and User Profile.
-- [ ] Implement `POST /projects` with JSONB storage.
+- [x] Initialize PostgreSQL DB with schemas above.
+- [x] Create `main.py` endpoints for Auth (JWT) and User Profile.
+- [x] Implement `POST /projects` with JSONB storage.
 
 ### Phase 2: Core Logic (Days 3-4)
-- [ ] Implement the **Pricing Engine** (Quote API).
-- [ ] Implement **Affiliate Logic** (Link tracking + DB triggers).
-- [ ] Build `GET /projects` to return JSONB settings 1:1.
+- [x] Implement the **Pricing Engine** (Quote API).
+- [x] Implement **Affiliate Logic** (Link tracking + DB triggers).
+- [x] Build `GET /projects` to return JSONB settings 1:1.
 
 ### Phase 3: The Engine Bridge (Days 5-7)
-- [ ] Upgrade `visitor_engine.py` to read from PostgreSQL `projects` and parse `settings`.
-- [ ] Implement Multi-Geo Proxy Selector based on `geoTargets`.
-- [ ] Create SSE Endpoint for Live Pulse.
+- [x] Upgrade `visitor_engine.py` to read from PostgreSQL `projects` and parse `settings`.
+- [x] Implement Multi-Geo Proxy Selector based on `geoTargets`.
+- [x] Create SSE Endpoint for Live Pulse.
 
 ### Phase 4: Migration & Polish
-- [ ] Write script to seed `Test-Site` local data into Prod DB.
-- [ ] Test Payment Webhook flow.
+- [x] Write script to seed `Test-Site` local data into Prod DB. (Completed via `migrate_legacy.py`)
+- [x] Test Payment Webhook flow.
+
+### Phase 5: Additional Features Delivered (Bonus)
+- [x] Global `POST /start` and `POST /stop` for ad-hoc simulation.
+- [x] Admin Dashboard Analytics (`/admin/stats`).
+- [x] API Key Management (`/auth/api-key`).
+- [x] Admin User Promotion System.
+- [x] Frontend Integration (React + Vite).
 
 ---
 *Status: READY FOR EXECUTION*

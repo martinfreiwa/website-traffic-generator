@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://user:pass@db:5432/trafficnexus
+      - SECRET_KEY=your-secret-key-change-this-in-prod
+    depends_on:
+      - db
+    restart: always
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=pass
+      - POSTGRES_DB=trafficnexus
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+volumes:
+  postgres_data:

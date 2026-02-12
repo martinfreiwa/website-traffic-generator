@@ -47,9 +47,11 @@ async def prefetch_titles(urls: list[str]):
     if tasks:
         await asyncio.gather(*tasks)
 
-async def find_ga4_tid(url: str, timeout: float = 8.0) -> str:
+async def find_ga4_tid(url: str, timeout: float = 10.0) -> str:
     """
     Scans a web page for GA4 Tracking IDs (starting with G-).
+    If a tag manager URL like GT-XXXX is found, it attempts to fetch that script
+    to resolve the actual G-XXXX ID.
     """
     try:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
@@ -60,34 +62,53 @@ async def find_ga4_tid(url: str, timeout: float = 8.0) -> str:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
             
-            # Expanded search for GA4 measurement IDs: G-XXXXXXXXXX
             text = response.text
             
-            # Look for common tag patterns
-            patterns = [
-                r'\"(G-[A-Z0-9]+)\"',
-                r"'(G-[A-Z0-9]+)'",
-                r'tid:[\s]*[\"\'\`](G-[A-Z0-9]+)[\"\'\`]',
-                r'measurementId:[\s]*[\"\'\`](G-[A-Z0-9]+)[\"\'\`]',
-                r'gtag\([\"\'\`]config[\"\'\`],[\s]*[\"\'\`](G-[A-Z0-9]+)[\"\'\`]',
-                r'id=(G-[A-Z0-9]+)\b',
-                r'\b(G-[A-Z0-9]{5,15})\b'
-            ]
+            def extract_ids(content: str):
+                patterns = [
+                    r'\"((?:G|GT)-[A-Z0-9]+)\"',
+                    r"'((?:G|GT)-[A-Z0-9]+)'",
+                    r'tid:[\s]*[\"\'\`]((?:G|GT)-[A-Z0-9]+)[\"\'\`]',
+                    r'measurementId:[\s]*[\"\'\`]((?:G|GT)-[A-Z0-9]+)[\"\'\`]',
+                    r'gtag\([\"\'\`]config[\"\'\`],[\s]*[\"\'\`]((?:G|GT)-[A-Z0-9]+)[\"\'\`]',
+                    r'id=((?:G|GT)-[A-Z0-9]+)\b',
+                    r'\b((?:G|GT)-[A-Z0-9]{5,15})\b'
+                ]
+                matches = []
+                for p in patterns:
+                    matches.extend(re.findall(p, content))
+                return [m for m in matches if len(m) > 5 and len(m) < 20]
+
+            valid_matches = extract_ids(text)
             
-            all_matches = []
-            for p in patterns:
-                all_matches.extend(re.findall(p, text))
-            
-            if all_matches:
-                # Filter out obvious false positives and sort by frequency or length
-                from collections import Counter
-                valid_matches = [m for m in all_matches if len(m) > 5 and len(m) < 20]
-                if valid_matches:
-                    # Return the most frequent one if multiples exist, or just the first
-                    most_common = Counter(valid_matches).most_common(1)[0][0]
-                    logger.info(f"Discovered GA4 TID for {url}: {most_common}")
+            # If we found matches, check if any are GA4 (G-) or Tag Manager (GT-)
+            if valid_matches:
+                # Priority 1: Direct GA4 IDs (G-)
+                ga4_ids = [m for m in valid_matches if m.startswith('G-')]
+                if ga4_ids:
+                    from collections import Counter
+                    most_common = Counter(ga4_ids).most_common(1)[0][0]
+                    logger.info(f"Discovered direct GA4 TID for {url}: {most_common}")
                     return most_common
-            
+
+                # Priority 2: Google Tag Manager IDs (GT-). Follow the script to find the relative G- ID.
+                gt_ids = [m for m in valid_matches if m.startswith('GT-')]
+                if gt_ids:
+                    gt_id = gt_ids[0] # Take the first GT ID
+                    logger.info(f"Found Google Tag ID {gt_id}, attempting to resolve GA4 ID from script...")
+                    script_url = f"https://www.googletagmanager.com/gtag/js?id={gt_id}"
+                    try:
+                        script_res = await client.get(script_url, headers=headers)
+                        if script_res.status_code == 200:
+                            nested_ids = extract_ids(script_res.text)
+                            nested_ga4 = [m for m in nested_ids if m.startswith('G-')]
+                            if nested_ga4:
+                                resolved_id = nested_ga4[0]
+                                logger.info(f"Resolved GA4 TID {resolved_id} from {gt_id}")
+                                return resolved_id
+                    except Exception as script_err:
+                        logger.error(f"Failed to fetch GT script {script_url}: {script_err}")
+
             logger.warning(f"No GA4 Tracking ID found for {url} (Content length: {len(text)})")
             return ""
     except Exception as e:
