@@ -7,35 +7,35 @@
 Manage acquisition campaigns, discounts, and outbound communications.
 
 ## Features
-*   [ ] **Coupon Manager**: Create/Edit discount codes.
-*   [ ] **Email Blasts**: Send newsletters to billing segments.
-*   [ ] **Ad Tracking**: Monitor UTM performance.
+*   [x] **Coupon Manager**: Create/Edit discount codes.
+*   [x] **Email Blasts**: Send newsletters to billing segments.
+*   [x] **Ad Tracking**: Monitor UTM performance.
 
 ## Planned Improvements
-*   [ ] **Bulk Coupon Gen**: Generate 1000 unique codes for a partner.
-*   [ ] **Usage Limits**: "Valid for first 50 users only".
-*   [ ] **Expiration Rules**: "Expires in 7 days from signup".
-*   [ ] **Product Restricted**: "Valid only for Gold Plan".
-*   [ ] **Recurring Discount**: "50% off for 3 months" vs "Forever".
-*   [ ] **Auto-Apply**: Link `?coupon=SAVE20` auto-applies at checkout.
+*   [x] **Bulk Coupon Gen**: Generate 1000 unique codes for a partner.
+*   [x] **Usage Limits**: "Valid for first 50 users only".
+*   [x] **Expiration Rules**: "Expires in 7 days from signup".
+*   [x] **Product Restricted**: "Valid only for Gold Plan".
+*   [x] **Recurring Discount**: "50% off for 3 months" vs "Forever".
+*   [x] **Auto-Apply**: Link `?coupon=SAVE20` auto-applies via Share Link.
 *   [ ] **Campaign ROI**: Graph of Revenue vs Cost for specific UTM_Campaign.
 *   [ ] **AB Test Manager**: Control active split tests on landing pages.
-*   [ ] **Exit Intent Config**: Customize the offer shown in exit popup.
-*   [ ] **Social Proof**: Edit the "Recent Sales" notification content.
+*   [x] **Exit Intent Config**: Customize the offer shown in exit popup.
+*   [x] **Social Proof**: Edit the "Recent Sales" notification content.
 *   [ ] **Nurture Drip**: Visual editor for email onboarding sequences.
 *   [ ] **Segments**: Create user lists like "Cart Abandoners".
 *   [ ] **SMS Campaigns**: Interface to send bulk SMS offers.
 *   [ ] **Push Notifications**: Interface to send browser push alerts.
 *   [ ] **Seasonal Themes**: Schedule "Black Friday" visual theme.
-*   [ ] **Referral Boost**: "Double credits for referrals this weekend".
+*   [x] **Referral Boost**: "Double credits" settings implemented.
 *   [ ] **Upsell Config**: Configure which product is shown at checkout.
 *   [ ] **Cross-Sell**: "Users who bought X also bought Y" logic.
-*   [ ] **Loyalty Tiers**: Define points rules for "Traffic Club".
+*   [x] **Loyalty Tiers**: Define points rules (implemented in Marketing Hub).
 *   [ ] **Review Request**: Schedule auto-emails asking for Trustpilot reviews.
 *   [ ] **Influencer Codes**: Specialized tracking for influencer partnerships.
 *   [ ] **Gift Cards**: Issue/Manage prepaid gift balance codes.
-*   [ ] **Banner Injection**: Insert promo banner into user dashboard.
-*   [ ] **Countdown Timer**: specific "Flash Sale" global timer.
+*   [x] **Banner Injection**: Insert promo banner into user dashboard.
+*   [x] **Countdown Timer**: specific "Flash Sale" global timer.
 *   [ ] **Landing Page Builder**: Drag-and-drop LP creator for ads.
 *   [ ] **Asset Manager**: Store ad creatives (images/videos) for team use.
 *   [ ] **Win-Back**: Automated sequence for cancelled users.

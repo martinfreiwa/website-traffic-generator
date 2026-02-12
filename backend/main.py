@@ -71,6 +71,16 @@ class UserResponse(BaseModel):
     balance: float
     api_key: Optional[str] = None
     affiliate_code: Optional[str] = None
+    status: str = "active"
+    plan: str = "free"
+    shadow_banned: bool = False
+    is_verified: bool = False
+    notes: Optional[str] = None
+    tags: List[str] = []
+    ban_reason: Optional[str] = None
+    created_at: Optional[datetime] = None
+    last_ip: Optional[str] = None
+    last_active: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -209,6 +219,18 @@ class BroadcastResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+class AdminUserUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    role: Optional[str] = None
+    status: Optional[str] = None
+    plan: Optional[str] = None
+    shadow_banned: Optional[bool] = None
+    is_verified: Optional[bool] = None
+    notes: Optional[str] = None
+    tags: Optional[List[str]] = None
+    ban_reason: Optional[str] = None
 
 class SystemSettingsUpdate(BaseModel):
     settings: Dict[str, Any]
@@ -979,6 +1001,28 @@ def get_all_users(
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return db.query(models.User).all()
+
+@app.put("/admin/users/{user_id}")
+def update_user_admin(
+    user_id: str,
+    user_update: AdminUserUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    update_data = user_update.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_user, key, value)
+    
+    db.commit()
+    db.refresh(db_user)
+    return {"status": "success"}
 
 
 @app.get("/admin/transactions", response_model=List[TransactionResponse])

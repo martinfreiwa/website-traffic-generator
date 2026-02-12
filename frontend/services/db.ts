@@ -1,5 +1,5 @@
 
-import { Project, PriceClass, ProjectSettings, Transaction, User, Ticket, SystemSettings, Notification, TrafficLog, SystemAlert, LiveVisitor, Broadcast, AdminStats, Coupon, MarketingCampaign } from '../types';
+import { Project, PriceClass, ProjectSettings, Transaction, User, Ticket, SystemSettings, Notification, TrafficLog, SystemAlert, LiveVisitor, Broadcast, AdminStats, Coupon, MarketingCampaign, ConversionSettings } from '../types';
 
 const API_BASE_URL = "http://127.0.0.1:8001";
 
@@ -119,7 +119,7 @@ export const db = {
                 id: p.id,
                 userId: p.user_id,
                 name: p.name,
-                plan: p.plan_type,
+                plan: p.plan_type || 'Custom', // Ensure plan is populated
                 status: p.status,
                 expires: p.expires_at || 'Never',
                 settings: p.settings,
@@ -211,14 +211,27 @@ export const db = {
             balance: u.balance,
             status: u.status || 'active',
             joinedDate: u.created_at?.split('T')[0] || u.joinedDate || new Date().toISOString().split('T')[0],
-            projectsCount: u.projects_count || 0
+            projectsCount: u.projects_count || 0,
+            plan: u.plan || 'free',
+            shadowBanned: u.shadow_banned || false,
+            isVerified: u.is_verified || false,
+            notes: u.notes || '',
+            tags: u.tags || [],
+            banReason: u.ban_reason || '',
+            lastIp: u.last_ip || '',
+            lastActive: u.last_active || ''
         }));
         localStorage.setItem('modus_users_cache', JSON.stringify(mapped));
         return mapped;
     },
 
     updateUser: async (user: User) => {
-        console.log("Updating user:", user);
+        const users = db.getUsers();
+        const index = users.findIndex(u => u.id === user.id);
+        if (index >= 0) {
+            users[index] = user;
+            localStorage.setItem('modus_users_cache', JSON.stringify(users));
+        }
         return user;
     },
 
@@ -614,5 +627,67 @@ export const db = {
         ];
         localStorage.setItem('modus_marketing_cache', JSON.stringify(initial));
         return initial;
+    },
+
+    // Conversion Settings
+    getConversionSettings: (): ConversionSettings => {
+        const data = localStorage.getItem('modus_conversion_settings');
+        if (data) return JSON.parse(data);
+
+        const initial: ConversionSettings = {
+            socialProof: {
+                enabled: true,
+                position: 'bottom-left',
+                delay: 5,
+                showRealData: false,
+                customMessages: ['Someone in New York purchased Momentum Plan', 'New user joined from London']
+            },
+            exitIntent: {
+                enabled: false,
+                headline: 'Wait! Don\'t miss out.',
+                subtext: 'Get 20% off your first month with code: STAY20',
+                couponCode: 'STAY20',
+                showOncePerSession: true
+            },
+            promoBar: {
+                enabled: false,
+                message: 'Limited Time Offer: Get 50% off all annual plans!',
+                buttonText: 'Claim Offer',
+                buttonLink: '/pricing',
+                backgroundColor: '#ff4d00',
+                textColor: '#ffffff'
+            }
+        };
+        localStorage.setItem('modus_conversion_settings', JSON.stringify(initial));
+        return initial;
+    },
+
+    saveConversionSettings: (settings: ConversionSettings) => {
+        localStorage.setItem('modus_conversion_settings', JSON.stringify(settings));
+    },
+
+    // Loyalty & Referrals
+    getLoyaltySettings: (): import('../types').LoyaltySettings => {
+        const data = localStorage.getItem('modus_loyalty_settings');
+        if (data) return JSON.parse(data);
+        const initial = { enabled: false, pointsPerDollar: 1, redemptionRate: 100, bonusSignupPoints: 50 };
+        localStorage.setItem('modus_loyalty_settings', JSON.stringify(initial));
+        return initial;
+    },
+
+    saveLoyaltySettings: (settings: import('../types').LoyaltySettings) => {
+        localStorage.setItem('modus_loyalty_settings', JSON.stringify(settings));
+    },
+
+    getReferralSettings: (): import('../types').ReferralSettings => {
+        const data = localStorage.getItem('modus_referral_settings');
+        if (data) return JSON.parse(data);
+        const initial = { enabled: false, referrerReward: 25, refereeReward: 25, rewardType: 'credit' as const };
+        localStorage.setItem('modus_referral_settings', JSON.stringify(initial));
+        return initial;
+    },
+
+    saveReferralSettings: (settings: import('../types').ReferralSettings) => {
+        localStorage.setItem('modus_referral_settings', JSON.stringify(settings));
     }
 };

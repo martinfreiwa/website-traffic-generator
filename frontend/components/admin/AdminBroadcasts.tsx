@@ -73,8 +73,8 @@ const AdminBroadcasts: React.FC<AdminBroadcastsProps> = ({ onRefresh }) => {
         if (onRefresh) onRefresh();
     };
 
-    const handleToggleActive = async (id: string, currentStatus: boolean) => {
-        await db.updateBroadcast(id, { isActive: !currentStatus });
+    const handleToggleActive = async (item: Broadcast) => {
+        await db.updateBroadcast(item.id, { ...item, isActive: !item.isActive });
         fetchData();
     };
 
@@ -319,7 +319,7 @@ const AdminBroadcasts: React.FC<AdminBroadcastsProps> = ({ onRefresh }) => {
 
                                 <div className="mt-4">
                                     <button
-                                        onClick={() => handleToggleActive(item.id, item.isActive)}
+                                        onClick={() => handleToggleActive(item)}
                                         className={`text-xs font-bold uppercase flex items-center gap-2 ${item.isActive ? 'text-green-600' : 'text-gray-400'}`}
                                     >
                                         {item.isActive ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}

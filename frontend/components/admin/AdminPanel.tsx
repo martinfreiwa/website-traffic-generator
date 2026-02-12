@@ -19,10 +19,11 @@ import AdminCreateProject from './AdminCreateProject';
 import ApiDocs from './ApiDocs';
 import AdminMarketing from './AdminMarketing';
 import AdminCoupons from './AdminCoupons';
+import AdminConversion from './AdminConversion';
 
 import { MenuSection, User, Project, PriceClass, Transaction, Ticket, SystemSettings, SystemAlert, AdminStats } from '../../types';
 import { db } from '../../services/db';
-import { Users, LayoutDashboard, Settings, Layers, CreditCard, MessageSquare, Megaphone, Radio, FileCode, Plus, TrendingUp, Tag } from 'lucide-react';
+import { Users, LayoutDashboard, Settings, Layers, CreditCard, MessageSquare, Megaphone, Radio, FileCode, Plus, TrendingUp, Tag, Zap } from 'lucide-react';
 
 interface AdminPanelProps {
   onLogout: () => void;
@@ -52,6 +53,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
     if (path === '/admin/api-docs') return 'admin-api-docs';
     if (path === '/admin/marketing') return 'admin-marketing';
     if (path === '/admin/coupons') return 'admin-coupons';
+    if (path === '/admin/conversion') return 'admin-conversion';
     return 'admin-home';
   };
 
@@ -148,6 +150,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
       items: [
         { label: 'Marketing Hub', id: 'admin-marketing', path: 'marketing', icon: <TrendingUp size={18} /> },
         { label: 'Coupons', id: 'admin-coupons', path: 'coupons', icon: <Tag size={18} /> },
+        { label: 'Conversion', id: 'admin-conversion', path: 'conversion', icon: <Zap size={18} /> },
       ]
     },
     {
@@ -201,7 +204,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
             'admin-settings': 'settings',
             'admin-api-docs': 'api-docs',
             'admin-marketing': 'marketing',
-            'admin-coupons': 'coupons'
+            'admin-coupons': 'coupons',
+            'admin-conversion': 'conversion'
           };
           navigate(`/admin/${idToPath[id] || ''}`);
           setMobileMenuOpen(false);
@@ -257,6 +261,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
               <Route path="api-docs" element={<ApiDocs />} />
               <Route path="marketing" element={<AdminMarketing />} />
               <Route path="coupons" element={<AdminCoupons onRefresh={refreshData} />} />
+              <Route path="conversion" element={<AdminConversion />} />
               <Route path="*" element={<Navigate to="/admin" replace />} />
             </Routes>
           </div>

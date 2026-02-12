@@ -31,6 +31,16 @@ class User(Base):
     address = Column(String, nullable=True)
     city = Column(String, nullable=True)
     country = Column(String, nullable=True)
+    
+    # Administrative Fields
+    plan = Column(String, default="free") # 'free', 'pro', 'agency'
+    shadow_banned = Column(Boolean, default=False)
+    is_verified = Column(Boolean, default=False)
+    notes = Column(Text, nullable=True) # Admin private notes
+    tags = Column(JSON, default=list) # List of strings e.g. ["VIP", "High Risk"]
+    ban_reason = Column(String, nullable=True)
+    last_ip = Column(String, nullable=True)
+    last_active = Column(DateTime, nullable=True)
 
     projects = relationship("Project", back_populates="user")
     transactions = relationship("Transaction", back_populates="user")

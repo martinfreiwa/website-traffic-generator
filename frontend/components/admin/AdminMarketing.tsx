@@ -5,8 +5,12 @@ import { MarketingCampaign } from '../../types';
 import { Mail, BarChart2, Send, MousePointer, DollarSign } from 'lucide-react';
 
 const AdminMarketing: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'campaigns' | 'email'>('campaigns');
+    const [activeTab, setActiveTab] = useState<'campaigns' | 'email' | 'loyalty'>('campaigns');
     const [stats, setStats] = useState<MarketingCampaign[]>([]);
+
+    // Loyalty & Referral State
+    const [loyaltySettings, setLoyaltySettings] = useState<import('../../types').LoyaltySettings | null>(null);
+    const [referralSettings, setReferralSettings] = useState<import('../../types').ReferralSettings | null>(null);
 
     // Email Blast State
     const [emailSubject, setEmailSubject] = useState('');
@@ -16,6 +20,8 @@ const AdminMarketing: React.FC = () => {
 
     useEffect(() => {
         loadStats();
+        setLoyaltySettings(db.getLoyaltySettings());
+        setReferralSettings(db.getReferralSettings());
     }, []);
 
     const loadStats = () => {
@@ -51,8 +57,8 @@ const AdminMarketing: React.FC = () => {
                 <button
                     onClick={() => setActiveTab('campaigns')}
                     className={`pb-3 px-1 text-sm font-bold uppercase tracking-wide border-b-2 transition-colors ${activeTab === 'campaigns'
-                            ? 'border-[#ff4d00] text-[#ff4d00]'
-                            : 'border-transparent text-gray-500 hover:text-gray-800'
+                        ? 'border-[#ff4d00] text-[#ff4d00]'
+                        : 'border-transparent text-gray-500 hover:text-gray-800'
                         }`}
                 >
                     <div className="flex items-center gap-2">
@@ -63,13 +69,25 @@ const AdminMarketing: React.FC = () => {
                 <button
                     onClick={() => setActiveTab('email')}
                     className={`pb-3 px-1 text-sm font-bold uppercase tracking-wide border-b-2 transition-colors ${activeTab === 'email'
-                            ? 'border-[#ff4d00] text-[#ff4d00]'
-                            : 'border-transparent text-gray-500 hover:text-gray-800'
+                        ? 'border-[#ff4d00] text-[#ff4d00]'
+                        : 'border-transparent text-gray-500 hover:text-gray-800'
                         }`}
                 >
                     <div className="flex items-center gap-2">
                         <Mail size={16} />
                         <span>Email Blasts</span>
+                    </div>
+                </button>
+                <button
+                    onClick={() => setActiveTab('loyalty')}
+                    className={`pb-3 px-1 text-sm font-bold uppercase tracking-wide border-b-2 transition-colors ${activeTab === 'loyalty'
+                        ? 'border-[#ff4d00] text-[#ff4d00]'
+                        : 'border-transparent text-gray-500 hover:text-gray-800'
+                        }`}
+                >
+                    <div className="flex items-center gap-2">
+                        <DollarSign size={16} />
+                        <span>Loyalty & Referrals</span>
                     </div>
                 </button>
             </div>
@@ -128,7 +146,7 @@ const AdminMarketing: React.FC = () => {
                         <span className="font-bold">Track New URL</span>
                     </button>
                 </div>
-            ) : (
+            ) : activeTab === 'email' ? (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Compose Area */}
                     <div className="lg:col-span-2 space-y-4">
@@ -211,6 +229,130 @@ const AdminMarketing: React.FC = () => {
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Loyalty Program */}
+                    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="p-2 bg-purple-100 text-purple-600 rounded-lg">
+                                <DollarSign size={24} />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900">Loyalty Program</h3>
+                                <p className="text-xs text-gray-500">Reward users for spending.</p>
+                            </div>
+                            <div className="ml-auto">
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={loyaltySettings?.enabled}
+                                        onChange={e => setLoyaltySettings(prev => prev ? { ...prev, enabled: e.target.checked } : null)}
+                                        className="sr-only peer"
+                                    />
+                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#ff4d00]"></div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Points per $1 Spent</label>
+                                <input
+                                    type="number"
+                                    value={loyaltySettings?.pointsPerDollar || ''}
+                                    onChange={e => setLoyaltySettings(prev => prev ? { ...prev, pointsPerDollar: Number(e.target.value) } : null)}
+                                    className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-black outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Redemption Rate (Points = $1)</label>
+                                <input
+                                    type="number"
+                                    value={loyaltySettings?.redemptionRate || ''}
+                                    onChange={e => setLoyaltySettings(prev => prev ? { ...prev, redemptionRate: Number(e.target.value) } : null)}
+                                    className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-black outline-none"
+                                />
+                                <p className="text-[10px] text-gray-400 mt-1">Example: 100 points = $1 discount.</p>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Bonus Signup Points</label>
+                                <input
+                                    type="number"
+                                    value={loyaltySettings?.bonusSignupPoints || ''}
+                                    onChange={e => setLoyaltySettings(prev => prev ? { ...prev, bonusSignupPoints: Number(e.target.value) } : null)}
+                                    className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-black outline-none"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Referral Program */}
+                    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="p-2 bg-green-100 text-green-600 rounded-lg">
+                                <MousePointer size={24} />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900">Referral Program</h3>
+                                <p className="text-xs text-gray-500">Incentivize word-of-mouth growth.</p>
+                            </div>
+                            <div className="ml-auto">
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={referralSettings?.enabled}
+                                        onChange={e => setReferralSettings(prev => prev ? { ...prev, enabled: e.target.checked } : null)}
+                                        className="sr-only peer"
+                                    />
+                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#ff4d00]"></div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Referrer Gets</label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-2 text-gray-400">$</span>
+                                        <input
+                                            type="number"
+                                            value={referralSettings?.referrerReward || ''}
+                                            onChange={e => setReferralSettings(prev => prev ? { ...prev, referrerReward: Number(e.target.value) } : null)}
+                                            className="w-full p-2 pl-6 border border-gray-300 rounded focus:ring-2 focus:ring-black outline-none"
+                                        />
+                                    </div>
+                                    <p className="text-[10px] text-gray-400 mt-1">Credit added to balance.</p>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Referee Gets</label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-2 text-gray-400">$</span>
+                                        <input
+                                            type="number"
+                                            value={referralSettings?.refereeReward || ''}
+                                            onChange={e => setReferralSettings(prev => prev ? { ...prev, refereeReward: Number(e.target.value) } : null)}
+                                            className="w-full p-2 pl-6 border border-gray-300 rounded focus:ring-2 focus:ring-black outline-none"
+                                        />
+                                    </div>
+                                    <p className="text-[10px] text-gray-400 mt-1">Discount on first purchase.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="lg:col-span-2 flex justify-end">
+                        <button
+                            onClick={() => {
+                                if (loyaltySettings) db.saveLoyaltySettings(loyaltySettings);
+                                if (referralSettings) db.saveReferralSettings(referralSettings);
+                                alert('Settings Saved!');
+                            }}
+                            className="bg-black text-white px-6 py-2 rounded font-bold hover:bg-gray-800"
+                        >
+                            Save Settings
+                        </button>
                     </div>
                 </div>
             )}

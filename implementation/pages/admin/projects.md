@@ -7,7 +7,7 @@
 Super-admin control over all campaigns on the platform.
 
 ## Features
-*   [ ] **Project List**: Global list of all campaigns.
+*   [x] **Project List**: Global list of all campaigns.
 *   [ ] **Create Project**: Manually create campaign for any user.
 *   [ ] **Edit Project**: Force stop/pause, adjust hidden parameters (priority, weight).
 *   [ ] **Debug**: View raw logs for specific project execution.
@@ -16,7 +16,7 @@ Super-admin control over all campaigns on the platform.
 *   [ ] **Admin Boost**: Flag to prioritize project in the queue.
 *   [ ] **Force Stop Reason**: Text input to explain why a project was stopped.
 *   [ ] **Batch Edit**: Adjust settings for multiple projects at once.
-*   [ ] **Search by Domain**: Quickly find all campaigns targeting `domain.com`.
+*   [x] **Search by Domain**: Quickly find all campaigns targeting `domain.com`.
 *   [ ] **Flagged Projects**: Auto-flag campaigns with suspicious URLs (phishing etc).
 *   [ ] **Domain Blacklist**: "Prevent any user from targeting youtube.com".
 *   [ ] **Priority Slider**: -10 to +10 weight adjustment for scheduling queue.

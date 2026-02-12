@@ -128,6 +128,7 @@ export interface Project {
   userId: string; // Added for Admin aggregation
   externalId?: string; // ID from SparkTraffic API
   name: string;
+  domain?: string; // New: Extracted from entryUrls for filtering
   plan: string; // "Custom" or legacy plan name
   customTarget?: CustomTarget; // New field for volume/duration
   expires: string;
@@ -199,6 +200,15 @@ export interface User {
   zip?: string;
   country?: string;
   paymentMethods?: PaymentMethod[];
+
+  // Admin Fields
+  tags?: string[];
+  notes?: string;
+  isVerified?: boolean;
+  shadowBanned?: boolean;
+  plan?: 'free' | 'pro' | 'agency'; // User-level plan
+  lastIp?: string;
+  banReason?: string;
 }
 
 export interface LiveVisitor {
@@ -304,9 +314,28 @@ export interface Coupon {
   discountValue: number;
   expiryDate?: string;
   maxUses?: number;
+  maxUsesPerUser?: number; // New: Limit per user
+  allowedPlans?: string[]; // New: Restrict to specific plans
+  bulkBatchId?: string; // New: Group ID for bulk generation
+  duration?: 'once' | 'forever' | 'repeating'; // New: SaaS field
+  durationInMonths?: number; // New: For repeating coupons
   usedCount: number;
   active: boolean;
-  boundToUser?: string; // Optional: specific user email
+  boundToUser?: string;
+}
+
+export interface LoyaltySettings {
+  enabled: boolean;
+  pointsPerDollar: number;
+  redemptionRate: number; // 100 points = $1
+  bonusSignupPoints: number;
+}
+
+export interface ReferralSettings {
+  enabled: boolean;
+  referrerReward: number; // Credit amount
+  refereeReward: number; // Discount amount or credit
+  rewardType: 'credit' | 'cash';
 }
 
 export interface MarketingCampaign {
@@ -322,4 +351,30 @@ export interface MarketingCampaign {
   conversions?: number;
   revenue?: number;
   dateCreated: string;
+}
+
+export interface ConversionSettings {
+  socialProof: {
+    enabled: boolean;
+    position: 'bottom-left' | 'bottom-right';
+    delay: number;
+    showRealData: boolean;
+    customMessages?: string[];
+  };
+  exitIntent: {
+    enabled: boolean;
+    headline: string;
+    subtext: string;
+    couponCode?: string;
+    showOncePerSession: boolean;
+  };
+  promoBar: {
+    enabled: boolean;
+    message: string;
+    buttonText?: string;
+    buttonLink?: string;
+    backgroundColor: string;
+    textColor: string;
+    endDate?: string; // New: For countdown timer
+  };
 }
