@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Helmet } from 'react-helmet-async';
+import SEO from '../SEO';
 import { Link } from 'react-router-dom';
 import {
     ArrowRight, Check, Zap, Globe, Shield, BarChart3,
@@ -25,11 +25,11 @@ const ModernLandingPage: React.FC<ModernLandingPageProps> = ({ onLogin, onNaviga
 
     return (
         <div className="min-h-screen bg-[#FAFAFA] text-gray-900 font-sans selection:bg-[#ff4d00] selection:text-white">
-            <Helmet>
-                <title>Traffic Creator - The Modern Way to Grow</title>
-                <meta name="description" content="Generate real, organic website traffic with our premium platform. Boost SEO, improve metrics, and grow your digital presence." />
-                <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-            </Helmet>
+            <SEO
+                title="Next-Gen Traffic Generation - AI-Driven SEO Visits"
+                description="Experience the future of traffic generation. AI-powered user behavior simulation for the most natural-looking analytics patterns."
+                keywords="ai traffic generator, modern seo traffic, behavioral traffic bot"
+            />
 
             {/* Floating Navbar */}
             <nav className={`fixed w-full z-50 transition-all duration-300 ${scrolled ? 'top-4' : 'top-0'}`}>

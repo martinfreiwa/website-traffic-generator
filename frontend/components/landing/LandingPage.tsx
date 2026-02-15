@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Helmet } from 'react-helmet-async';
+import SEO from '../SEO';
 import { Link } from 'react-router-dom';
 import { ArrowRight, BarChart3, Globe, ShieldCheck, ChevronDown, ChevronUp, Target, Clock, Code, TrendingUp, BarChart2, Bitcoin, Briefcase, Search, Zap, AlertTriangle, Cpu, Activity, Moon, Radio, MapPin, Link2 } from 'lucide-react';
 import QuickCampaign from './QuickCampaign';
@@ -22,7 +22,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
     "@context": "https://schema.org",
     "@type": "Organization",
     "name": "Traffic Creator",
-    "url": "http://localhost:3000/",
+    "url": "https://traffic-creator.com/",
     "description": "Premium website traffic generator for boosting SEO metrics and engagement.",
     "brand": {
       "@type": "Brand",
@@ -34,10 +34,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
     "@context": "https://schema.org",
     "@type": "WebSite",
     "name": "Traffic Creator",
-    "url": "http://localhost:3000/",
+    "url": "https://traffic-creator.com/",
     "potentialAction": {
       "@type": "SearchAction",
-      "target": "http://localhost:3000/search?q={search_term_string}",
+      "target": "https://traffic-creator.com/search?q={search_term_string}",
       "query-input": "required name=search_term_string"
     }
   };
@@ -149,31 +149,12 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
 
   return (
     <div className="min-h-screen bg-white text-gray-900 font-sans overflow-hidden">
-      <Helmet>
-        <title>Traffic Creator - Boost Your Website Traffic | Premium SEO Traffic Generator</title>
-        <meta name="description" content="Get high-quality, residential IP traffic to improve your SEO rankings and metrics. Fully compatible with GA4 and bypasses bot filters with randomized natural events." />
-        <meta name="keywords" content="website traffic, boost traffic, SEO traffic, organic traffic, traffic generator, buy website traffic, traffic creator, website visitors, GA4 traffic" />
-
-        {/* OpenGraph */}
-        <meta property="og:title" content="Traffic Creator - Boost Your Website Traffic" />
-        <meta property="og:description" content="High-quality residential IP traffic for SEO boosting. Safe for GA4 and AdSense." />
-        <meta property="og:type" content="website" />
-        <meta property="og:url" content="http://localhost:3000/" />
-
-        {/* Twitter */}
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Traffic Creator - Boost Your Website Traffic" />
-        <meta name="twitter:description" content="Premium website traffic generator using residential IPs. Boost your SEO metrics safely." />
-
-        {/* Schema.org JSON-LD */}
-        <script type="application/ld+json">
-          {JSON.stringify(organizationSchema)}
-        </script>
-        <script type="application/ld+json">
-          {JSON.stringify(websiteSchema)}
-        </script>
-        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-      </Helmet>
+      <SEO
+        title="Traffic Creator - #1 Website Traffic Generator for SEO & Rankings"
+        description="Boost your SEO rankings with real residential website traffic. Traffic Creator helps you manipulate CTR, increase dwell time, and improve domain authority naturally."
+        keywords="website traffic, boost traffic, SEO traffic, organic traffic, traffic generator, buy website traffic, traffic creator, website visitors, GA4 traffic"
+        schema={[organizationSchema, websiteSchema]}
+      />
       {/* Navigation */}
       <nav className="border-b border-gray-100 bg-white/95 backdrop-blur-md sticky top-0 z-50 transition-all duration-300">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">

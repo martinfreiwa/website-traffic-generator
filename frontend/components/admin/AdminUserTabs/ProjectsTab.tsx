@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Project } from '../../types';
+import { Project } from '../../../types';
 import { db } from '../../../services/db';
 import { Filter, ChevronRight } from 'lucide-react';
 

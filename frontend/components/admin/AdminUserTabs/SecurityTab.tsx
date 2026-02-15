@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserSession, ImpersonationLog, BalanceAdjustmentLog } from '../../types';
+import { UserSession, ImpersonationLog, BalanceAdjustmentLog } from '../../../types';
 import { db } from '../../../services/db';
 import { Shield, Monitor, Key, Clock, Trash2, RefreshCw } from 'lucide-react';
 

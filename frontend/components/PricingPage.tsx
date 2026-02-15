@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import SEO from './SEO';
 import { ChevronRight, Check, Zap, Rocket, Shield, Globe, Terminal, Users, Search, ShoppingCart, ArrowLeft, ArrowRight } from 'lucide-react';
 import { db } from '../services/db';
 
@@ -13,7 +14,7 @@ const PricingPage: React.FC = () => {
     const PRICE_IDS = {
         starter_monthly: 'price_1T19GZJLE5bW6f8EPNVSoaGp',  // Starter Monthly
         starter_yearly: 'price_starter_yearly',
-        professional_monthly: 'price_professional_monthly', 
+        professional_monthly: 'price_professional_monthly',
         professional_yearly: 'price_professional_yearly',
         agency_monthly: 'price_agency_monthly',
         agency_yearly: 'price_agency_yearly',
@@ -187,10 +188,10 @@ const PricingPage: React.FC = () => {
 
     const handleCheckout = async () => {
         if (!selectedPlan) return;
-        
+
         const plan = plans.find(p => p.id === selectedPlan);
         if (!plan) return;
-        
+
         setLoading(true);
         try {
             const result = await db.createCheckoutSession(plan.priceId);
@@ -207,93 +208,106 @@ const PricingPage: React.FC = () => {
 
     const renderStep3 = () => {
         const currentPlan = plans.find(p => p.id === selectedPlan) || plans[1];
-        
+
         return (
-        <div className="animate-in fade-in slide-in-from-right-4 duration-500 flex flex-col lg:flex-row gap-12 max-w-7xl mx-auto">
-            {/* Left Side: Customizer */}
-            <div className="flex-1 space-y-8">
-                <div>
-                    <h2 className="text-3xl font-black text-gray-900 uppercase tracking-tighter mb-2">Customize Your Package</h2>
-                    <p className="text-gray-500 font-medium">Add premium features to boost your campaign performance.</p>
-                </div>
-
-                <div className="space-y-4">
-                    {[
-                        { id: 'proxies', label: 'Residential Proxy Pool', price: 15, icon: <Shield size={18} /> },
-                        { id: 'mobile', label: 'Mobile Device Emulation', price: 10, icon: <Globe size={18} /> },
-                        { id: 'referrers', label: 'Custom Web Referrers', price: 12, icon: <Users size={18} /> },
-                        { id: 'keywords', label: 'Extra Keyword Slots (+5)', price: 9, icon: <Search size={18} /> },
-                    ].map((addon) => (
-                        <div key={addon.id} className="bg-white border border-gray-100 p-6 flex justify-between items-center group hover:border-[#ff4d00] transition-colors cursor-pointer">
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 bg-gray-50 group-hover:bg-orange-50 group-hover:text-[#ff4d00] transition-colors">
-                                    {addon.icon}
-                                </div>
-                                <div>
-                                    <h4 className="text-sm font-black text-gray-900 uppercase tracking-tight">{addon.label}</h4>
-                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Premium Add-on</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-6">
-                                <span className="text-sm font-black text-gray-900">+€{addon.price}/mo</span>
-                                <div className="w-5 h-5 border-2 border-gray-200 rounded-sm flex items-center justify-center">
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            {/* Right Side: Summary Card */}
-            <div className="w-full lg:w-[400px]">
-                <div className="bg-black text-white p-8 sticky top-8 rounded-sm overflow-hidden">
-                    {/* Decorative Pattern */}
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-[#ff4d00] opacity-10 translate-x-16 -translate-y-16 rotate-45"></div>
-
-                    <h3 className="text-xl font-black uppercase tracking-tighter mb-8 relative">Order Summary</h3>
-
-                    <div className="space-y-6 mb-12 relative">
-                        <div className="flex justify-between items-center">
-                            <span className="text-gray-400 text-[10px] font-black uppercase tracking-widest">Selected Plan</span>
-                            <span className="font-bold text-sm">{currentPlan.name}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-gray-400 text-[10px] font-black uppercase tracking-widest">Billing Cycle</span>
-                            <span className="font-bold text-sm">{billingCycle === 'yearly' ? 'Yearly (-20%)' : 'Monthly'}</span>
-                        </div>
-                        <div className="pt-6 border-t border-gray-800 flex justify-between items-center text-xl">
-                            <span className="font-black uppercase tracking-tighter">Total Due</span>
-                            <span className="text-[#ff4d00] font-black">€{currentPlan.price}.00</span>
-                        </div>
+            <div className="animate-in fade-in slide-in-from-right-4 duration-500 flex flex-col lg:flex-row gap-12 max-w-7xl mx-auto">
+                {/* Left Side: Customizer */}
+                <div className="flex-1 space-y-8">
+                    <div>
+                        <h2 className="text-3xl font-black text-gray-900 uppercase tracking-tighter mb-2">Customize Your Package</h2>
+                        <p className="text-gray-500 font-medium">Add premium features to boost your campaign performance.</p>
                     </div>
 
-                    <button 
-                        onClick={handleCheckout}
-                        disabled={loading}
-                        className="w-full bg-[#ff4d00] py-5 text-xs font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all shadow-[0_20px_40px_rgba(255,77,0,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {loading ? 'Processing...' : 'Complete Purchase'}
-                    </button>
-
-                    <p className="text-[9px] text-gray-500 font-bold text-center mt-6 uppercase tracking-widest">
-                        Safe & Secure Checkout via Stripe
-                    </p>
+                    <div className="space-y-4">
+                        {[
+                            { id: 'proxies', label: 'Residential Proxy Pool', price: 15, icon: <Shield size={18} /> },
+                            { id: 'mobile', label: 'Mobile Device Emulation', price: 10, icon: <Globe size={18} /> },
+                            { id: 'referrers', label: 'Custom Web Referrers', price: 12, icon: <Users size={18} /> },
+                            { id: 'keywords', label: 'Extra Keyword Slots (+5)', price: 9, icon: <Search size={18} /> },
+                        ].map((addon) => (
+                            <div key={addon.id} className="bg-white border border-gray-100 p-6 flex justify-between items-center group hover:border-[#ff4d00] transition-colors cursor-pointer">
+                                <div className="flex items-center gap-4">
+                                    <div className="p-3 bg-gray-50 group-hover:bg-orange-50 group-hover:text-[#ff4d00] transition-colors">
+                                        {addon.icon}
+                                    </div>
+                                    <div>
+                                        <h4 className="text-sm font-black text-gray-900 uppercase tracking-tight">{addon.label}</h4>
+                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Premium Add-on</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-6">
+                                    <span className="text-sm font-black text-gray-900">+€{addon.price}/mo</span>
+                                    <div className="w-5 h-5 border-2 border-gray-200 rounded-sm flex items-center justify-center">
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
-                <button
-                    onClick={() => setStep(2)}
-                    className="w-full mt-4 text-gray-400 hover:text-black text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 py-4 border border-transparent hover:border-gray-200 transition-all"
-                >
-                    <ArrowLeft size={14} /> Back to Plans
-                </button>
+                {/* Right Side: Summary Card */}
+                <div className="w-full lg:w-[400px]">
+                    <div className="bg-black text-white p-8 sticky top-8 rounded-sm overflow-hidden">
+                        {/* Decorative Pattern */}
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-[#ff4d00] opacity-10 translate-x-16 -translate-y-16 rotate-45"></div>
+
+                        <h3 className="text-xl font-black uppercase tracking-tighter mb-8 relative">Order Summary</h3>
+
+                        <div className="space-y-6 mb-12 relative">
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-400 text-[10px] font-black uppercase tracking-widest">Selected Plan</span>
+                                <span className="font-bold text-sm">{currentPlan.name}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-400 text-[10px] font-black uppercase tracking-widest">Billing Cycle</span>
+                                <span className="font-bold text-sm">{billingCycle === 'yearly' ? 'Yearly (-20%)' : 'Monthly'}</span>
+                            </div>
+                            <div className="pt-6 border-t border-gray-800 flex justify-between items-center text-xl">
+                                <span className="font-black uppercase tracking-tighter">Total Due</span>
+                                <span className="text-[#ff4d00] font-black">€{currentPlan.price}.00</span>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={handleCheckout}
+                            disabled={loading}
+                            className="w-full bg-[#ff4d00] py-5 text-xs font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all shadow-[0_20px_40px_rgba(255,77,0,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {loading ? 'Processing...' : 'Complete Purchase'}
+                        </button>
+
+                        <p className="text-[9px] text-gray-500 font-bold text-center mt-6 uppercase tracking-widest">
+                            Safe & Secure Checkout via Stripe
+                        </p>
+                    </div>
+
+                    <button
+                        onClick={() => setStep(2)}
+                        className="w-full mt-4 text-gray-400 hover:text-black text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 py-4 border border-transparent hover:border-gray-200 transition-all"
+                    >
+                        <ArrowLeft size={14} /> Back to Plans
+                    </button>
+                </div>
             </div>
-        </div>
         );
     };
 
     return (
         <div className="min-h-screen bg-[#f3f4f6] py-20 px-6 font-sans">
             <div className="max-w-7xl mx-auto">
+                <SEO
+                    title="Pricing Plans - Scalable Organic Traffic Packages | Traffic Creator"
+                    description="Transparent pricing for every need. Start with our flexible credit packs or choose a monthly agency plan. Plans start at just €29."
+                    keywords="traffic bot pricing, buy website hits cost, cheap seo traffic, agency traffic plan"
+                    type="product"
+                    schema={{
+                        "@context": "https://schema.org",
+                        "@type": "PriceSpecification",
+                        "priceCurrency": "EUR",
+                        "minPrice": "29.00",
+                        "maxPrice": "2999.00"
+                    }}
+                />
                 {/* Step Indicator */}
                 <div className="flex justify-center mb-20">
                     <div className="flex items-center gap-4">

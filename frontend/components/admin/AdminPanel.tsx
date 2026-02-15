@@ -86,7 +86,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
   const refreshData = async () => {
     try {
       const [usersData, projectsData, transactionsData, ticketsData, settingsData, statsData] = await Promise.all([
-        db.getUsers(),
+        db.syncUsers(),
         db.getAdminProjects(),
         db.getAllTransactionsAdmin(),
         db.getTickets(),

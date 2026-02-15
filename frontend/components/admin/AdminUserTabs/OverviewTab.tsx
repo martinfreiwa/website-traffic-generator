@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { User, Transaction, Project, Ticket, AdminUserDetails } from '../../types';
+import { User, Transaction, Project, Ticket, AdminUserDetails } from '../../../types';
 import { db } from '../../../services/db';
 import {
     DollarSign, Layers, Award, Zap, Plus, Minus, Send,
     RefreshCw, AlertTriangle, Shield, Key, Download, Trash2,
     LogIn, Tag, FileText, Users, ChevronRight
 } from 'lucide-react';
-import CustomSelect from '../CustomSelect';
+import CustomSelect from '../../CustomSelect';
 
 interface OverviewTabProps {
     userId: string;

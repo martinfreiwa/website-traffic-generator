@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ActivityLog } from '../../types';
+import { ActivityLog } from '../../../types';
 import { db } from '../../../services/db';
 import { Clock, Filter, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -97,8 +97,8 @@ const ActivityTab: React.FC<ActivityTabProps> = ({ userId }) => {
                     >
                         <option value="all">All Activities</option>
                         {uniqueActionTypes.map(type => (
-                            <option key={type} value={type}>
-                                {getActionInfo(type).label}
+                            <option key={type as string} value={type as string}>
+                                {getActionInfo(type as string).label}
                             </option>
                         ))}
                     </select>

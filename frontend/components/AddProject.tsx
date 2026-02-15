@@ -3,6 +3,7 @@ import { db } from '../services/db';
 import { Project, ProjectSettings, GeoTarget, PayloadTemplate, Transaction } from '../types';
 import { ArrowLeft, Save, Globe, Info, Zap, Calculator, Calendar, BarChart2, Check, ExternalLink, MapPin, Search, Upload, X, Layers, Award } from 'lucide-react';
 import CustomSelect from './CustomSelect';
+import { COUNTRIES_LIST } from '../constants';
 
 interface AddProjectProps {
     onBack: () => void;
@@ -83,6 +84,7 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
 
     // State: Geo-Targeting
     const [selectedCountries, setSelectedCountries] = useState<string[]>(['US']);
+    const [countrySearch, setCountrySearch] = useState('');
     const [deviceSplit, setDeviceSplit] = useState(70); // Default 70% Desktop
 
     // State: Traffic Behavior
@@ -275,19 +277,9 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
         }, 800);
     };
 
-    // Helper: Country List (Simplified)
-    const availableCountries = [
-        { code: 'US', name: 'United States' },
-        { code: 'GB', name: 'United Kingdom' },
-        { code: 'CA', name: 'Canada' },
-        { code: 'DE', name: 'Germany' },
-        { code: 'FR', name: 'France' },
-        { code: 'AU', name: 'Australia' },
-        { code: 'BR', name: 'Brazil' },
-        { code: 'IN', name: 'India' },
-        { code: 'JP', name: 'Japan' },
-        { code: 'CN', name: 'China' },
-    ];
+    const filteredCountries = countrySearch 
+        ? COUNTRIES_LIST.filter(c => c.name.toLowerCase().includes(countrySearch.toLowerCase()) || c.code.toLowerCase().includes(countrySearch.toLowerCase()))
+        : COUNTRIES_LIST;
 
     const toggleCountry = (code: string) => {
         if (selectedCountries.includes(code)) {
@@ -468,24 +460,76 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
                             {/* Geo Map */}
                             <div>
                                 <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Geographic Location (Max 5)</label>
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                    {availableCountries.map((c) => (
+                                
+                                {/* Search Input */}
+                                <div className="relative mb-4">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                                    <input
+                                        type="text"
+                                        placeholder="Search countries..."
+                                        value={countrySearch}
+                                        onChange={(e) => setCountrySearch(e.target.value)}
+                                        className="w-full pl-10 pr-4 py-2 border border-gray-200 text-sm focus:border-[#ff4d00] outline-none"
+                                    />
+                                    {countrySearch && (
                                         <button
-                                            key={c.code}
-                                            onClick={() => toggleCountry(c.code)}
-                                            className={`p-3 text-left border text-sm font-bold flex justify-between items-center transition-all ${selectedCountries.includes(c.code)
-                                                ? 'border-[#ff4d00] bg-orange-50 text-[#ff4d00]'
-                                                : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                                                }`}
+                                            onClick={() => setCountrySearch('')}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                                         >
-                                            <span className="flex items-center gap-2">
-                                                <img src={`https://flagcdn.com/w20/${c.code.toLowerCase()}.png`} alt={c.code} className="w-5 h-auto rounded-sm" />
-                                                {c.name}
-                                            </span>
-                                            {selectedCountries.includes(c.code) && <Check size={14} />}
+                                            <X size={14} />
                                         </button>
-                                    ))}
+                                    )}
                                 </div>
+
+                                {/* Selected Countries */}
+                                {selectedCountries.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 mb-4">
+                                        {selectedCountries.map(code => {
+                                            const country = COUNTRIES_LIST.find(c => c.code === code);
+                                            return (
+                                                <span
+                                                    key={code}
+                                                    className="inline-flex items-center gap-1 px-2 py-1 bg-[#ff4d00]/10 text-[#ff4d00] text-xs font-bold"
+                                                >
+                                                    <img src={`https://flagcdn.com/w16/${code.toLowerCase()}.png`} alt={code} className="w-4 h-auto" />
+                                                    {country?.name || code}
+                                                    <button
+                                                        onClick={() => selectedCountries.length > 1 && toggleCountry(code)}
+                                                        className="ml-1 hover:text-red-500 disabled:opacity-30"
+                                                        disabled={selectedCountries.length <= 1}
+                                                    >
+                                                        <X size={12} />
+                                                    </button>
+                                                </span>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+
+                                {/* Country List - Scrollable */}
+                                <div className="border border-gray-200 max-h-[300px] overflow-y-auto">
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-1 p-1">
+                                        {filteredCountries.map((c) => (
+                                            <button
+                                                key={c.code}
+                                                onClick={() => toggleCountry(c.code)}
+                                                className={`p-2 text-left border text-xs font-bold flex justify-between items-center transition-all ${selectedCountries.includes(c.code)
+                                                    ? 'border-[#ff4d00] bg-orange-50 text-[#ff4d00]'
+                                                    : 'border-transparent bg-gray-50 text-gray-600 hover:bg-gray-100'
+                                                    }`}
+                                            >
+                                                <span className="flex items-center gap-2 truncate">
+                                                    <img src={`https://flagcdn.com/w20/${c.code.toLowerCase()}.png`} alt={c.code} className="w-4 h-auto rounded-sm flex-shrink-0" />
+                                                    <span className="truncate">{c.name}</span>
+                                                </span>
+                                                {selectedCountries.includes(c.code) && <Check size={12} className="flex-shrink-0" />}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <p className="text-[10px] text-gray-400 mt-2">
+                                    Showing {filteredCountries.length} countries • {selectedCountries.length}/5 selected
+                                </p>
                             </div>
 
                             {/* Device Split */}

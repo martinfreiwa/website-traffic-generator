@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Transaction } from '../../types';
+import { Transaction } from '../../../types';
 import { db } from '../../../services/db';
 import { DollarSign, Download, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 

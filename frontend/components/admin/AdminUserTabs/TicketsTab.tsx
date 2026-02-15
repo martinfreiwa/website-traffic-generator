@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Ticket, TicketMessage } from '../../types';
+import { Ticket, TicketMessage } from '../../../types';
 import { db } from '../../../services/db';
 import { MessageSquare, Send, ChevronDown, ChevronUp, X } from 'lucide-react';
 

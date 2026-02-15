@@ -2,8 +2,9 @@
 import React, { useState } from 'react';
 import { Project, ProjectSettings, User } from '../../types';
 import { db } from '../../services/db';
-import { Globe, Save, ArrowLeft, Settings, Activity, MapPin, MousePointer, Search, CheckCircle, AlertCircle, Smartphone, Monitor, Link, Sliders, Shield, Zap, Globe2, MousePointer2, FileText, User as UserIcon } from 'lucide-react';
+import { Globe, Save, ArrowLeft, Settings, Activity, MapPin, MousePointer, Search, CheckCircle, AlertCircle, Smartphone, Monitor, Link, Sliders, Shield, Zap, Globe2, MousePointer2, FileText, User as UserIcon, X } from 'lucide-react';
 import CustomSelect from '../CustomSelect';
+import { COUNTRIES_LIST, TRAFFIC_SOURCES, TIME_ON_PAGE_OPTS, TIMEZONES } from '../../constants';
 
 interface AdminCreateProjectProps {
     onBack: () => void;
@@ -65,6 +66,7 @@ const AdminCreateProject: React.FC<AdminCreateProjectProps> = ({ onBack, onSucce
     // User Selection State
     const [users, setUsers] = useState<User[]>([]);
     const [selectedUserId, setSelectedUserId] = useState<string>('');
+    const [countrySearch, setCountrySearch] = useState('');
 
     React.useEffect(() => {
         const loadUsers = async () => {
@@ -343,31 +345,69 @@ const AdminCreateProject: React.FC<AdminCreateProjectProps> = ({ onBack, onSucce
                     <div className="space-y-6">
                         <div>
                             <Label>Countries</Label>
-                            <div className="flex flex-wrap gap-2 mb-3">
-                                {settings.countries.map(c => (
-                                    <span key={c} className="bg-gray-100 text-gray-700 px-2 py-1 text-xs font-bold uppercase rounded-sm flex items-center gap-2">
-                                        {c} <button onClick={() => updateSetting('countries', settings.countries.filter(x => x !== c))} className="hover:text-red-500">×</button>
-                                    </span>
-                                ))}
+                            {/* Selected Countries */}
+                            {settings.countries.length > 0 && (
+                                <div className="flex flex-wrap gap-2 mb-3">
+                                    {settings.countries.map(c => {
+                                        const countryInfo = COUNTRIES_LIST.find(ct => ct.name === c || ct.code === c);
+                                        return (
+                                            <span key={c} className="bg-[#ff4d00]/10 text-[#ff4d00] px-2 py-1 text-xs font-bold flex items-center gap-1">
+                                                {countryInfo && (
+                                                    <img src={`https://flagcdn.com/w16/${countryInfo.code.toLowerCase()}.png`} alt={c} className="w-4 h-auto" />
+                                                )}
+                                                {countryInfo?.name || c}
+                                                <button onClick={() => updateSetting('countries', settings.countries.filter(x => x !== c))} className="ml-1 hover:text-red-500">
+                                                    <X size={12} />
+                                                </button>
+                                            </span>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                            {/* Search Input */}
+                            <div className="relative mb-2">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                                <input
+                                    type="text"
+                                    placeholder="Search countries..."
+                                    value={countrySearch}
+                                    onChange={(e) => setCountrySearch(e.target.value)}
+                                    className="w-full pl-9 pr-3 py-2 border border-gray-200 text-xs outline-none focus:border-[#ff4d00]"
+                                />
+                                {countrySearch && (
+                                    <button
+                                        onClick={() => setCountrySearch('')}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                )}
                             </div>
-                            <CustomSelect
-                                value=""
-                                onChange={(val) => {
-                                    if (val && !settings.countries.includes(val)) {
-                                        updateSetting('countries', [...settings.countries, val]);
+                            {/* Country Dropdown */}
+                            <div className="border border-gray-200 max-h-[150px] overflow-y-auto">
+                                <div className="grid grid-cols-2 gap-px p-1">
+                                    {COUNTRIES_LIST
+                                        .filter(c => 
+                                            !settings.countries.includes(c.name) && 
+                                            (countrySearch === '' || 
+                                                c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                                c.code.toLowerCase().includes(countrySearch.toLowerCase()))
+                                        )
+                                        .slice(0, 50)
+                                        .map(c => (
+                                            <button
+                                                key={c.code}
+                                                onClick={() => updateSetting('countries', [...settings.countries, c.name])}
+                                                className="p-2 text-left text-xs font-medium flex items-center gap-2 hover:bg-gray-50 transition-colors"
+                                            >
+                                                <img src={`https://flagcdn.com/w16/${c.code.toLowerCase()}.png`} alt={c.name} className="w-4 h-auto" />
+                                                <span className="truncate">{c.name}</span>
+                                            </button>
+                                        ))
                                     }
-                                }}
-                                placeholder="Add Country..."
-                                options={[
-                                    { value: "United States", label: "United States" },
-                                    { value: "United Kingdom", label: "United Kingdom" },
-                                    { value: "Germany", label: "Germany" },
-                                    { value: "France", label: "France" },
-                                    { value: "Canada", label: "Canada" },
-                                    { value: "India", label: "India" },
-                                    { value: "Brazil", label: "Brazil" }
-                                ]}
-                            />
+                                </div>
+                            </div>
+                            <p className="text-[10px] text-gray-400 mt-1">{settings.countries.length} countries selected</p>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
@@ -383,12 +423,7 @@ const AdminCreateProject: React.FC<AdminCreateProjectProps> = ({ onBack, onSucce
                                 <CustomSelect
                                     value={settings.timezone}
                                     onChange={(val) => updateSetting('timezone', val)}
-                                    options={[
-                                        { value: "UTC", label: "UTC" },
-                                        { value: "EST", label: "EST" },
-                                        { value: "PST", label: "PST" },
-                                        { value: "CET", label: "CET" }
-                                    ]}
+                                    options={TIMEZONES.slice(0, 10)}
                                 />
                             </div>
                         </div>
@@ -405,11 +440,7 @@ const AdminCreateProject: React.FC<AdminCreateProjectProps> = ({ onBack, onSucce
                             <CustomSelect
                                 value={settings.trafficSource}
                                 onChange={(val) => updateSetting('trafficSource', val)}
-                                options={[
-                                    { value: "organic", label: "Organic (Search)" },
-                                    { value: "direct", label: "Direct" },
-                                    { value: "social", label: "Social" }
-                                ]}
+                                options={TRAFFIC_SOURCES.slice(0, 15)}
                             />
                         </div>
 

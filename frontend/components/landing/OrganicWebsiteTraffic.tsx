@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Helmet } from 'react-helmet-async';
+import SEO from '../SEO';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Search, Activity, BarChart2, CheckCircle, Check, X, ChevronDown, ChevronUp, Globe, MousePointer, Shield, TrendingUp, Zap, Target, Layout, Clock, Play, Server, Lock, Code } from 'lucide-react';
 import QuickCampaign from './QuickCampaign';
@@ -63,13 +63,13 @@ const OrganicWebsiteTraffic: React.FC<LandingPageProps> = ({ onLogin, onNavigate
 
     return (
         <div className="min-h-screen bg-gray-50 text-gray-900 font-sans overflow-x-hidden">
-            <Helmet>
-                <title>Buy Organic Website Traffic | Boost SEO Rankings & CTR</title>
-                <meta name="description" content="Generate high-quality organic website traffic to improve SERP rankings. Real residential IPs, keyword targeting, and natural user behavior for SEO professionals." />
-                <meta name="keywords" content="organic website traffic, buy organic traffic, seo traffic, ctr manipulation, boost rankings, real website visitors" />
-                <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-                <script type="application/ld+json">{JSON.stringify(schema)}</script>
-            </Helmet>
+            <SEO
+                title="Buy Organic Website Traffic - Real Residential IPs & CTR Booster"
+                description="Get 100% real organic traffic from residential IPs. Our advanced traffic bot simulates human behavior (scroll, click, read) to boost your SERP rankings."
+                keywords="organic website traffic, buy organic traffic, seo traffic, ctr manipulation, boost rankings, real website visitors"
+                schema={schema}
+                type="product"
+            />
 
             {/* Navigation */}
             <nav className="fixed w-full top-0 z-50 transition-all duration-300 bg-white/95 backdrop-blur-md border-b border-gray-100/50">

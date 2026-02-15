@@ -291,6 +291,17 @@ class TicketCreate(BaseModel):
     messages: List[Dict[str, Any]] = []
 
 
+class TicketReply(BaseModel):
+    text: str
+    sender: str = "user"
+    attachments: Optional[List[str]] = []
+
+
+class TicketUpdate(BaseModel):
+    status: Optional[str] = None
+    priority: Optional[str] = None
+
+
 class TicketResponse(BaseModel):
     id: str
     subject: str
@@ -656,16 +667,36 @@ def register(request: Request, user: UserCreate, db: Session = Depends(get_db)):
             referred_by_id = referrer.id
 
     hashed_password = get_password_hash(user.password)
+    verification_token = secrets.token_urlsafe(32)
+    verification_token_expires = datetime.utcnow() + timedelta(hours=24)
+
     new_user = models.User(
         email=user.email,
         password_hash=hashed_password,
         referred_by=referred_by_id,
+        verification_token=verification_token,
+        verification_token_expires=verification_token_expires,
+        is_verified=False,
         # Generate basic affiliate code
         affiliate_code=f"REF-{user.email[:3].upper()}-{secrets.token_hex(3).upper()}",
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+
+    # Send verification email
+    print(f"📧 Sending verification email to: {user.email}")
+    try:
+        result = email_service.send_verification_email(user.email, verification_token)
+        if result.get("success"):
+            print(f"✅ Verification email sent to {user.email}")
+        else:
+            print(
+                f"❌ Failed to send verification email to {user.email}: {result.get('error')}"
+            )
+    except Exception as e:
+        print(f"❌ Error sending verification email: {e}")
+
     return new_user
 
 
@@ -862,9 +893,15 @@ def resend_verification(data: ResendVerificationRequest, db: Session = Depends(g
     db.commit()
 
     try:
-        email_service.send_verification_email(user.email, verification_token)
+        result = email_service.send_verification_email(user.email, verification_token)
+        if result.get("success"):
+            print(f"✅ Verification email sent to {user.email}")
+        else:
+            print(
+                f"❌ Failed to send verification email to {user.email}: {result.get('error')}"
+            )
     except Exception as e:
-        print(f"Error sending verification email: {e}")
+        print(f"❌ Error sending verification email: {e}")
 
     return {
         "status": "sent",
@@ -1063,6 +1100,23 @@ def promote_user(target_email: str, db: Session = Depends(get_db)):
     user.role = "admin"
     db.commit()
     return {"status": "promoted", "email": target_email}
+
+
+class AdminResetPassword(BaseModel):
+    email: str
+    new_password: str
+
+
+@app.post("/admin/reset-password")
+def admin_reset_password(data: AdminResetPassword, db: Session = Depends(get_db)):
+    """Admin can reset any user's password"""
+    user = db.query(models.User).filter(models.User.email == data.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.password_hash = get_password_hash(data.new_password)
+    db.commit()
+    return {"status": "password reset", "email": data.email}
 
 
 @app.get("/transactions", response_model=List[TransactionResponse])
@@ -1620,6 +1674,191 @@ def get_global_stats():
         "is_running": scheduler.is_running,
         "recent_events": [],  # Handled by SSE now
     }
+
+
+@app.get("/projects/stats")
+def get_all_project_stats(
+    days: int = 30,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Aggregate daily stats for all user's projects.
+    Returns: { projectId: [{ date, visitors, pageviews }, ...] }
+    """
+    from datetime import datetime, timedelta
+
+    start_date = datetime.utcnow() - timedelta(days=days)
+
+    # Get all user's project IDs
+    user_projects = (
+        db.query(models.Project.id)
+        .filter(models.Project.user_id == current_user.id)
+        .all()
+    )
+    project_ids = [p.id for p in user_projects]
+
+    if not project_ids:
+        return {}
+
+    # Aggregate traffic logs by project and date
+    from sqlalchemy import func, and_
+
+    stats = (
+        db.query(
+            models.TrafficLog.project_id,
+            func.date(models.TrafficLog.timestamp).label("date"),
+            func.count().label("pageviews"),
+            func.count(func.distinct(models.TrafficLog.ip)).label("visitors"),
+        )
+        .filter(
+            and_(
+                models.TrafficLog.project_id.in_(project_ids),
+                models.TrafficLog.timestamp >= start_date,
+                models.TrafficLog.status == "success",
+            )
+        )
+        .group_by(models.TrafficLog.project_id, func.date(models.TrafficLog.timestamp))
+        .order_by(func.date(models.TrafficLog.timestamp).desc())
+        .all()
+    )
+
+    # Format response
+    result = {}
+    for s in stats:
+        pid = s.project_id
+        if pid not in result:
+            result[pid] = []
+        result[pid].append(
+            {"date": str(s.date), "visitors": s.visitors, "pageviews": s.pageviews}
+        )
+
+    return result
+
+
+@app.get("/projects/{project_id}/stats")
+def get_project_stats(
+    project_id: str,
+    days: int = 30,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Daily stats for single project.
+    Returns: [{ date, visitors, pageviews }, ...]
+    """
+    from datetime import datetime, timedelta
+    from sqlalchemy import func, and_
+
+    # Verify project belongs to user
+    project = (
+        db.query(models.Project)
+        .filter(
+            models.Project.id == project_id, models.Project.user_id == current_user.id
+        )
+        .first()
+    )
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    start_date = datetime.utcnow() - timedelta(days=days)
+
+    stats = (
+        db.query(
+            func.date(models.TrafficLog.timestamp).label("date"),
+            func.count().label("pageviews"),
+            func.count(func.distinct(models.TrafficLog.ip)).label("visitors"),
+        )
+        .filter(
+            and_(
+                models.TrafficLog.project_id == project_id,
+                models.TrafficLog.timestamp >= start_date,
+                models.TrafficLog.status == "success",
+            )
+        )
+        .group_by(func.date(models.TrafficLog.timestamp))
+        .order_by(func.date(models.TrafficLog.timestamp).desc())
+        .all()
+    )
+
+    return [
+        {"date": str(s.date), "visitors": s.visitors, "pageviews": s.pageviews}
+        for s in stats
+    ]
+
+
+@app.get("/projects/active-now")
+def get_active_now(
+    current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    """
+    Real-time count of active visitors.
+    Counts hits in the last 60 seconds.
+    """
+    from datetime import datetime, timedelta
+    from hit_emulator import ga_emu_engine
+
+    one_minute_ago = datetime.utcnow() - timedelta(seconds=60)
+
+    # Get user's projects
+    user_projects = (
+        db.query(models.Project)
+        .filter(
+            models.Project.user_id == current_user.id, models.Project.status == "active"
+        )
+        .all()
+    )
+
+    project_ids = [p.id for p in user_projects]
+
+    if not project_ids:
+        return {"activeNow": 0, "projects": {}}
+
+    # Count recent hits from TrafficLog
+    from sqlalchemy import func
+
+    recent_hits = (
+        db.query(
+            models.TrafficLog.project_id,
+            func.count().label("count"),
+            func.max(models.TrafficLog.timestamp).label("last_hit"),
+        )
+        .filter(
+            models.TrafficLog.project_id.in_(project_ids),
+            models.TrafficLog.timestamp >= one_minute_ago,
+        )
+        .group_by(models.TrafficLog.project_id)
+        .all()
+    )
+
+    # Build response
+    projects_data = {}
+    total_active = 0
+
+    for hit in recent_hits:
+        projects_data[hit.project_id] = {
+            "active": hit.count,
+            "lastHit": hit.last_hit.isoformat() if hit.last_hit else None,
+        }
+        total_active += hit.count
+
+    # Also check in-memory stats from emulator for real-time accuracy
+    for pid in project_ids:
+        if pid in ga_emu_engine.stats:
+            # Add in-memory count if higher (catches very recent hits not yet in DB)
+            mem_count = ga_emu_engine.stats[pid].get("total", 0)
+            if pid not in projects_data:
+                # Only use memory if no DB hits (very recent activity)
+                if mem_count > 0:
+                    # Check if emulator has recent activity
+                    projects_data[pid] = {
+                        "active": min(mem_count, 5),  # Cap at 5 to avoid overcounting
+                        "lastHit": datetime.utcnow().isoformat(),
+                    }
+                    total_active += min(mem_count, 5)
+
+    return {"activeNow": total_active, "projects": projects_data}
 
 
 @app.get("/admin/live-pulse")
@@ -2703,6 +2942,82 @@ def create_ticket(
     db.commit()
     db.refresh(new_ticket)
     return new_ticket
+
+
+@app.post("/tickets/{ticket_id}/reply", response_model=TicketResponse)
+def reply_ticket(
+    ticket_id: str,
+    reply: TicketReply,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    ticket = db.query(models.Ticket).filter(models.Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    if current_user.role != "admin" and ticket.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Construct new message
+    new_msg = {
+        "id": str(datetime.utcnow().timestamp()),
+        "sender": "admin" if current_user.role == "admin" else "user",
+        "text": reply.text,
+        "date": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        "attachments": reply.attachments,
+    }
+
+    # Append to JSON list
+    # SQLAlchemy requires flagging the field as modified or re-assigning for JSON
+    current_messages = list(ticket.messages) if ticket.messages else []
+    current_messages.append(new_msg)
+    ticket.messages = current_messages
+
+    db.commit()
+    db.refresh(ticket)
+    return ticket
+
+
+@app.put("/tickets/{ticket_id}", response_model=TicketResponse)
+def update_ticket(
+    ticket_id: str,
+    update: TicketUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    ticket = db.query(models.Ticket).filter(models.Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    if current_user.role != "admin" and ticket.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if update.status:
+        ticket.status = update.status
+    if update.priority:
+        ticket.priority = update.priority
+
+    db.commit()
+    db.refresh(ticket)
+    return ticket
+
+
+@app.delete("/tickets/{ticket_id}")
+def delete_ticket(
+    ticket_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    ticket = db.query(models.Ticket).filter(models.Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    if current_user.role != "admin" and ticket.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    db.delete(ticket)
+    db.commit()
+    return {"status": "deleted"}
 
 
 @app.get("/notifications", response_model=List[NotificationResponse])

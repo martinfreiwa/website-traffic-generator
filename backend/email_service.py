@@ -1,7 +1,11 @@
 import os
 import resend
+import logging
 from typing import Optional, List
 from datetime import datetime
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 resend.api_key = os.getenv("RESEND_API_KEY", "")
 
@@ -30,9 +34,18 @@ def send_email(
         if text:
             params["text"] = text
 
+        logger.info(f"📧 Attempting to send email to: {to}, subject: {subject}")
+
         response = resend.Emails.send(params)
+
+        logger.info(
+            f"✅ Email sent successfully! ID: {response.get('id', 'unknown')}, to: {to}"
+        )
         return {"success": True, "data": response}
     except Exception as e:
+        logger.error(
+            f"❌ Email FAILED to send! to: {to}, subject: {subject}, error: {str(e)}"
+        )
         return {"success": False, "error": str(e)}
 
 

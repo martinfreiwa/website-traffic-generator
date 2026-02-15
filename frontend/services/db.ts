@@ -1,4 +1,4 @@
-
+/// <reference types="vite/client" />
 import { Project, PriceClass, ProjectSettings, Transaction, User, Ticket, SystemSettings, Notification, TrafficLog, SystemAlert, LiveVisitor, Broadcast, AdminStats, Coupon, MarketingCampaign, ConversionSettings, ActivityLog, UserSession, ImpersonationLog, BalanceAdjustmentLog, EmailLog, UserNotificationPrefs, UserReferral, AdminUserDetails } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin;
@@ -312,11 +312,11 @@ export const db = {
             method: 'PUT',
             body: JSON.stringify(payload)
         });
-        
+
         if (!response.ok) {
             throw new Error("Failed to update project");
         }
-        
+
         await db.syncProjects();
         return db.getProjects();
     },
@@ -417,22 +417,7 @@ export const db = {
         return user;
     },
 
-    adminAdjustBalance: async (userId: string, amount: number, type: 'credit' | 'debit', reason: string) => {
-        const users = db.getUsers();
-        const user = users.find(u => u.id === userId);
-        if (!user) return;
 
-        await fetchWithAuth(`${API_BASE_URL}/webhooks/deposit`, {
-            method: 'POST',
-            body: JSON.stringify({
-                user_email: user.email,
-                amount: type === 'credit' ? amount : -amount,
-                description: reason
-            })
-        });
-        await db.syncUsers();
-        await db.syncAllTransactions();
-    },
 
     // Transactions
     getTransactions: (): Transaction[] => {
@@ -696,8 +681,60 @@ export const db = {
     },
 
     replyToTicket: async (ticketId: string, text: string, sender: 'user' | 'admin' | 'guest', attachments?: string[]) => {
-        console.log(`Replying to ticket ${ticketId}: ${text}`);
-        return {};
+        const payload = {
+            text,
+            sender, // Although backend overrides this based on token, we send it for completeness
+            attachments: attachments || []
+        };
+
+        const response = await fetchWithAuth(`${API_BASE_URL}/tickets/${ticketId}/reply`, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            console.error("Failed to reply to ticket");
+            throw new Error("Failed to send reply");
+        }
+
+        await db.syncTickets();
+        return await response.json();
+    },
+
+    markTicketRead: async (ticketId: string) => {
+        // Backend doesn't support read status yet, update specific cache to pretend
+        const tickets = db.getTickets();
+        const ticket = tickets.find(t => t.id === ticketId);
+        if (ticket) {
+            ticket.unread = false;
+            localStorage.setItem('modus_tickets_cache', JSON.stringify(tickets));
+        }
+    },
+
+    updateTicketStatus: async (ticketId: string, status: string) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/tickets/${ticketId}`, {
+            method: 'PUT',
+            body: JSON.stringify({ status })
+        });
+        if (!response.ok) throw new Error("Failed to update ticket status");
+        await db.syncTickets();
+    },
+
+    updateTicketPriority: async (ticketId: string, priority: string) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/tickets/${ticketId}`, {
+            method: 'PUT',
+            body: JSON.stringify({ priority })
+        });
+        if (!response.ok) throw new Error("Failed to update ticket priority");
+        await db.syncTickets();
+    },
+
+    deleteTicket: async (ticketId: string) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/tickets/${ticketId}`, {
+            method: 'DELETE'
+        });
+        if (!response.ok) throw new Error("Failed to delete ticket");
+        await db.syncTickets();
     },
 
     savePricing: async (pricing: PriceClass[]) => {
@@ -1595,5 +1632,49 @@ export const db = {
             body: JSON.stringify(data)
         });
         if (!response.ok) throw new Error('Failed to update user');
+    },
+
+    // Compatibility methods for AdminPanel.tsx
+    updateUserStatus: async (userId: string, status: 'active' | 'suspended') => {
+        await db.adminUpdateUser(userId, { status });
+        // Return updated list for React state update simplicity (although inefficient)
+        return db.getUsers();
+    },
+
+    adminAdjustBalance: async (userId: string, amount: number, type: 'credit' | 'debit', reason: string) => {
+        await db.adjustUserBalance(userId, {
+            adjustmentType: type,
+            tier: 'general',
+            amount: amount,
+            reason: reason
+        });
+    },
+
+    createAlert: (message: string, type: 'info' | 'warning' | 'error') => {
+        const alerts = db.getAlerts();
+        const newAlert: SystemAlert = {
+            id: Date.now().toString(),
+            message,
+            type,
+            active: true,
+            date: new Date().toISOString(),
+            targetType: 'all'
+        };
+        alerts.push(newAlert);
+        localStorage.setItem('modus_alerts_cache', JSON.stringify(alerts));
+    },
+
+    toggleAlert: (id: string, active: boolean) => {
+        const alerts = db.getAlerts();
+        const alert = alerts.find(a => a.id === id);
+        if (alert) {
+            alert.active = active;
+            localStorage.setItem('modus_alerts_cache', JSON.stringify(alerts));
+        }
+    },
+
+    deleteAlert: (id: string) => {
+        const alerts = db.getAlerts().filter(a => a.id !== id);
+        localStorage.setItem('modus_alerts_cache', JSON.stringify(alerts));
     }
 };

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Helmet } from 'react-helmet-async';
+import SEO from './SEO';
 import { ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -158,17 +158,12 @@ const Legal: React.FC<LegalProps> = ({ type, onBack }) => {
 
     return (
         <div className="min-h-screen bg-white">
-            <Helmet>
-                <title>{getTitle()} - Traffic Creator</title>
-                <meta name="description" content={`Official ${getTitle()} for Traffic Creator. Please read carefully.`} />
-                <meta name="keywords" content={`traffic creator ${type}, ${type} policy, legal ${type}, traffic generator legal`} />
-
-                {/* OpenGraph */}
-                <meta property="og:title" content={`${getTitle()} - Traffic Creator`} />
-                <meta property="og:description" content={`Read our official ${getTitle()} document.`} />
-                <meta property="og:type" content="article" />
-                <meta property="og:url" content={`http://localhost:3000/legal/${type}`} />
-            </Helmet>
+            <SEO
+                title={`${getTitle()} - Traffic Creator`}
+                description={`Official ${getTitle()} for Traffic Creator. Please read carefully and contact support if needed.`}
+                keywords={`traffic creator ${type}, ${type} policy, legal ${type}, traffic generator legal`}
+                type="article"
+            />
             {/* Header */}
             <div className="border-b border-gray-100 bg-white sticky top-0 z-50">
                 <div className="max-w-4xl mx-auto px-6 h-20 flex items-center justify-between">
