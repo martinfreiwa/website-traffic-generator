@@ -20,10 +20,11 @@ import ApiDocs from './ApiDocs';
 import AdminMarketing from './AdminMarketing';
 import AdminCoupons from './AdminCoupons';
 import AdminConversion from './AdminConversion';
+import AdminBankTransfers from './AdminBankTransfers';
 
 import { MenuSection, User, Project, PriceClass, Transaction, Ticket, SystemSettings, SystemAlert, AdminStats } from '../../types';
 import { db } from '../../services/db';
-import { Users, LayoutDashboard, Settings, Layers, CreditCard, MessageSquare, Megaphone, Radio, FileCode, Plus, TrendingUp, Tag, Zap } from 'lucide-react';
+import { Users, LayoutDashboard, Settings, Layers, CreditCard, MessageSquare, Megaphone, Radio, FileCode, Plus, TrendingUp, Tag, Zap, Landmark } from 'lucide-react';
 
 interface AdminPanelProps {
   onLogout: () => void;
@@ -54,6 +55,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
     if (path === '/admin/marketing') return 'admin-marketing';
     if (path === '/admin/coupons') return 'admin-coupons';
     if (path === '/admin/conversion') return 'admin-conversion';
+    if (path === '/admin/bank-transfers') return 'admin-bank-transfers';
     return 'admin-home';
   };
 
@@ -143,6 +145,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
       title: 'Operations',
       items: [
         { label: 'Transactions', id: 'admin-transactions', path: 'transactions', icon: <CreditCard size={18} /> },
+        { label: 'Bank Transfers', id: 'admin-bank-transfers', path: 'bank-transfers', icon: <Landmark size={18} /> },
         { label: 'Support Tickets', id: 'admin-tickets', path: 'tickets', icon: <MessageSquare size={18} /> },
         { label: 'Broadcasts', id: 'admin-alerts', path: 'alerts', icon: <Megaphone size={18} /> },
         { label: 'API Documentation', id: 'admin-api-docs', path: 'api-docs', icon: <FileCode size={18} /> },
@@ -208,7 +211,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
             'admin-api-docs': 'api-docs',
             'admin-marketing': 'marketing',
             'admin-coupons': 'coupons',
-            'admin-conversion': 'conversion'
+            'admin-conversion': 'conversion',
+            'admin-bank-transfers': 'bank-transfers'
           };
           navigate(`/admin/${idToPath[id] || ''}`);
           setMobileMenuOpen(false);
@@ -266,6 +270,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
               <Route path="marketing" element={<AdminMarketing />} />
               <Route path="coupons" element={<AdminCoupons onRefresh={refreshData} />} />
               <Route path="conversion" element={<AdminConversion />} />
+              <Route path="bank-transfers" element={<AdminBankTransfers />} />
               <Route path="*" element={<Navigate to="/admin" replace />} />
             </Routes>
           </div>

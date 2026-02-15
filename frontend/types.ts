@@ -168,6 +168,7 @@ export interface Transaction {
   type: 'credit' | 'debit';
   userId?: string;
   tier?: string;
+  reference?: string;
 }
 
 export interface TicketMessage {

@@ -64,7 +64,7 @@ const Balance: React.FC = () => {
             return;
         }
 
-        const headers = ['ID', 'Date', 'Description', 'Type', 'Amount', 'Status', 'Balance Tier'];
+        const headers = ['ID', 'Date', 'Description', 'Type', 'Amount', 'Status', 'Balance Tier', 'Reference'];
         const rows = filteredTransactions.map(t => [
             t.id,
             t.date,
@@ -72,7 +72,8 @@ const Balance: React.FC = () => {
             t.type,
             t.amount.toFixed(2),
             t.status,
-            getTierLabel(t.tier)
+            getTierLabel(t.tier),
+            t.reference || ''
         ]);
 
         const csvContent = "data:text/csv;charset=utf-8,"
@@ -128,6 +129,10 @@ const Balance: React.FC = () => {
                         <div>
                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-1">Balance Tier</label>
                             <div className="text-sm font-bold text-gray-900">{getTierLabel(trx.tier)}</div>
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-1">Reference</label>
+                            <div className="text-sm font-mono text-gray-600">{trx.reference || '-'}</div>
                         </div>
                         <div>
                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-1">User</label>
@@ -248,6 +253,7 @@ const Balance: React.FC = () => {
                                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Date</th>
                                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Description</th>
                                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Balance</th>
+                                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Reference</th>
                                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
                                 <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Amount</th>
                                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Action</th>
@@ -255,7 +261,7 @@ const Balance: React.FC = () => {
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {filteredTransactions.length === 0 ? (
-                                <tr><td colSpan={6} className="text-center p-8 text-sm text-gray-400">No transactions found.</td></tr>
+                                <tr><td colSpan={7} className="text-center p-8 text-sm text-gray-400">No transactions found.</td></tr>
                             ) : (
                                 filteredTransactions.map((trx) => (
                                     <tr key={trx.id} className="hover:bg-gray-50 transition-colors">
@@ -266,6 +272,7 @@ const Balance: React.FC = () => {
                                                 {getTierLabel(trx.tier)}
                                             </span>
                                         </td>
+                                        <td className="px-6 py-4 text-xs font-mono text-gray-500">{trx.reference || '-'}</td>
                                         <td className="px-6 py-4">
                                             <span className="px-2 py-1 bg-green-100 text-green-700 text-[9px] font-black uppercase tracking-wider rounded-sm">
                                                 {trx.status}

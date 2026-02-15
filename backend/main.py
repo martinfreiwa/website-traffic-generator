@@ -219,6 +219,7 @@ class TransactionResponse(BaseModel):
     description: Optional[str]
     status: str
     tier: Optional[str]
+    reference: Optional[str]
     created_at: datetime
 
     class Config:
@@ -1674,6 +1675,230 @@ def delete_broadcast(
     db.delete(db_broadcast)
     db.commit()
     return {"status": "success"}
+
+
+os.makedirs("static/proofs", exist_ok=True)
+
+
+class BankTransferProofResponse(BaseModel):
+    id: str
+    user_id: str
+    amount: float
+    tier: Optional[str]
+    currency: str
+    status: str
+    file_url: Optional[str]
+    file_name: Optional[str]
+    reference: Optional[str]
+    notes: Optional[str]
+    admin_notes: Optional[str]
+    created_at: datetime
+    processed_at: Optional[datetime]
+    user_email: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class BankTransferProofCreate(BaseModel):
+    amount: float
+    tier: Optional[str] = None
+    currency: str = "USD"
+    notes: Optional[str] = None
+
+
+class BankTransferApproval(BaseModel):
+    approved: bool
+    admin_notes: Optional[str] = None
+
+
+@app.post("/bank-transfer/proof", response_model=BankTransferProofResponse)
+async def upload_bank_transfer_proof(
+    file: UploadFile = File(...),
+    amount: float = 0.0,
+    tier: str = "",
+    currency: str = "USD",
+    notes: str = "",
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    file_extension = os.path.splitext(file.filename)[1].lower()
+    if file_extension not in [".jpg", ".jpeg", ".png", ".webp", ".pdf"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file type. Only jpg, png, webp, pdf allowed.",
+        )
+
+    import uuid
+
+    reference = f"TGP-{current_user.id[:8].upper()}-{uuid.uuid4().hex[:6].upper()}"
+
+    filename = f"proofs/{reference}{file_extension}"
+    file_path = os.path.join("static", filename)
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    proof = models.BankTransferProof(
+        user_id=current_user.id,
+        amount=amount,
+        tier=tier if tier else None,
+        currency=currency,
+        status="pending",
+        file_url=f"/static/{filename}",
+        file_name=file.filename,
+        reference=reference,
+        notes=notes if notes else None,
+    )
+    db.add(proof)
+    db.commit()
+    db.refresh(proof)
+
+    return BankTransferProofResponse(
+        id=proof.id,
+        user_id=proof.user_id,
+        amount=proof.amount,
+        tier=proof.tier,
+        currency=proof.currency,
+        status=proof.status,
+        file_url=proof.file_url,
+        file_name=proof.file_name,
+        reference=proof.reference,
+        notes=proof.notes,
+        admin_notes=proof.admin_notes,
+        created_at=proof.created_at,
+        processed_at=proof.processed_at,
+        user_email=current_user.email,
+    )
+
+
+@app.get("/bank-transfer/my-proofs", response_model=List[BankTransferProofResponse])
+def get_my_bank_transfers(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    proofs = (
+        db.query(models.BankTransferProof)
+        .filter(models.BankTransferProof.user_id == current_user.id)
+        .order_by(models.BankTransferProof.created_at.desc())
+        .all()
+    )
+    return [
+        BankTransferProofResponse(
+            id=p.id,
+            user_id=p.user_id,
+            amount=p.amount,
+            tier=p.tier,
+            currency=p.currency,
+            status=p.status,
+            file_url=p.file_url,
+            file_name=p.file_name,
+            reference=p.reference,
+            notes=p.notes,
+            admin_notes=p.admin_notes,
+            created_at=p.created_at,
+            processed_at=p.processed_at,
+            user_email=current_user.email,
+        )
+        for p in proofs
+    ]
+
+
+@app.get("/admin/bank-transfers", response_model=List[BankTransferProofResponse])
+def get_all_bank_transfers(
+    status_filter: str = "all",
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    query = db.query(models.BankTransferProof)
+    if status_filter != "all":
+        query = query.filter(models.BankTransferProof.status == status_filter)
+
+    proofs = query.order_by(models.BankTransferProof.created_at.desc()).all()
+
+    result = []
+    for p in proofs:
+        user = db.query(models.User).filter(models.User.id == p.user_id).first()
+        result.append(
+            BankTransferProofResponse(
+                id=p.id,
+                user_id=p.user_id,
+                amount=p.amount,
+                tier=p.tier,
+                currency=p.currency,
+                status=p.status,
+                file_url=p.file_url,
+                file_name=p.file_name,
+                reference=p.reference,
+                notes=p.notes,
+                admin_notes=p.admin_notes,
+                created_at=p.created_at,
+                processed_at=p.processed_at,
+                user_email=user.email if user else None,
+            )
+        )
+    return result
+
+
+@app.put("/admin/bank-transfers/{proof_id}/approve")
+def approve_bank_transfer(
+    proof_id: str,
+    approval: BankTransferApproval,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    proof = (
+        db.query(models.BankTransferProof)
+        .filter(models.BankTransferProof.id == proof_id)
+        .first()
+    )
+    if not proof:
+        raise HTTPException(status_code=404, detail="Transfer proof not found")
+
+    if proof.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Transfer already {proof.status}")
+
+    user = db.query(models.User).filter(models.User.id == proof.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if approval.approved:
+        if proof.tier == "economy":
+            user.balance_economy = (user.balance_economy or 0.0) + proof.amount
+        elif proof.tier == "professional":
+            user.balance_professional = (
+                user.balance_professional or 0.0
+            ) + proof.amount
+        elif proof.tier == "expert":
+            user.balance_expert = (user.balance_expert or 0.0) + proof.amount
+        else:
+            user.balance += proof.amount
+
+        trx = models.Transaction(
+            user_id=user.id,
+            type="credit",
+            amount=proof.amount,
+            description=f"Bank Transfer ({proof.currency}) - Ref: {proof.reference}",
+            tier=proof.tier,
+            reference=proof.reference,
+        )
+        db.add(trx)
+        proof.status = "approved"
+    else:
+        proof.status = "rejected"
+
+    proof.admin_notes = approval.admin_notes
+    proof.processed_at = datetime.utcnow()
+    proof.processed_by = current_user.id
+
+    db.commit()
+    return {"status": proof.status, "proof_id": proof_id}
 
 
 # --- Stripe Integration ---

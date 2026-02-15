@@ -3,7 +3,7 @@ import { db } from '../services/db';
 import {
     Check, CreditCard, Zap, Shield, Wallet, ArrowRight, Lock,
     Loader2, Landmark, Smartphone, Calculator, Star, Sliders,
-    Layers, AlertCircle, ShoppingCart, Percent
+    Layers, AlertCircle, ShoppingCart, Percent, Copy, Upload, FileText, Info, CheckCircle
 } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
@@ -45,7 +45,7 @@ const TIERS: TierDef[] = [
         color: 'border-orange-300'
     },
     {
-        id: 'expert',
+    id: 'expert',
         name: 'Expert',
         factor: 1.0,
         quality: '100% Quality',
@@ -53,6 +53,69 @@ const TIERS: TierDef[] = [
         color: 'border-[#ff4d00]'
     }
 ];
+
+interface BankDetails {
+    name: string;
+    bankName: string;
+    bankAddress: string;
+    note: string;
+    iban?: string;
+    accountNumber?: string;
+    accountType?: string;
+    routingNumber?: string;
+    sortCode?: string;
+    bsb?: string;
+    swift?: string;
+}
+
+const BANK_DETAILS: Record<string, BankDetails> = {
+    USD: {
+        name: 'Easytrafficbot Ug',
+        accountNumber: '8314422210',
+        accountType: 'Checking',
+        routingNumber: '026073150',
+        swift: 'TRWIBEB1XXX',
+        bankName: 'Wise',
+        bankAddress: 'Rue du Trône 100, 3rd floor, Brussels, 1050, Belgium',
+        note: 'Use for domestic transfers from USA (Wire & ACH)'
+    },
+    EUR: {
+        name: 'Easytrafficbot Ug',
+        iban: 'BE86 9679 9171 7050',
+        swift: 'TRWIBEB1XXX',
+        bankName: 'Wise',
+        bankAddress: 'Rue du Trône 100, 3rd floor, Brussels, 1050, Belgium',
+        note: 'Use for SEPA transfers within Europe'
+    },
+    GBP: {
+        name: 'Easytrafficbot Ug',
+        accountNumber: '46701141',
+        sortCode: '23-08-01',
+        iban: 'GB79 TRWI 2308 0146 7011 41',
+        swift: 'TRWIGB2LXXX',
+        bankName: 'Wise',
+        bankAddress: 'Rue du Trône 100, 3rd floor, Brussels, 1050, Belgium',
+        note: 'Use for domestic transfers from UK'
+    },
+    AUD: {
+        name: 'Easytrafficbot Ug',
+        accountNumber: '218673731',
+        bsb: '774-001',
+        swift: 'TRWIAUS1XXX',
+        bankName: 'Wise',
+        bankAddress: 'Rue du Trône 100, 3rd floor, Brussels, 1050, Belgium',
+        note: 'Use for domestic transfers from Australia'
+    },
+    RON: {
+        name: 'Easytrafficbot Ug',
+        iban: 'RO60 BREL 0005 6028 6239 0100',
+        bankName: 'Wise / BREL',
+        bankAddress: 'Rue du Trône 100, 3rd floor, Brussels, 1050, Belgium',
+        note: 'Use for domestic transfers from Romania'
+    }
+};
+
+type Currency = 'USD' | 'EUR' | 'GBP' | 'AUD' | 'RON';
 
 const VOLUME_STEPS = [60000, 500000, 1000000, 10000000, 50000000];
 const BULK_OPTIONS = [1, 6, 24];
@@ -132,13 +195,29 @@ const CheckoutForm = ({ amount, onSuccess, onError }: { amount: number, onSucces
 
 const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
     const [step, setStep] = useState(1);
-    const [selectedTier, setSelectedTier] = useState<TierDef>(TIERS[1]); // Default Professional
-    const [volumeIndex, setVolumeIndex] = useState(1); // Default 500k
-    const [bulkPack, setBulkPack] = useState(1); // 1, 6, or 24
+    const [selectedTier, setSelectedTier] = useState<TierDef>(TIERS[1]);
+    const [volumeIndex, setVolumeIndex] = useState(1);
+    const [bulkPack, setBulkPack] = useState(1);
     const [balance, setBalance] = useState(0);
     const [isProcessing, setIsProcessing] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState<'card' | 'bank' | 'apple'>('card');
     const [clientSecret, setClientSecret] = useState("");
+    const [selectedCurrency, setSelectedCurrency] = useState<Currency>('USD');
+    const [proofFile, setProofFile] = useState<File | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
+    const [uploadSuccess, setUploadSuccess] = useState(false);
+    const [copied, setCopied] = useState<string | null>(null);
+    const [transferReference, setTransferReference] = useState<string>('');
+
+    useEffect(() => {
+        setBalance(db.getBalance());
+        if (paymentMethod === 'bank' && step === 2 && !transferReference) {
+            const user = db.getCurrentUser();
+            const userId = user?.id?.substring(0, 8).toUpperCase() || 'XXXXX';
+            const timestamp = Date.now().toString(36).toUpperCase();
+            setTransferReference(`TGP-${userId}-${timestamp}`);
+        }
+    }, [paymentMethod, step]);
 
     useEffect(() => {
         setBalance(db.getBalance());
@@ -177,13 +256,169 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
 
     const handlePaymentSuccess = async (paymentId: string) => {
         setIsProcessing(true);
-        // Add credits to account
         await db.purchaseCredits(totalPrice, `Traffic Credits (${totalVisitors.toLocaleString()} ${selectedTier.name}) - Stripe ${paymentId}`, selectedTier.id);
         setBalance(db.getBalance());
         setIsProcessing(false);
         if (onPurchase) onPurchase();
         alert("Payment Successful! Credits added.");
         onBack();
+    };
+
+    const copyToClipboard = (text: string, label: string) => {
+        navigator.clipboard.writeText(text);
+        setCopied(label);
+        setTimeout(() => setCopied(null), 2000);
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            setProofFile(e.target.files[0]);
+        }
+    };
+
+    const handleProofUpload = async () => {
+        if (!proofFile) {
+            alert("Please select a file to upload.");
+            return;
+        }
+
+        setIsUploading(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', proofFile);
+            formData.append('amount', totalPrice.toString());
+            formData.append('tier', selectedTier.id);
+            formData.append('currency', selectedCurrency);
+            formData.append('notes', `Bank transfer for ${totalVisitors.toLocaleString()} ${selectedTier.name} visitors - Ref: ${transferReference}`);
+
+            const token = localStorage.getItem('tgp_token');
+            const response = await fetch('http://127.0.0.1:8001/bank-transfer/proof', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                },
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error('Upload failed');
+            }
+
+            setUploadSuccess(true);
+        } catch (error: any) {
+            alert("Upload failed: " + error.message);
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const renderBankDetails = (currency: Currency) => {
+        const bank = BANK_DETAILS[currency];
+        
+        return (
+            <div className="space-y-2 font-mono text-sm">
+                <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-gray-500">Account Holder:</span>
+                    <div className="flex items-center gap-2">
+                        <span className="font-bold">{bank.name}</span>
+                        <button onClick={() => copyToClipboard(bank.name, 'name')} className="text-gray-400 hover:text-[#ff4d00]">
+                            {copied === 'name' ? <CheckCircle size={14} className="text-green-500" /> : <Copy size={14} />}
+                        </button>
+                    </div>
+                </div>
+                
+                {bank.iban && (
+                    <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                        <span className="text-gray-500">IBAN:</span>
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold">{bank.iban}</span>
+                            <button onClick={() => copyToClipboard(bank.iban, 'iban')} className="text-gray-400 hover:text-[#ff4d00]">
+                                {copied === 'iban' ? <CheckCircle size={14} className="text-green-500" /> : <Copy size={14} />}
+                            </button>
+                        </div>
+                    </div>
+                )}
+                
+                {bank.accountNumber && (
+                    <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                        <span className="text-gray-500">Account Number:</span>
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold">{bank.accountNumber}</span>
+                            <button onClick={() => copyToClipboard(bank.accountNumber, 'account')} className="text-gray-400 hover:text-[#ff4d00]">
+                                {copied === 'account' ? <CheckCircle size={14} className="text-green-500" /> : <Copy size={14} />}
+                            </button>
+                        </div>
+                    </div>
+                )}
+                
+                {bank.routingNumber && (
+                    <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                        <span className="text-gray-500">Routing Number:</span>
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold">{bank.routingNumber}</span>
+                            <button onClick={() => copyToClipboard(bank.routingNumber, 'routing')} className="text-gray-400 hover:text-[#ff4d00]">
+                                {copied === 'routing' ? <CheckCircle size={14} className="text-green-500" /> : <Copy size={14} />}
+                            </button>
+                        </div>
+                    </div>
+                )}
+                
+                {bank.sortCode && (
+                    <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                        <span className="text-gray-500">Sort-Code:</span>
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold">{bank.sortCode}</span>
+                            <button onClick={() => copyToClipboard(bank.sortCode, 'sortcode')} className="text-gray-400 hover:text-[#ff4d00]">
+                                {copied === 'sortcode' ? <CheckCircle size={14} className="text-green-500" /> : <Copy size={14} />}
+                            </button>
+                        </div>
+                    </div>
+                )}
+                
+                {bank.bsb && (
+                    <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                        <span className="text-gray-500">BSB-Code:</span>
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold">{bank.bsb}</span>
+                            <button onClick={() => copyToClipboard(bank.bsb, 'bsb')} className="text-gray-400 hover:text-[#ff4d00]">
+                                {copied === 'bsb' ? <CheckCircle size={14} className="text-green-500" /> : <Copy size={14} />}
+                            </button>
+                        </div>
+                    </div>
+                )}
+                
+                {bank.swift && (
+                    <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                        <span className="text-gray-500">SWIFT/BIC:</span>
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold">{bank.swift}</span>
+                            <button onClick={() => copyToClipboard(bank.swift, 'swift')} className="text-gray-400 hover:text-[#ff4d00]">
+                                {copied === 'swift' ? <CheckCircle size={14} className="text-green-500" /> : <Copy size={14} />}
+                            </button>
+                        </div>
+                    </div>
+                )}
+                
+                <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-gray-500">Bank Name:</span>
+                    <span className="font-bold">{bank.bankName}</span>
+                </div>
+                
+                <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-gray-500">Reference:</span>
+                    <div className="flex items-center gap-2">
+                        <span className="font-bold text-[#ff4d00]">{transferReference}</span>
+                        <button onClick={() => copyToClipboard(transferReference, 'ref')} className="text-gray-400 hover:text-[#ff4d00]">
+                            {copied === 'ref' ? <CheckCircle size={14} className="text-green-500" /> : <Copy size={14} />}
+                        </button>
+                    </div>
+                </div>
+                
+                <div className="mt-3 p-2 bg-gray-50 border border-gray-200 rounded">
+                    <p className="text-xs text-gray-500">{bank.note}</p>
+                </div>
+            </div>
+        );
     };
 
     if (isProcessing && step === 1) {
@@ -218,30 +453,30 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
                     {/* Left: Configuration */}
                     <div className="lg:col-span-2 space-y-8">
                         {/* Tier Selection */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             {TIERS.map((tier) => (
                                 <button
                                     key={tier.id}
                                     onClick={() => setSelectedTier(tier)}
-                                    className={`relative p-6 border-2 transition-all duration-300 text-left flex flex-col ${selectedTier.id === tier.id
+                                    className={`relative p-8 border-2 transition-all duration-300 text-left flex flex-col min-h-[280px] ${selectedTier.id === tier.id
                                         ? `${tier.color} bg-white shadow-xl translate-y-[-4px]`
                                         : 'border-transparent bg-gray-50 opacity-60 hover:opacity-100'
                                         }`}
                                 >
                                     {tier.popular && (
-                                        <div className="absolute top-0 right-0 bg-[#ff4d00] text-white text-[8px] font-black uppercase px-2 py-1">Recommended</div>
+                                        <div className="absolute top-0 right-0 bg-[#ff4d00] text-white text-[9px] font-black uppercase px-3 py-1.5">Recommended</div>
                                     )}
-                                    <div className="flex items-center gap-2 mb-4 text-gray-400">
-                                        <Layers size={16} />
-                                        <span className="text-[10px] font-black uppercase tracking-widest">{tier.quality}</span>
+                                    <div className="flex items-center gap-3 mb-6 text-gray-400">
+                                        <Layers size={20} />
+                                        <span className="text-xs font-black uppercase tracking-widest">{tier.quality}</span>
                                     </div>
-                                    <h3 className="text-xl font-black uppercase tracking-tighter mb-1">{tier.name}</h3>
-                                    <div className="text-[10px] font-bold text-[#ff4d00] mb-6">×{tier.factor.toFixed(2)} Price Factor</div>
+                                    <h3 className="text-2xl font-black uppercase tracking-tighter mb-2">{tier.name}</h3>
+                                    <div className="text-sm font-bold text-[#ff4d00] mb-8">×{tier.factor.toFixed(2)} Price Factor</div>
 
-                                    <ul className="space-y-2 mt-auto">
+                                    <ul className="space-y-3 mt-auto">
                                         {tier.features.slice(0, 3).map((f, i) => (
-                                            <li key={i} className="text-[10px] font-medium text-gray-500 flex items-center gap-2">
-                                                <Check size={10} className="text-[#ff4d00]" /> {f}
+                                            <li key={i} className="text-xs font-medium text-gray-500 flex items-center gap-2">
+                                                <Check size={12} className="text-[#ff4d00]" /> {f}
                                             </li>
                                         ))}
                                     </ul>
@@ -344,48 +579,48 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
 
                     {/* Right: Summary Card */}
                     <div className="lg:col-span-1">
-                        <div className="bg-[#111] text-white p-8 shadow-2xl relative overflow-hidden sticky top-8">
-                            <div className="absolute top-0 right-0 p-8 opacity-10 rotate-12">
-                                <ShoppingCart size={140} />
+                        <div className="bg-[#111] text-white p-10 shadow-2xl relative overflow-hidden sticky top-8 min-h-[500px]">
+                            <div className="absolute top-0 right-0 p-10 opacity-10 rotate-12">
+                                <ShoppingCart size={180} />
                             </div>
 
-                            <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-10 relative">Package Summary</h3>
+                            <h3 className="text-sm font-black uppercase tracking-widest text-gray-400 mb-12 relative">Package Summary</h3>
 
-                            <div className="space-y-6 relative">
+                            <div className="space-y-8 relative">
                                 <div className="flex justify-between items-end">
-                                    <div className="text-gray-400 text-[10px] font-black uppercase tracking-widest">Plan</div>
-                                    <div className="font-black text-sm uppercase">{selectedTier.name}</div>
+                                    <div className="text-gray-400 text-xs font-black uppercase tracking-widest">Plan</div>
+                                    <div className="font-black text-base uppercase">{selectedTier.name}</div>
                                 </div>
                                 <div className="flex justify-between items-end">
-                                    <div className="text-gray-400 text-[10px] font-black uppercase tracking-widest">Volume</div>
-                                    <div className="font-black text-sm">{visitors.toLocaleString()} <span className="text-gray-500">x{bulkPack}</span></div>
+                                    <div className="text-gray-400 text-xs font-black uppercase tracking-widest">Volume</div>
+                                    <div className="font-black text-base">{visitors.toLocaleString()} <span className="text-gray-500">x{bulkPack}</span></div>
                                 </div>
                                 <div className="flex justify-between items-end">
-                                    <div className="text-gray-400 text-[10px] font-black uppercase tracking-widest">Total Hits</div>
-                                    <div className="font-black text-sm text-[#ff4d00]">{totalVisitors.toLocaleString()}</div>
+                                    <div className="text-gray-400 text-xs font-black uppercase tracking-widest">Total Hits</div>
+                                    <div className="font-black text-base text-[#ff4d00]">{totalVisitors.toLocaleString()}</div>
                                 </div>
                                 <div className="flex justify-between items-end">
-                                    <div className="text-gray-400 text-[10px] font-black uppercase tracking-widest">Effective CPM</div>
-                                    <div className="font-black text-sm text-gray-300">€{cpm.toFixed(2)}</div>
+                                    <div className="text-gray-400 text-xs font-black uppercase tracking-widest">Effective CPM</div>
+                                    <div className="font-black text-base text-gray-300">€{cpm.toFixed(2)}</div>
                                 </div>
 
-                                <div className="h-px bg-gray-800 my-8"></div>
+                                <div className="h-px bg-gray-800 my-10"></div>
 
                                 <div className="flex justify-between items-center">
-                                    <div className="text-xs font-black uppercase tracking-widest">Total Due</div>
-                                    <div className="text-3xl font-black text-white">€{totalPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                    <div className="text-sm font-black uppercase tracking-widest">Total Due</div>
+                                    <div className="text-4xl font-black text-white">€{totalPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                                 </div>
 
                                 <button
                                     onClick={handleCreatePayment}
-                                    className="w-full bg-[#ff4d00] text-white py-5 text-xs font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all flex items-center justify-center gap-3 mt-8 shadow-[0_15px_30px_rgba(255,77,0,0.3)] group"
+                                    className="w-full bg-[#ff4d00] text-white py-6 text-sm font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all flex items-center justify-center gap-3 mt-10 shadow-[0_15px_30px_rgba(255,77,0,0.3)] group"
                                 >
-                                    Proceed to Checkout <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                                    Proceed to Checkout <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
                                 </button>
 
-                                <div className="mt-8 flex items-center justify-center gap-2 text-gray-500">
-                                    <Lock size={12} />
-                                    <span className="text-[9px] uppercase font-black tracking-[0.2em]">Tiered Rate Calculator v4.1</span>
+                                <div className="mt-10 flex items-center justify-center gap-2 text-gray-500">
+                                    <Lock size={14} />
+                                    <span className="text-[10px] uppercase font-black tracking-[0.2em]">Tiered Rate Calculator v4.1</span>
                                 </div>
                             </div>
                         </div>
@@ -393,15 +628,15 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
                 </div>
             ) : (
                 /* Step 2: Payment Execution */
-                <div className="max-w-2xl mx-auto space-y-8 animate-in slide-in-from-right-8 duration-500 pb-20">
+                <div className="max-w-5xl mx-auto space-y-8 animate-in slide-in-from-right-8 duration-500 pb-20">
                     <button onClick={() => setStep(1)} className="flex items-center gap-2 text-gray-500 hover:text-black text-sm font-bold uppercase tracking-wider mb-6">
                         <ArrowRight size={16} className="rotate-180" /> Back to Configuration
                     </button>
 
-                    <div className="bg-white border border-gray-200 p-12 shadow-xl">
-                        <div className="text-center mb-10">
-                            <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tighter mb-2">Secure Checkout</h3>
-                            <p className="text-gray-500 text-sm">Completing payment of <span className="font-bold text-black">€{totalPrice.toFixed(2)}</span> via {paymentMethod === 'card' ? 'Stripe Secure' : paymentMethod}</p>
+                    <div className="bg-white border border-gray-200 p-12 md:p-20 shadow-xl min-h-[700px]">
+                        <div className="text-center mb-16">
+                            <h3 className="text-4xl font-black text-gray-900 uppercase tracking-tighter mb-4">Secure Checkout</h3>
+                            <p className="text-gray-500 text-lg">Completing payment of <span className="font-bold text-[#ff4d00] text-xl">€{totalPrice.toFixed(2)}</span> via {paymentMethod === 'card' ? 'Stripe Secure' : paymentMethod}</p>
                         </div>
 
                         {paymentMethod === 'card' && clientSecret && (
@@ -415,24 +650,118 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
                         )}
 
                         {paymentMethod === 'bank' && (
-                            <div className="text-center space-y-4">
-                                <div className="p-6 bg-gray-50 border border-gray-200 text-left space-y-2 font-mono text-sm">
-                                    <p><strong>Bank Name:</strong> Global Traffic Bank</p>
-                                    <p><strong>IBAN:</strong> DE89 3704 0044 0532 0150 00</p>
-                                    <p><strong>BIC:</strong> COBADEFFXXX</p>
-                                    <p><strong>Ref:</strong> USER-{db.getCurrentUser()?.id.substring(0, 8).toUpperCase()}</p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                                <div className="space-y-8">
+                                    <div className="bg-green-50 border-l-4 border-green-500 p-6 shadow-md">
+                                        <div className="flex items-start gap-4">
+                                            <Info size={28} className="text-green-600 flex-shrink-0 mt-1" />
+                                            <div>
+                                                <p className="text-xl font-black text-green-800 mb-2">Instant Credit Upon Confirmation</p>
+                                                <p className="text-base text-green-700">
+                                                    Upload your transfer confirmation. After validation, traffic will be <strong className="text-green-900">instantly</strong> credited to your account.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-sm font-black uppercase tracking-widest text-gray-400 mb-4 block flex items-center gap-2">
+                                            <Layers size={14} /> Select Currency
+                                        </label>
+                                        <div className="flex flex-wrap gap-4">
+                                            {(Object.keys(BANK_DETAILS) as Currency[]).map((curr) => {
+                                                const icons: Record<Currency, string> = { USD: '$', EUR: '€', GBP: '£', AUD: 'A$', RON: 'lei' };
+                                                return (
+                                                    <button
+                                                        key={curr}
+                                                        onClick={() => setSelectedCurrency(curr)}
+                                                        className={`px-6 py-3 text-base font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${
+                                                            selectedCurrency === curr
+                                                                ? 'bg-[#ff4d00] text-white shadow-lg'
+                                                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                        }`}
+                                                    >
+                                                        <span className="text-lg">{icons[curr]}</span>
+                                                        {curr}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-gray-50 border border-gray-200 p-8">
+                                        <div className="flex items-center justify-between mb-5">
+                                            <h4 className="text-sm font-black uppercase tracking-widest text-gray-900">Bank Details ({selectedCurrency})</h4>
+                                            <span className="text-xs font-bold text-[#ff4d00] uppercase">Recommended</span>
+                                        </div>
+                                        {renderBankDetails(selectedCurrency)}
+                                    </div>
                                 </div>
-                                <button onClick={() => handlePaymentSuccess("WIRE-PENDING")} className="w-full bg-[#111] text-white py-4 font-black uppercase hover:bg-[#ff4d00]">
-                                    I have sent the wire
-                                </button>
+
+                                <div className="space-y-6">
+                                    <label className="text-sm font-black uppercase tracking-widest text-gray-400 mb-4 block">
+                                        Upload Transfer Confirmation
+                                    </label>
+                                    
+                                    {uploadSuccess ? (
+                                        <div className="bg-green-50 border border-green-200 p-10 text-center h-full flex flex-col items-center justify-center">
+                                            <CheckCircle size={72} className="text-green-500 mb-6" />
+                                            <p className="text-lg font-bold text-green-800 mb-3">Upload Successful!</p>
+                                            <p className="text-base text-green-600">Your transfer is being reviewed. You will receive instant credit upon validation.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-5 h-full flex flex-col">
+                                            <div className="border-2 border-dashed border-gray-300 p-10 text-center hover:border-[#ff4d00] transition-colors cursor-pointer flex-1 flex flex-col items-center justify-center">
+                                                <input
+                                                    type="file"
+                                                    accept=".pdf,.jpg,.jpeg,.png,.webp"
+                                                    onChange={handleFileChange}
+                                                    className="hidden"
+                                                    id="proof-upload"
+                                                />
+                                                <label htmlFor="proof-upload" className="cursor-pointer">
+                                                    <Upload size={48} className="mx-auto text-gray-400 mb-5" />
+                                                    <p className="text-lg font-medium text-gray-600">
+                                                        {proofFile ? proofFile.name : 'Click here or drag a file'}
+                                                    </p>
+                                                    <p className="text-sm text-gray-400 mt-3">PDF, JPG, PNG (max. 10MB)</p>
+                                                </label>
+                                            </div>
+
+                                            <button
+                                                onClick={handleProofUpload}
+                                                disabled={!proofFile || isUploading}
+                                                className="w-full bg-[#ff4d00] text-white py-6 text-base font-black uppercase tracking-widest hover:bg-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+                                            >
+                                                {isUploading ? (
+                                                    <>
+                                                        <Loader2 className="animate-spin" size={20} />
+                                                        Uploading...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Upload size={20} />
+                                                        Upload & Release Traffic
+                                                    </>
+                                                )}
+                                            </button>
+
+                                            <div className="bg-gray-50 border border-gray-200 p-5 text-center">
+                                                <p className="text-base text-gray-500">
+                                                    Amount: <strong className="text-[#ff4d00] text-lg">€{totalPrice.toFixed(2)}</strong> for <strong>{totalVisitors.toLocaleString()} {selectedTier.name} Visitors</strong>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
 
                         {paymentMethod === 'apple' && (
-                            <div className="text-center py-12">
-                                <Smartphone size={64} className="mx-auto text-gray-200 mb-4" />
-                                <p className="text-gray-500 mb-6">Apple Pay integration requires HTTPS on production domain.</p>
-                                <button onClick={() => handlePaymentSuccess("APPLE-SIM")} className="bg-black text-white px-8 py-3 rounded-full font-bold">
+                            <div className="text-center py-16">
+                                <Smartphone size={80} className="mx-auto text-gray-200 mb-6" />
+                                <p className="text-gray-500 mb-8 text-lg">Apple Pay integration requires HTTPS on production domain.</p>
+                                <button onClick={() => handlePaymentSuccess("APPLE-SIM")} className="bg-black text-white px-10 py-4 rounded-full font-bold text-lg">
                                     Pay with Pay (Simulated)
                                 </button>
                             </div>
@@ -440,8 +769,8 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
                     </div>
 
                     <div className="flex justify-center items-center gap-2 opacity-50">
-                        <Lock size={12} className="text-gray-400" />
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">256-Bit SSL Encrypted & Verified</span>
+                        <Lock size={14} className="text-gray-400" />
+                        <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">256-Bit SSL Encrypted & Verified</span>
                     </div>
                 </div>
             )}

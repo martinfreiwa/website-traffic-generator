@@ -158,6 +158,7 @@ class Transaction(Base):
     description = Column(String, nullable=True)
     status = Column(String, default="completed")
     tier = Column(String, nullable=True)
+    reference = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     user = relationship("User", back_populates="transactions")
@@ -237,9 +238,31 @@ class Broadcast(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     title = Column(String, nullable=False)
     message = Column(String, nullable=False)
-    type = Column(String, default="info")  # 'info', 'warning', 'critical', 'success'
+    type = Column(String, default="info")
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     expires_at = Column(DateTime, nullable=True)
     action_url = Column(String, nullable=True)
     action_text = Column(String, nullable=True)
+
+
+class BankTransferProof(Base):
+    __tablename__ = "bank_transfer_proofs"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"))
+    amount = Column(Float, nullable=False)
+    tier = Column(String, nullable=True)
+    currency = Column(String, default="USD")
+    status = Column(String, default="pending")
+    file_url = Column(String, nullable=True)
+    file_name = Column(String, nullable=True)
+    reference = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
+    admin_notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    processed_at = Column(DateTime, nullable=True)
+    processed_by = Column(String, ForeignKey("users.id"), nullable=True)
+
+    user = relationship("User", foreign_keys=[user_id], backref="bank_transfers")
+    processor = relationship("User", foreign_keys=[processed_by])

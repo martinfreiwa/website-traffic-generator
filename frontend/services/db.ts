@@ -385,7 +385,8 @@ export const db = {
             status: t.status || 'completed',
             type: t.type,
             userId: t.user_id || t.userId,
-            tier: t.tier
+            tier: t.tier,
+            reference: t.reference
         }));
         localStorage.setItem('modus_transactions_cache', JSON.stringify(mapped));
         return mapped;
@@ -408,7 +409,8 @@ export const db = {
             status: t.status || 'completed',
             type: t.type,
             userId: t.user_id || t.userId,
-            tier: t.tier
+            tier: t.tier,
+            reference: t.reference
         }));
         localStorage.setItem('modus_admin_transactions_cache', JSON.stringify(mapped));
         return mapped;
@@ -957,5 +959,29 @@ export const db = {
 
     saveReferralSettings: (settings: import('../types').ReferralSettings) => {
         localStorage.setItem('modus_referral_settings', JSON.stringify(settings));
+    },
+
+    getBankTransfers: async (statusFilter: string = 'all'): Promise<any[]> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/bank-transfers?status_filter=${statusFilter}`);
+        if (!response.ok) return [];
+        return await response.json();
+    },
+
+    getMyBankTransfers: async (): Promise<any[]> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/bank-transfer/my-proofs`);
+        if (!response.ok) return [];
+        return await response.json();
+    },
+
+    approveBankTransfer: async (proofId: string, approved: boolean, adminNotes?: string): Promise<any> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/bank-transfers/${proofId}/approve`, {
+            method: 'PUT',
+            body: JSON.stringify({ approved, admin_notes: adminNotes })
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || "Failed to process transfer");
+        }
+        return await response.json();
     }
 };
