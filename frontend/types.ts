@@ -271,6 +271,8 @@ export interface User {
   displayName?: string;
   requirePasswordReset?: boolean;
   avatarUrl?: string;
+  createdAt?: string;
+  lastActive?: string;
 }
 
 export interface LiveVisitor {
@@ -437,6 +439,106 @@ export interface ConversionSettings {
     buttonLink?: string;
     backgroundColor: string;
     textColor: string;
-    endDate?: string; // New: For countdown timer
+    endDate?: string;
   };
+}
+
+// Admin User Detail Types
+export interface ActivityLog {
+  id: string;
+  userId?: string;
+  actionType: string;
+  actionDetail: Record<string, any>;
+  ipAddress?: string;
+  userAgent?: string;
+  createdAt: string;
+}
+
+export interface UserSession {
+  id: string;
+  userId: string;
+  ipAddress?: string;
+  userAgent?: string;
+  deviceInfo: Record<string, any>;
+  location?: string;
+  createdAt: string;
+  lastActivity: string;
+  expiresAt?: string;
+  isActive: boolean;
+}
+
+export interface ImpersonationLog {
+  id: string;
+  adminId: string;
+  targetUserId: string;
+  action: string;
+  ipAddress?: string;
+  createdAt: string;
+  adminEmail?: string;
+}
+
+export interface BalanceAdjustmentLog {
+  id: string;
+  userId: string;
+  adminId?: string;
+  adjustmentType: string;
+  tier?: string;
+  amount: number;
+  hits?: number;
+  reason?: string;
+  notes?: string;
+  createdAt: string;
+  adminEmail?: string;
+}
+
+export interface EmailLog {
+  id: string;
+  userId?: string;
+  emailType: string;
+  toEmail: string;
+  subject?: string;
+  status: string;
+  errorMessage?: string;
+  sentAt: string;
+  deliveredAt?: string;
+}
+
+export interface UserNotificationPrefs {
+  id: string;
+  userId: string;
+  emailMarketing: boolean;
+  emailTransactional: boolean;
+  emailAlerts: boolean;
+  browserNotifications: boolean;
+  newsletterSub: boolean;
+  emailFrequency: string;
+  updatedAt: string;
+}
+
+export interface UserReferral {
+  id: string;
+  email: string;
+  name: string;
+  status: string;
+  createdAt?: string;
+  totalSpent: number;
+  earningsFromRef: number;
+}
+
+export interface AdminUserDetails {
+  user: User;
+  tierBalances: {
+    economy: number;
+    professional: number;
+    expert: number;
+  };
+  totalSpent: number;
+  totalHitsPurchased: number;
+  totalHitsUsed: number;
+  transactionsCount: number;
+  projectsCount: number;
+  ticketsCount: number;
+  referralsCount: number;
+  referralEarnings: number;
+  notificationPrefs?: UserNotificationPrefs;
 }

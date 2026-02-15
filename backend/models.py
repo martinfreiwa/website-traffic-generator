@@ -96,6 +96,10 @@ class User(Base):
     last_ip = Column(String, nullable=True)
     last_active = Column(DateTime, nullable=True)
 
+    # Additional security fields
+    api_key_last_used = Column(DateTime, nullable=True)
+    password_changed_at = Column(DateTime, nullable=True)
+
     projects = relationship("Project", back_populates="user")
     transactions = relationship("Transaction", back_populates="user")
     # Self-referential relationship for affiliates
@@ -269,3 +273,126 @@ class BankTransferProof(Base):
 
     user = relationship("User", foreign_keys=[user_id], backref="bank_transfers")
     processor = relationship("User", foreign_keys=[processed_by])
+
+
+class ActivityLog(Base):
+    __tablename__ = "activity_log"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(
+        String, ForeignKey("users.id"), nullable=True
+    )  # Can be null for system events
+    action_type = Column(
+        String, nullable=False
+    )  # 'login', 'logout', 'project_created', 'project_started', 'purchase', 'settings_change', etc.
+    action_detail = Column(JSON, default=dict)  # Additional details as JSON
+    ip_address = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    user = relationship("User", backref="activity_logs")
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"))
+    token_hash = Column(String, nullable=True)
+    ip_address = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
+    device_info = Column(JSON, default=dict)  # Parsed device info
+    location = Column(String, nullable=True)  # Geo-located from IP
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    last_activity = Column(DateTime, default=datetime.datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True)
+
+    user = relationship("User", backref="sessions")
+
+
+class ImpersonationLog(Base):
+    __tablename__ = "impersonation_log"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    admin_id = Column(String, ForeignKey("users.id"))
+    target_user_id = Column(String, ForeignKey("users.id"))
+    action = Column(String, nullable=False)  # 'start', 'end'
+    ip_address = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    admin = relationship("User", foreign_keys=[admin_id], backref="impersonation_logs")
+    target_user = relationship(
+        "User", foreign_keys=[target_user_id], backref="was_impersonated_by"
+    )
+
+
+class BalanceAdjustmentLog(Base):
+    __tablename__ = "balance_adjustment_log"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"))
+    admin_id = Column(String, ForeignKey("users.id"), nullable=True)
+    adjustment_type = Column(String, nullable=False)  # 'credit', 'debit'
+    tier = Column(
+        String, nullable=True
+    )  # 'economy', 'professional', 'expert', 'general'
+    amount = Column(Float, default=0)  # Euro amount
+    hits = Column(Integer, nullable=True)  # Hits amount (if applicable)
+    reason = Column(String, nullable=True)
+    notes = Column(String, nullable=True)  # Additional admin notes
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    user = relationship("User", foreign_keys=[user_id], backref="balance_adjustments")
+    admin = relationship(
+        "User", foreign_keys=[admin_id], backref="balance_adjustments_made"
+    )
+
+
+class EmailLog(Base):
+    __tablename__ = "email_log"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(
+        String, ForeignKey("users.id"), nullable=True
+    )  # Can be null for system emails
+    email_type = Column(
+        String, nullable=False
+    )  # 'password_reset', 'verification', 'receipt', 'alert', etc.
+    to_email = Column(String, nullable=False)
+    subject = Column(String, nullable=True)
+    status = Column(String, default="sent")  # 'sent', 'delivered', 'bounced', 'failed'
+    error_message = Column(String, nullable=True)
+    sent_at = Column(DateTime, default=datetime.datetime.utcnow)
+    delivered_at = Column(DateTime, nullable=True)
+
+    user = relationship("User", backref="email_logs")
+
+
+class UserNotificationPrefs(Base):
+    __tablename__ = "user_notification_prefs"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), unique=True)
+    email_marketing = Column(Boolean, default=True)
+    email_transactional = Column(Boolean, default=True)
+    email_alerts = Column(Boolean, default=True)
+    browser_notifications = Column(Boolean, default=True)
+    newsletter_sub = Column(Boolean, default=False)
+    email_frequency = Column(String, default="instant")  # 'instant', 'daily', 'weekly'
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    user = relationship("User", backref="notification_prefs")
+
+
+class TokenBlacklist(Base):
+    __tablename__ = "token_blacklist"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    token = Column(String, unique=True, nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=True)
+    reason = Column(
+        String, nullable=True
+    )  # 'logout', 'admin_terminate', 'password_change', 'security'
+    expires_at = Column(DateTime, nullable=False)
+    blacklisted_at = Column(DateTime, default=datetime.datetime.utcnow)

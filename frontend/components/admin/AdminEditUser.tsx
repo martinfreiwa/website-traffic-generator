@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { User, Transaction, Ticket } from '../../types';
+import { User } from '../../types';
 import { db } from '../../services/db';
-import { ArrowLeft, Save, Plus, Minus, DollarSign, Layers, LogIn, Lock, CheckCircle, AlertTriangle, FileText, Tag } from 'lucide-react';
-import CustomSelect from '../CustomSelect';
+import { ArrowLeft, Save, LogIn, User as UserIcon, CreditCard, Folder, Ticket, Shield, Activity as ActivityIcon } from 'lucide-react';
+import OverviewTab from './AdminUserTabs/OverviewTab';
+import TransactionsTab from './AdminUserTabs/TransactionsTab';
+import ProjectsTab from './AdminUserTabs/ProjectsTab';
+import TicketsTab from './AdminUserTabs/TicketsTab';
+import SecurityTab from './AdminUserTabs/SecurityTab';
+import ActivityTab from './AdminUserTabs/ActivityTab';
+import ProfileTab from './AdminUserTabs/ProfileTab';
 
 interface AdminEditUserProps {
     userId: string;
@@ -10,334 +16,170 @@ interface AdminEditUserProps {
     onUpdate: () => void;
 }
 
+const tabs = [
+    { id: 'overview', label: 'Overview', icon: <UserIcon size={16} /> },
+    { id: 'profile', label: 'Profile', icon: <UserIcon size={16} /> },
+    { id: 'transactions', label: 'Transactions', icon: <CreditCard size={16} /> },
+    { id: 'projects', label: 'Projects', icon: <Folder size={16} /> },
+    { id: 'tickets', label: 'Tickets', icon: <Ticket size={16} /> },
+    { id: 'security', label: 'Security', icon: <Shield size={16} /> },
+    { id: 'activity', label: 'Activity', icon: <ActivityIcon size={16} /> },
+];
+
 const AdminEditUser: React.FC<AdminEditUserProps> = ({ userId, onBack, onUpdate }) => {
     const [user, setUser] = useState<User | null>(null);
-    const [transactions, setTransactions] = useState<Transaction[]>([]);
-    const [tickets, setTickets] = useState<Ticket[]>([]);
-    const [fundAmount, setFundAmount] = useState('');
-    const [fundReason, setFundReason] = useState('');
+    const [activeTab, setActiveTab] = useState('overview');
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const users = db.getUsers();
-        const foundUser = users.find(u => u.id === userId);
-        setUser(foundUser || null);
-
-        const allTrx = db.getTransactions();
-        setTransactions(allTrx.filter(t => t.userId === userId));
-
-        const allTickets = db.getTickets();
-        setTickets(allTickets.filter(t => t.userId === userId));
+        loadUser();
     }, [userId]);
 
-    const handleSaveUser = () => {
+    const loadUser = async () => {
+        setLoading(true);
+        try {
+            const data = await db.getUserDetails(userId);
+            if (data && data.user) {
+                setUser(data.user);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+        setLoading(false);
+    };
+
+    const handleNavigateToProject = (projectId: string) => {
+        window.location.href = `/admin/projects/edit/${projectId}`;
+    };
+
+    const handleImpersonate = async () => {
         if (!user) return;
-        db.updateUser(user);
-        onUpdate();
-        alert('User updated successfully.');
+        try {
+            await db.startImpersonation(user.id);
+            window.location.href = '/dashboard';
+        } catch (e) {
+            console.error("Failed to impersonate", e);
+            alert("Failed to start impersonation session. Please try again.");
+        }
     };
 
-    const handleFundAdjustment = (type: 'credit' | 'debit') => {
-        if (!user || !fundAmount) return;
-        const amount = parseFloat(fundAmount);
-        if (isNaN(amount) || amount <= 0) return alert('Invalid amount');
-
-        db.adminAdjustBalance(user.id, amount, type, fundReason || 'Manual Adjustment');
-
-        // Refresh local user state
-        const updatedUsers = db.getUsers();
-        const updatedUser = updatedUsers.find(u => u.id === user.id);
-        setUser(updatedUser || null);
-
-        setFundAmount('');
-        setFundReason('');
-        onUpdate();
-        alert(`Successfully ${type === 'credit' ? 'added' : 'removed'} funds.`);
-    };
-
-    if (!user) return <div>User not found.</div>;
+    if (loading) return <div className="p-8 text-center text-gray-500">Loading user details...</div>;
+    if (!user) return <div className="p-8 text-center text-red-500">User not found</div>;
 
     return (
-        <div className="animate-in fade-in slide-in-from-right-4 space-y-6">
-            <div className="flex items-center justify-between mb-4">
-                <button onClick={onBack} className="flex items-center gap-2 text-gray-500 hover:text-black text-xs font-bold uppercase tracking-wide">
-                    <ArrowLeft size={14} /> Back to List
+        <div className="animate-in fade-in space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <button
+                    onClick={onBack}
+                    className="flex items-center gap-2 text-gray-500 hover:text-[#ff4d00] text-xs font-bold uppercase tracking-wide transition-colors"
+                >
+                    <ArrowLeft size={14} /> Back to Users
                 </button>
                 <div className="flex items-center gap-2">
+                    {/* Action buttons can go here if needed generically */}
+                </div>
+            </div>
+
+            {/* User Identity Bar */}
+            <div className="bg-white border border-gray-200 p-6 shadow-sm flex items-center justify-between rounded-lg">
+                <div className="flex items-center gap-5">
+                    <div className="w-14 h-14 bg-[#ff4d00] rounded-full flex items-center justify-center shadow-md">
+                        <span className="font-black text-white text-xl">
+                            {user.name ? user.name.charAt(0).toUpperCase() : user.email.charAt(0).toUpperCase()}
+                        </span>
+                    </div>
+                    <div>
+                        <div className="font-bold text-gray-900 text-xl">{user.name || 'Unnamed User'}</div>
+                        <div className="text-sm text-gray-500 font-mono">{user.email}</div>
+                        <div className="flex items-center gap-2 mt-2">
+                            <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded border ${user.status === 'active' ? 'bg-green-50 text-green-600 border-green-200' : 'bg-red-50 text-red-600 border-red-200'
+                                }`}>
+                                {user.status}
+                            </span>
+                            <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded border ${user.role === 'admin' ? 'bg-purple-50 text-purple-600 border-purple-200' : 'bg-gray-50 text-gray-600 border-gray-200'
+                                }`}>
+                                {user.role}
+                            </span>
+                            <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded border bg-blue-50 text-blue-600 border-blue-200">
+                                {user.plan} Plan
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div className="flex items-center gap-3">
                     <button
-                        onClick={() => {
-                            db.setCurrentUser(user);
-                            window.location.href = '/dashboard';
-                        }}
-                        className="bg-white border border-gray-300 text-gray-700 px-4 py-3 text-xs font-bold uppercase tracking-wider hover:bg-gray-50 transition-colors flex items-center gap-2"
+                        onClick={handleImpersonate}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-black text-white text-xs font-bold uppercase hover:bg-gray-800 transition-colors border border-black shadow-sm"
                     >
                         <LogIn size={14} /> Login As User
-                    </button>
-                    <button
-                        onClick={handleSaveUser}
-                        className="bg-black text-white px-6 py-3 text-xs font-bold uppercase tracking-wider hover:bg-[#ff4d00] transition-colors flex items-center gap-2"
-                    >
-                        <Save size={14} /> Save Changes
                     </button>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-                {/* Main Info */}
-                <div className="lg:col-span-2 space-y-6">
-                    <div className="bg-white border border-gray-200 p-8 shadow-sm">
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-6">User Identity</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-2">Full Name</label>
-                                <input
-                                    value={user.name}
-                                    onChange={(e) => setUser({ ...user, name: e.target.value })}
-                                    className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 outline-none focus:border-[#ff4d00]"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-2">Email Address</label>
-                                <input
-                                    value={user.email}
-                                    onChange={(e) => setUser({ ...user, email: e.target.value })}
-                                    className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 outline-none focus:border-[#ff4d00]"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-2">Role</label>
-                                <CustomSelect
-                                    value={user.role}
-                                    onChange={(val) => setUser({ ...user, role: val as 'user' | 'admin' })}
-                                    options={[
-                                        { value: "user", label: "User" },
-                                        { value: "admin", label: "Admin" }
-                                    ]}
-                                />
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-2">Account Status</label>
-                                <CustomSelect
-                                    value={user.status}
-                                    onChange={(val) => setUser({ ...user, status: val as 'active' | 'suspended' })}
-                                    options={[
-                                        { value: "active", label: "Active" },
-                                        { value: "suspended", label: "Suspended" }
-                                    ]}
-                                />
-                            </div>
-                            <div className="md:col-span-2 pt-2 border-t border-gray-100 mt-2">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-2">Internal Tags (Comma Separated)</label>
-                                <div className="relative">
-                                    <input
-                                        value={user.tags?.join(', ') || ''}
-                                        onChange={(e) => setUser({ ...user, tags: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
-                                        className="w-full bg-[#f9fafb] border border-gray-200 p-3 pl-9 text-sm font-bold text-gray-900 outline-none focus:border-[#ff4d00]"
-                                        placeholder="e.g. VIP, High Risk, Old Client"
-                                    />
-                                    <Tag className="absolute left-3 top-3.5 text-gray-400" size={14} />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-2">Account Plan</label>
-                                <CustomSelect
-                                    value={user.plan || 'free'}
-                                    onChange={(val) => setUser({ ...user, plan: val as 'free' | 'pro' | 'agency' })}
-                                    options={[
-                                        { value: "free", label: "Free Tier" },
-                                        { value: "pro", label: "Pro ($29/mo)" },
-                                        { value: "agency", label: "Agency ($99/mo)" }
-                                    ]}
-                                />
-                            </div>
-                            {user.status === 'suspended' && (
-                                <div className="md:col-span-2 bg-red-50 p-3 border border-red-100 rounded">
-                                    <label className="text-[10px] font-bold text-red-400 uppercase tracking-wide block mb-2">Reason for Suspension</label>
-                                    <input
-                                        value={user.banReason || ''}
-                                        onChange={(e) => setUser({ ...user, banReason: e.target.value })}
-                                        className="w-full bg-white border border-red-200 p-2 text-sm text-red-900 outline-none focus:border-red-500"
-                                        placeholder="e.g. Violation of ToS..."
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="bg-white border border-gray-200 p-8 shadow-sm">
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-gray-900 mb-6 flex items-center gap-2">
-                            <DollarSign size={14} /> Fund Management
-                        </h3>
-                        <div className="flex flex-col md:flex-row gap-4 items-end">
-                            <div className="flex-1 w-full">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-2">Amount</label>
-                                <input
-                                    type="number"
-                                    value={fundAmount}
-                                    onChange={(e) => setFundAmount(e.target.value)}
-                                    className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-mono font-medium outline-none focus:border-[#ff4d00]"
-                                    placeholder="0.00"
-                                />
-                            </div>
-                            <div className="flex-[2] w-full">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-2">Reason</label>
-                                <input
-                                    type="text"
-                                    value={fundReason}
-                                    onChange={(e) => setFundReason(e.target.value)}
-                                    className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm outline-none focus:border-[#ff4d00]"
-                                    placeholder="e.g. Bonus, Refund, Adjustment"
-                                />
-                            </div>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => handleFundAdjustment('credit')}
-                                    className="bg-green-600 text-white px-4 py-3 text-xs font-bold uppercase tracking-wider hover:bg-green-700 transition-colors flex items-center gap-2"
-                                >
-                                    <Plus size={14} /> Add
-                                </button>
-                                <button
-                                    onClick={() => handleFundAdjustment('debit')}
-                                    className="bg-red-600 text-white px-4 py-3 text-xs font-bold uppercase tracking-wider hover:bg-red-700 transition-colors flex items-center gap-2"
-                                >
-                                    <Minus size={14} /> Deduct
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    {/* Risk & Compliance */}
-                    <div className="bg-white border border-gray-200 p-8 shadow-sm">
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-red-600 mb-6 flex items-center gap-2">
-                            <AlertTriangle size={14} /> Risk Control
-                        </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="flex items-center justify-between p-4 bg-gray-50 border border-gray-100 rounded">
-                                <div>
-                                    <div className="text-sm font-bold text-gray-900">Shadow Ban</div>
-                                    <div className="text-[10px] text-gray-500">User appears active but campaigns adhere to "Ghost Mode".</div>
-                                </div>
-                                <label className="relative inline-flex items-center cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={user.shadowBanned || false}
-                                        onChange={e => setUser({ ...user, shadowBanned: e.target.checked })}
-                                        className="sr-only peer"
-                                    />
-                                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-600"></div>
-                                </label>
-                            </div>
-
-                            <div className="flex items-center justify-between p-4 bg-gray-50 border border-gray-100 rounded">
-                                <div>
-                                    <div className="text-sm font-bold text-gray-900">Email Verified</div>
-                                    <div className="text-[10px] text-gray-500">Manually override verification status.</div>
-                                </div>
-                                <label className="relative inline-flex items-center cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={user.isVerified || false}
-                                        onChange={e => setUser({ ...user, isVerified: e.target.checked })}
-                                        className="sr-only peer"
-                                    />
-                                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-600"></div>
-                                </label>
-                            </div>
-
-                            <div className="flex items-center justify-between p-4 bg-gray-50 border border-gray-100 rounded">
-                                <div>
-                                    <div className="text-sm font-bold text-gray-900">Last Known IP</div>
-                                    <div className="text-[10px] text-gray-500">{user.lastIp || 'Unknown'}</div>
-                                </div>
-                                <div className="px-2 py-1 bg-gray-200 text-gray-600 text-xs font-mono rounded">
-                                    {user.lastIp ? user.lastIp : 'N/A'}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Admin Notes */}
-                    <div className="bg-white border border-gray-200 p-8 shadow-sm">
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-gray-900 mb-6 flex items-center gap-2">
-                            <FileText size={14} /> Admin Notes (Private)
-                        </h3>
-                        <textarea
-                            value={user.notes || ''}
-                            onChange={(e) => setUser({ ...user, notes: e.target.value })}
-                            className="w-full bg-[#f9fafb] border border-gray-200 p-4 text-sm outline-none focus:border-[#ff4d00] min-h-[120px]"
-                            placeholder="Add private notes about this user (e.g. 'Refunded on 12/12', 'VIP client')..."
-                        />
-                    </div>
+            {/* Tabs */}
+            <div className="bg-white border border-gray-200 shadow-sm rounded-lg overflow-hidden">
+                <div className="flex overflow-x-auto border-b border-gray-100">
+                    {tabs.map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`flex items-center gap-2 px-6 py-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all whitespace-nowrap
+                                ${activeTab === tab.id
+                                    ? 'border-[#ff4d00] text-[#ff4d00] bg-orange-50/50'
+                                    : 'border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+                                }`}
+                        >
+                            <span className={activeTab === tab.id ? "text-[#ff4d00]" : "text-gray-400"}>
+                                {tab.icon}
+                            </span>
+                            <span>{tab.label}</span>
+                        </button>
+                    ))}
                 </div>
 
-                {/* Sidebar Stats */}
-                <div className="space-y-6">
-                    <div className="bg-[#111] text-white p-8">
-                        <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Current Balance</div>
-                        <div className="text-4xl font-black text-[#ff4d00]">€{user.balance.toFixed(2)}</div>
-                    </div>
-
-                    <div className="bg-white border border-gray-200 p-6 shadow-sm">
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-gray-900 mb-4">Quick Stats</h3>
-                        <div className="space-y-3">
-                            <div className="flex justify-between text-sm">
-                                <span className="text-gray-500">Transactions</span>
-                                <span className="font-bold">{transactions.length}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-gray-500">Tickets</span>
-                                <span className="font-bold">{tickets.length}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-gray-500">Projects</span>
-                                <span className="font-bold">{user.projectsCount}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Transaction History (Credit History) */}
-                    <div className="bg-white border border-gray-200 shadow-sm overflow-hidden">
-                        <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-                            <h3 className="text-xs font-bold uppercase tracking-widest text-gray-900 flex items-center gap-2">
-                                <DollarSign size={14} /> Credit History
-                            </h3>
-                            <button className="text-[10px] font-bold text-gray-400 hover:text-black uppercase">View All</button>
-                        </div>
-                        <table className="w-full text-left">
-                            <thead className="bg-gray-50 border-b border-gray-100">
-                                <tr>
-                                    <th className="px-6 py-3 text-[10px] font-bold text-gray-500 uppercase">Date</th>
-                                    <th className="px-6 py-3 text-[10px] font-bold text-gray-500 uppercase">Desc</th>
-                                    <th className="px-6 py-3 text-[10px] font-bold text-gray-500 uppercase">Amount</th>
-                                    <th className="px-6 py-3 text-[10px] font-bold text-gray-500 uppercase text-right">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50">
-                                {transactions.length === 0 ? (
-                                    <tr><td colSpan={4} className="px-6 py-4 text-center text-xs text-gray-400">No transactions found.</td></tr>
-                                ) : (
-                                    transactions.slice(0, 5).map(t => (
-                                        <tr key={t.id} className="hover:bg-gray-50">
-                                            <td className="px-6 py-3 text-xs text-gray-600 font-mono">{new Date(t.date).toLocaleDateString()}</td>
-                                            <td className="px-6 py-3 text-xs text-gray-900 font-medium">{t.desc}</td>
-                                            <td className={`px-6 py-3 text-xs font-bold ${t.type === 'credit' ? 'text-green-600' : 'text-gray-900'}`}>
-                                                {t.type === 'credit' ? '+' : '-'}€{t.amount.toFixed(2)}
-                                            </td>
-                                            <td className="px-6 py-3 text-right">
-                                                <span className={`text-[9px] uppercase font-bold px-2 py-1 rounded-full ${t.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                                                    }`}>
-                                                    {t.status}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
+                {/* Tab Content */}
+                <div className="p-6 bg-gray-50/30 min-h-[400px]">
+                    <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                        {activeTab === 'overview' && (
+                            <OverviewTab
+                                userId={userId}
+                                onNavigateToProject={handleNavigateToProject}
+                                onUpdate={onUpdate}
+                            />
+                        )}
+                        {activeTab === 'profile' && (
+                            <ProfileTab userId={userId} onUpdate={() => {
+                                loadUser();
+                                onUpdate();
+                            }} />
+                        )}
+                        {activeTab === 'transactions' && (
+                            <TransactionsTab userId={userId} />
+                        )}
+                        {activeTab === 'projects' && (
+                            <ProjectsTab
+                                userId={userId}
+                                onNavigateToProject={handleNavigateToProject}
+                            />
+                        )}
+                        {activeTab === 'tickets' && (
+                            <TicketsTab userId={userId} />
+                        )}
+                        {activeTab === 'security' && (
+                            <SecurityTab
+                                userId={userId}
+                                onUpdate={onUpdate}
+                            />
+                        )}
+                        {activeTab === 'activity' && (
+                            <ActivityTab userId={userId} />
+                        )}
                     </div>
                 </div>
             </div>
         </div>
     );
-}
+};
 
 export default AdminEditUser;

@@ -1,5 +1,5 @@
 
-import { Project, PriceClass, ProjectSettings, Transaction, User, Ticket, SystemSettings, Notification, TrafficLog, SystemAlert, LiveVisitor, Broadcast, AdminStats, Coupon, MarketingCampaign, ConversionSettings } from '../types';
+import { Project, PriceClass, ProjectSettings, Transaction, User, Ticket, SystemSettings, Notification, TrafficLog, SystemAlert, LiveVisitor, Broadcast, AdminStats, Coupon, MarketingCampaign, ConversionSettings, ActivityLog, UserSession, ImpersonationLog, BalanceAdjustmentLog, EmailLog, UserNotificationPrefs, UserReferral, AdminUserDetails } from '../types';
 
 const API_BASE_URL = "http://127.0.0.1:8001";
 
@@ -1021,5 +1021,449 @@ export const db = {
             tier: updated.tier,
             reference: updated.reference
         };
+    },
+
+    // Admin User Details
+    getUserDetails: async (userId: string): Promise<any> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/users/${userId}/details`);
+        if (!response.ok) throw new Error('Failed to fetch user details');
+        const data = await response.json();
+
+        return {
+            user: {
+                id: data.user.id,
+                email: data.user.email,
+                role: data.user.role,
+                balance: data.user.balance,
+                balanceEconomy: data.user.balance_economy,
+                balanceProfessional: data.user.balance_professional,
+                balanceExpert: data.user.balance_expert,
+                status: data.user.status,
+                plan: data.user.plan,
+                isVerified: data.user.is_verified,
+                shadowBanned: data.user.shadow_banned,
+                notes: data.user.notes,
+                tags: data.user.tags || [],
+                banReason: data.user.ban_reason,
+                lastIp: data.user.last_ip,
+                joinedDate: data.user.created_at?.split('T')[0]
+            },
+            tierBalances: data.tier_balances,
+            totalSpent: data.total_spent,
+            totalHitsPurchased: data.total_hits_purchased,
+            totalHitsUsed: data.total_hits_used,
+            transactionsCount: data.transactions_count,
+            projectsCount: data.projects_count,
+            ticketsCount: data.tickets_count,
+            referralsCount: data.referrals_count,
+            referralEarnings: data.referral_earnings,
+            notificationPrefs: data.notification_prefs
+        };
+    },
+
+    getUserActivity: async (userId: string, limit = 50, offset = 0, actionType?: string): Promise<ActivityLog[]> => {
+        let url = `${API_BASE_URL}/admin/users/${userId}/activity?limit=${limit}&offset=${offset}`;
+        if (actionType) url += `&action_type=${actionType}`;
+
+        const response = await fetchWithAuth(url);
+        if (!response.ok) throw new Error('Failed to fetch activity');
+        const data = await response.json();
+
+        return data.map((a: any) => ({
+            id: a.id,
+            userId: a.user_id,
+            actionType: a.action_type,
+            actionDetail: a.action_detail,
+            ipAddress: a.ip_address,
+            userAgent: a.user_agent,
+            createdAt: a.created_at
+        }));
+    },
+
+    getUserSessions: async (userId: string): Promise<UserSession[]> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/users/${userId}/sessions`);
+        if (!response.ok) throw new Error('Failed to fetch sessions');
+        const data = await response.json();
+
+        return data.map((s: any) => ({
+            id: s.id,
+            userId: s.user_id,
+            ipAddress: s.ip_address,
+            userAgent: s.user_agent,
+            deviceInfo: s.device_info,
+            location: s.location,
+            createdAt: s.created_at,
+            lastActivity: s.last_activity,
+            expiresAt: s.expires_at,
+            isActive: s.is_active
+        }));
+    },
+
+    terminateUserSession: async (userId: string, sessionId: string): Promise<void> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/users/${userId}/sessions/${sessionId}`, {
+            method: 'DELETE'
+        });
+        if (!response.ok) throw new Error('Failed to terminate session');
+    },
+
+    getImpersonationLog: async (userId: string): Promise<ImpersonationLog[]> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/users/${userId}/impersonation-log`);
+        if (!response.ok) throw new Error('Failed to fetch impersonation log');
+        const data = await response.json();
+
+        return data.map((l: any) => ({
+            id: l.id,
+            adminId: l.admin_id,
+            targetUserId: l.target_user_id,
+            action: l.action,
+            ipAddress: l.ip_address,
+            createdAt: l.created_at,
+            adminEmail: l.admin_email
+        }));
+    },
+
+    getBalanceAdjustments: async (userId: string): Promise<BalanceAdjustmentLog[]> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/users/${userId}/balance-adjustments`);
+        if (!response.ok) throw new Error('Failed to fetch balance adjustments');
+        const data = await response.json();
+
+        return data.map((a: any) => ({
+            id: a.id,
+            userId: a.user_id,
+            adminId: a.admin_id,
+            adjustmentType: a.adjustment_type,
+            tier: a.tier,
+            amount: a.amount,
+            hits: a.hits,
+            reason: a.reason,
+            notes: a.notes,
+            createdAt: a.created_at,
+            adminEmail: a.admin_email
+        }));
+    },
+
+    adjustUserBalance: async (userId: string, adjustment: {
+        adjustmentType: string;
+        tier: string;
+        amount: number;
+        hits?: number;
+        reason: string;
+        notes?: string;
+    }): Promise<void> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/users/${userId}/adjust-balance`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(adjustment)
+        });
+        if (!response.ok) throw new Error('Failed to adjust balance');
+    },
+
+    addBonusHits: async (userId: string, request: {
+        tier: string;
+        hits: number;
+        reason: string;
+    }): Promise<void> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/users/${userId}/add-bonus-hits`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(request)
+        });
+        if (!response.ok) throw new Error('Failed to add bonus hits');
+    },
+
+    getUserEmails: async (userId: string, limit = 50): Promise<EmailLog[]> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/users/${userId}/emails?limit=${limit}`);
+        if (!response.ok) throw new Error('Failed to fetch emails');
+        const data = await response.json();
+
+        return data.map((e: any) => ({
+            id: e.id,
+            userId: e.user_id,
+            emailType: e.email_type,
+            toEmail: e.to_email,
+            subject: e.subject,
+            status: e.status,
+            errorMessage: e.error_message,
+            sentAt: e.sent_at,
+            deliveredAt: e.delivered_at
+        }));
+    },
+
+    getUserReferrals: async (userId: string): Promise<{ referrals: UserReferral[]; totalReferrals: number; totalEarnings: number }> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/users/${userId}/referrals`);
+        if (!response.ok) throw new Error('Failed to fetch referrals');
+        const data = await response.json();
+
+        return {
+            referrals: (data.referrals || []).map((r: any) => ({
+                id: r.id,
+                email: r.email,
+                name: r.name,
+                status: r.status,
+                createdAt: r.created_at,
+                totalSpent: r.total_spent,
+                earningsFromRef: r.earnings_from_ref
+            })),
+            totalReferrals: data.total_referrals,
+            totalEarnings: data.total_earnings
+        };
+    },
+
+    getUserNotificationPrefs: async (userId: string): Promise<UserNotificationPrefs> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/users/${userId}/notification-prefs`);
+        if (!response.ok) throw new Error('Failed to fetch notification prefs');
+        const data = await response.json();
+
+        return {
+            id: data.id,
+            userId: data.user_id,
+            emailMarketing: data.email_marketing,
+            emailTransactional: data.email_transactional,
+            emailAlerts: data.email_alerts,
+            browserNotifications: data.browser_notifications,
+            newsletterSub: data.newsletter_sub,
+            emailFrequency: data.email_frequency,
+            updatedAt: data.updated_at
+        };
+    },
+
+    updateUserNotificationPrefs: async (userId: string, prefs: Partial<UserNotificationPrefs>): Promise<void> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/users/${userId}/notification-prefs`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(prefs)
+        });
+        if (!response.ok) throw new Error('Failed to update notification prefs');
+    },
+
+    sendPasswordReset: async (userId: string): Promise<void> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/users/${userId}/send-password-reset`, {
+            method: 'POST'
+        });
+        if (!response.ok) throw new Error('Failed to send password reset');
+    },
+
+    resendVerification: async (userId: string): Promise<void> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/users/${userId}/resend-verification`, {
+            method: 'POST'
+        });
+        if (!response.ok) throw new Error('Failed to resend verification');
+    },
+
+    adminRegenerateApiKey: async (userId: string): Promise<string> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/users/${userId}/regenerate-api-key`, {
+            method: 'POST'
+        });
+        if (!response.ok) throw new Error('Failed to regenerate API key');
+        const data = await response.json();
+        return data.api_key;
+    },
+
+    startImpersonation: async (userId: string): Promise<void> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/impersonate/${userId}`, {
+            method: 'POST'
+        });
+        if (!response.ok) throw new Error('Failed to start impersonation');
+        const data = await response.json();
+
+        // 0. Backup Admin Token
+        if (authToken) {
+            localStorage.setItem('tgp_admin_token', authToken);
+        }
+
+        // 1. Set new token
+        localStorage.setItem('tgp_token', data.token);
+        authToken = data.token; // Update module-scope variable
+
+        // 2. Fetch User Details with new token
+        const userRes = await fetchWithAuth(`${API_BASE_URL}/users/me`);
+        if (!userRes.ok) throw new Error('Failed to fetch impersonated user details');
+        const userData = await userRes.json();
+
+        // 3. Map and Set Current User
+        const mappedUser: User = {
+            id: userData.id,
+            email: userData.email,
+            name: (userData.name || userData.email.split('@')[0]),
+            role: userData.role,
+            balance: userData.balance,
+            balanceEconomy: userData.balance_economy,
+            balanceProfessional: userData.balance_professional,
+            balanceExpert: userData.balance_expert,
+            status: userData.status,
+            plan: userData.plan,
+            isVerified: userData.is_verified,
+            shadowBanned: userData.shadow_banned,
+            notes: userData.notes,
+            tags: userData.tags,
+            banReason: userData.ban_reason,
+            createdAt: userData.created_at,
+            joinedDate: userData.created_at || new Date().toISOString(),
+            projectsCount: 0,
+            lastIp: userData.last_ip,
+            lastActive: userData.last_active,
+
+            // Extended Profile
+            phone: userData.phone,
+            company: userData.company,
+            vatId: userData.vat_id,
+            address: userData.address,
+            city: userData.city,
+            country: userData.country,
+            zip: userData.zip,
+            website: userData.website,
+            displayName: userData.display_name,
+            bio: userData.bio,
+            jobTitle: userData.job_title,
+            publicProfile: userData.public_profile,
+            twoFactorEnabled: userData.two_factor_enabled,
+            emailFrequency: userData.email_frequency,
+            loginNotificationEnabled: userData.login_notification_enabled,
+            newsletterSub: userData.newsletter_sub,
+            soundEffects: userData.sound_effects,
+            developerMode: userData.developer_mode,
+            apiWhitelist: userData.api_whitelist,
+            webhookSecret: userData.webhook_secret,
+            accessibility: userData.accessibility,
+            socialLinks: userData.social_links,
+            recoveryEmail: userData.recovery_email,
+            timezone: userData.timezone,
+            language: userData.language,
+            themeAccentColor: userData.theme_accent_color,
+            dateFormat: userData.date_format,
+            numberFormat: userData.number_format,
+            requirePasswordReset: userData.require_password_reset
+        };
+
+        db.setCurrentUser(mappedUser);
+    },
+
+    stopImpersonation: async (): Promise<void> => {
+        const adminToken = localStorage.getItem('tgp_admin_token');
+        if (!adminToken) throw new Error('No admin session found');
+
+        // 1. Restore Admin Token
+        localStorage.setItem('tgp_token', adminToken);
+        authToken = adminToken;
+        localStorage.removeItem('tgp_admin_token');
+
+        // 2. Fetch Admin User Details
+        const userRes = await fetchWithAuth(`${API_BASE_URL}/users/me`);
+        if (!userRes.ok) throw new Error('Failed to restore admin user details');
+        const userData = await userRes.json();
+
+        // 3. Map and Set Current User (can reuse login logic but duplicative here for now)
+        const mappedUser: User = {
+            id: userData.id,
+            email: userData.email,
+            name: (userData.name || userData.email.split('@')[0]),
+            role: userData.role,
+            balance: userData.balance,
+            balanceEconomy: userData.balance_economy,
+            balanceProfessional: userData.balance_professional,
+            balanceExpert: userData.balance_expert,
+            status: userData.status,
+            plan: userData.plan,
+            isVerified: userData.is_verified,
+            shadowBanned: userData.shadow_banned,
+            notes: userData.notes,
+            tags: userData.tags,
+            banReason: userData.ban_reason,
+            createdAt: userData.created_at,
+            joinedDate: userData.created_at || new Date().toISOString(),
+            projectsCount: 0,
+            lastIp: userData.last_ip,
+            lastActive: userData.last_active,
+            // ... minimal fields sufficient for redirect, complete mapping ideally
+        };
+
+        db.setCurrentUser(mappedUser);
+    },
+
+    adminExportUserData: async (userId: string): Promise<any> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/users/${userId}/export`);
+        if (!response.ok) throw new Error('Failed to export user data');
+        return response.json();
+    },
+
+    // Get admin user transactions with hits
+    getUserTransactions: async (userId: string): Promise<Transaction[]> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/transactions`);
+        if (!response.ok) return [];
+
+        // Filter transactions for this user from the cached/local response
+        const data = await response.json();
+        const userTransactions = data.filter((t: any) => t.user_id === userId);
+
+        return userTransactions.map((t: any) => ({
+            id: t.id,
+            date: t.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
+            desc: t.description || '',
+            amount: t.amount,
+            status: t.status || 'completed',
+            type: t.type,
+            userId: t.user_id,
+            tier: t.tier,
+            hits: t.hits,
+            reference: t.reference
+        }));
+    },
+
+    // Get admin user projects
+    getUserProjects: async (userId: string): Promise<Project[]> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/projects`);
+        if (!response.ok) return [];
+
+        const data = await response.json();
+        const userProjects = data.filter((p: any) => p.user_id === userId);
+
+        return userProjects.map((p: any) => ({
+            id: p.id,
+            userId: p.user_id,
+            name: p.name,
+            plan: p.plan_type || 'Custom',
+            tier: p.tier,
+            status: p.status,
+            customTarget: {
+                totalVisitors: p.total_target || 0,
+                durationDays: 30,
+                dailyLimit: p.daily_limit || 0
+            },
+            expires: p.expires_at?.split('T')[0] || '',
+            createdAt: p.created_at,
+            settings: p.settings
+        }));
+    },
+
+    // Get admin user tickets
+    getUserTickets: async (userId: string): Promise<Ticket[]> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/tickets`);
+        if (!response.ok) return [];
+
+        const data = await response.json();
+        const userTickets = data.filter((t: any) => t.user_id === userId);
+
+        return userTickets.map((t: any) => ({
+            id: t.id,
+            type: t.type || 'ticket',
+            userId: t.user_id,
+            userName: '',
+            subject: t.subject,
+            status: t.status || 'open',
+            priority: t.priority || 'low',
+            date: t.created_at?.split('T')[0] || '',
+            lastMessage: t.messages?.length > 0 ? t.messages[t.messages.length - 1].text : '',
+            messages: t.messages || [],
+            unread: false
+        }));
+    },
+
+    adminUpdateUser: async (userId: string, data: any): Promise<void> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/users/${userId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (!response.ok) throw new Error('Failed to update user');
     }
 };

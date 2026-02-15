@@ -170,6 +170,30 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
 
       <main className="flex-1 md:ml-64 flex flex-col min-h-screen relative">
         <BroadcastBanner />
+
+        {/* Impersonation Banner */}
+        {localStorage.getItem('tgp_admin_token') && (
+          <div className="bg-red-600 text-white px-6 py-3 flex items-center justify-between shadow-lg relative z-50">
+            <div className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide">
+              <User size={18} />
+              <span>Viewing as User Mode</span>
+            </div>
+            <button
+              onClick={async () => {
+                try {
+                  await db.stopImpersonation();
+                  window.location.href = '/admin';
+                } catch (e) {
+                  alert('Failed to return to admin');
+                }
+              }}
+              className="bg-white text-red-600 px-4 py-1.5 rounded text-xs font-bold uppercase hover:bg-red-50"
+            >
+              Return to Admin
+            </button>
+          </div>
+        )}
+
         <Header
           title={getPageTitle()}
           onMobileMenuClick={() => setMobileMenuOpen(true)}

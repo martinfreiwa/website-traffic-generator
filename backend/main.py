@@ -319,6 +319,107 @@ class AdminUserUpdate(BaseModel):
     notes: Optional[str] = None
     tags: Optional[List[str]] = None
     ban_reason: Optional[str] = None
+    password: Optional[str] = None
+
+
+class ActivityLogResponse(BaseModel):
+    id: str
+    user_id: Optional[str] = None
+    action_type: str
+    action_detail: Dict[str, Any] = {}
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
+class UserSessionResponse(BaseModel):
+    id: str
+    user_id: str
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    device_info: Dict[str, Any] = {}
+    location: Optional[str] = None
+    created_at: Optional[datetime] = None
+    last_activity: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+    is_active: bool = True
+
+
+class ImpersonationLogResponse(BaseModel):
+    id: str
+    admin_id: str
+    target_user_id: str
+    action: str
+    ip_address: Optional[str] = None
+    created_at: Optional[datetime] = None
+    admin_email: Optional[str] = None
+
+
+class BalanceAdjustmentLogResponse(BaseModel):
+    id: str
+    user_id: str
+    admin_id: Optional[str] = None
+    adjustment_type: str
+    tier: Optional[str] = None
+    amount: float = 0
+    hits: Optional[int] = None
+    reason: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: Optional[datetime] = None
+    admin_email: Optional[str] = None
+
+
+class EmailLogResponse(BaseModel):
+    id: str
+    user_id: Optional[str] = None
+    email_type: str
+    to_email: str
+    subject: Optional[str] = None
+    status: str = "sent"
+    error_message: Optional[str] = None
+    sent_at: Optional[datetime] = None
+    delivered_at: Optional[datetime] = None
+
+
+class UserNotificationPrefsResponse(BaseModel):
+    id: str
+    user_id: str
+    email_marketing: bool = True
+    email_transactional: bool = True
+    email_alerts: bool = True
+    browser_notifications: bool = True
+    newsletter_sub: bool = False
+    email_frequency: str = "instant"
+    updated_at: Optional[datetime] = None
+
+
+class AdminUserDetailsResponse(BaseModel):
+    user: UserResponse
+    tier_balances: Dict[str, int] = {}
+    total_spent: float = 0
+    total_hits_purchased: int = 0
+    total_hits_used: int = 0
+    transactions_count: int = 0
+    projects_count: int = 0
+    tickets_count: int = 0
+    referrals_count: int = 0
+    referral_earnings: float = 0
+    notification_prefs: Optional[UserNotificationPrefsResponse] = None
+
+
+class BalanceAdjustRequest(BaseModel):
+    adjustment_type: str  # 'credit', 'debit'
+    tier: str  # 'economy', 'professional', 'expert', 'general'
+    amount: float = 0
+    hits: Optional[int] = None
+    reason: str
+    notes: Optional[str] = None
+
+
+class AddBonusHitsRequest(BaseModel):
+    tier: str
+    hits: int
+    reason: str
 
 
 class UserUpdate(BaseModel):
@@ -1541,8 +1642,870 @@ def update_user_admin(
         setattr(db_user, key, value)
 
     db.commit()
-    db.refresh(db_user)
     return {"status": "success"}
+
+
+@app.get("/admin/users/{user_id}/details", response_model=AdminUserDetailsResponse)
+def get_user_details_admin(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    from admin_utils import get_or_create_notification_prefs
+
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Get tier balances from transactions
+    credit_transactions = (
+        db.query(models.Transaction)
+        .filter(
+            models.Transaction.user_id == user_id, models.Transaction.type == "credit"
+        )
+        .all()
+    )
+
+    debit_transactions = (
+        db.query(models.Transaction)
+        .filter(
+            models.Transaction.user_id == user_id, models.Transaction.type == "debit"
+        )
+        .all()
+    )
+
+    tier_balances = {"economy": 0, "professional": 0, "expert": 0}
+
+    total_spent = 0
+    total_hits_purchased = 0
+    total_hits_used = 0
+
+    for trx in credit_transactions:
+        if trx.tier in tier_balances:
+            tier_balances[trx.tier] += trx.hits or 0
+        total_hits_purchased += trx.hits or 0
+        total_spent += trx.amount or 0
+
+    for trx in debit_transactions:
+        if trx.tier in tier_balances:
+            tier_balances[trx.tier] -= trx.hits or 0
+        total_hits_used += trx.hits or 0
+
+    # Get counts
+    transactions_count = (
+        db.query(models.Transaction)
+        .filter(models.Transaction.user_id == user_id)
+        .count()
+    )
+    projects_count = (
+        db.query(models.Project).filter(models.Project.user_id == user_id).count()
+    )
+    tickets_count = (
+        db.query(models.Ticket).filter(models.Ticket.user_id == user_id).count()
+    )
+
+    # Get referral info
+    referrals_count = (
+        db.query(models.User).filter(models.User.referred_by == user_id).count()
+    )
+    referral_earnings = (
+        db.query(func.sum(models.AffiliateEarnings.amount))
+        .filter(models.AffiliateEarnings.referrer_id == user_id)
+        .scalar()
+        or 0
+    )
+
+    # Get notification prefs
+    notification_prefs = get_or_create_notification_prefs(user_id)
+
+    # Build user response
+    user_response = UserResponse(
+        id=db_user.id,
+        email=db_user.email,
+        role=db_user.role,
+        balance=db_user.balance,
+        balance_economy=db_user.balance_economy,
+        balance_professional=db_user.balance_professional,
+        balance_expert=db_user.balance_expert,
+        api_key=db_user.api_key,
+        affiliate_code=db_user.affiliate_code,
+        status=db_user.status,
+        plan=db_user.plan,
+        shadow_banned=db_user.shadow_banned,
+        is_verified=db_user.is_verified,
+        notes=db_user.notes,
+        tags=db_user.tags or [],
+        ban_reason=db_user.ban_reason,
+        created_at=db_user.created_at,
+        last_ip=db_user.last_ip,
+        last_active=db_user.last_active,
+    )
+
+    prefs_response = None
+    if notification_prefs:
+        prefs_response = UserNotificationPrefsResponse(
+            id=notification_prefs.id,
+            user_id=notification_prefs.user_id,
+            email_marketing=notification_prefs.email_marketing,
+            email_transactional=notification_prefs.email_transactional,
+            email_alerts=notification_prefs.email_alerts,
+            browser_notifications=notification_prefs.browser_notifications,
+            newsletter_sub=notification_prefs.newsletter_sub,
+            email_frequency=notification_prefs.email_frequency,
+            updated_at=notification_prefs.updated_at,
+        )
+
+    return AdminUserDetailsResponse(
+        user=user_response,
+        tier_balances=tier_balances,
+        total_spent=total_spent,
+        total_hits_purchased=total_hits_purchased,
+        total_hits_used=total_hits_used,
+        transactions_count=transactions_count,
+        projects_count=projects_count,
+        tickets_count=tickets_count,
+        referrals_count=referrals_count,
+        referral_earnings=referral_earnings,
+        notification_prefs=prefs_response,
+    )
+
+
+@app.put("/admin/users/{user_id}", response_model=UserResponse)
+def update_user_admin(
+    user_id: str,
+    user_update: AdminUserUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    update_data = user_update.dict(exclude_unset=True)
+    
+    # Handle password separately
+    if "password" in update_data:
+        password = update_data.pop("password")
+        if password:
+            db_user.password_hash = get_password_hash(password)
+            db_user.token_version = (db_user.token_version or 1) + 1
+
+    for key, value in update_data.items():
+        setattr(db_user, key, value)
+
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+
+@app.get("/admin/users/{user_id}/activity", response_model=List[ActivityLogResponse])
+def get_user_activity(
+    user_id: str,
+    limit: int = 50,
+    offset: int = 0,
+    action_type: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    query = db.query(models.ActivityLog).filter(models.ActivityLog.user_id == user_id)
+
+    if action_type:
+        query = query.filter(models.ActivityLog.action_type == action_type)
+
+    activities = (
+        query.order_by(models.ActivityLog.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        ActivityLogResponse(
+            id=a.id,
+            user_id=a.user_id,
+            action_type=a.action_type,
+            action_detail=a.action_detail or {},
+            ip_address=a.ip_address,
+            user_agent=a.user_agent,
+            created_at=a.created_at,
+        )
+        for a in activities
+    ]
+
+
+@app.get("/admin/users/{user_id}/sessions", response_model=List[UserSessionResponse])
+def get_user_sessions_admin(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    sessions = (
+        db.query(models.UserSession)
+        .filter(
+            models.UserSession.user_id == user_id, models.UserSession.is_active == True
+        )
+        .order_by(models.UserSession.last_activity.desc())
+        .all()
+    )
+
+    return [
+        UserSessionResponse(
+            id=s.id,
+            user_id=s.user_id,
+            ip_address=s.ip_address,
+            user_agent=s.user_agent,
+            device_info=s.device_info or {},
+            location=s.location,
+            created_at=s.created_at,
+            last_activity=s.last_activity,
+            expires_at=s.expires_at,
+            is_active=s.is_active,
+        )
+        for s in sessions
+    ]
+
+
+@app.delete("/admin/users/{user_id}/sessions/{session_id}")
+def terminate_user_session(
+    user_id: str,
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    from admin_utils import terminate_session
+
+    success = terminate_session(session_id, "admin_terminate")
+    if not success:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    return {"status": "success", "message": "Session terminated"}
+
+
+@app.get(
+    "/admin/users/{user_id}/impersonation-log",
+    response_model=List[ImpersonationLogResponse],
+)
+def get_impersonation_log(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    logs = (
+        db.query(models.ImpersonationLog)
+        .filter(models.ImpersonationLog.target_user_id == user_id)
+        .order_by(models.ImpersonationLog.created_at.desc())
+        .all()
+    )
+
+    result = []
+    for log in logs:
+        admin = db.query(models.User).filter(models.User.id == log.admin_id).first()
+        result.append(
+            ImpersonationLogResponse(
+                id=log.id,
+                admin_id=log.admin_id,
+                target_user_id=log.target_user_id,
+                action=log.action,
+                ip_address=log.ip_address,
+                created_at=log.created_at,
+                admin_email=admin.email if admin else None,
+            )
+        )
+
+    return result
+
+
+@app.get(
+    "/admin/users/{user_id}/balance-adjustments",
+    response_model=List[BalanceAdjustmentLogResponse],
+)
+def get_balance_adjustments(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    adjustments = (
+        db.query(models.BalanceAdjustmentLog)
+        .filter(models.BalanceAdjustmentLog.user_id == user_id)
+        .order_by(models.BalanceAdjustmentLog.created_at.desc())
+        .all()
+    )
+
+    result = []
+    for adj in adjustments:
+        admin = (
+            db.query(models.User).filter(models.User.id == adj.admin_id).first()
+            if adj.admin_id
+            else None
+        )
+        result.append(
+            BalanceAdjustmentLogResponse(
+                id=adj.id,
+                user_id=adj.user_id,
+                admin_id=adj.admin_id,
+                adjustment_type=adj.adjustment_type,
+                tier=adj.tier,
+                amount=adj.amount,
+                hits=adj.hits,
+                reason=adj.reason,
+                notes=adj.notes,
+                created_at=adj.created_at,
+                admin_email=admin.email if admin else None,
+            )
+        )
+
+    return result
+
+
+@app.post("/admin/users/{user_id}/adjust-balance")
+def adjust_user_balance(
+    user_id: str,
+    adjustment: BalanceAdjustRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Update balance
+    if adjustment.tier == "general":
+        if adjustment.adjustment_type == "credit":
+            db_user.balance += adjustment.amount
+        else:
+            db_user.balance -= adjustment.amount
+    elif adjustment.tier == "economy":
+        if adjustment.adjustment_type == "credit":
+            db_user.balance_economy += adjustment.hits or 0
+        else:
+            db_user.balance_economy -= adjustment.hits or 0
+    elif adjustment.tier == "professional":
+        if adjustment.adjustment_type == "credit":
+            db_user.balance_professional += adjustment.hits or 0
+        else:
+            db_user.balance_professional -= adjustment.hits or 0
+    elif adjustment.tier == "expert":
+        if adjustment.adjustment_type == "credit":
+            db_user.balance_expert += adjustment.hits or 0
+        else:
+            db_user.balance_expert -= adjustment.hits or 0
+
+    # Log the adjustment
+    from admin_utils import log_balance_adjustment, log_email
+
+    log_balance_adjustment(
+        user_id=user_id,
+        admin_id=current_user.id,
+        adjustment_type=adjustment.adjustment_type,
+        tier=adjustment.tier,
+        amount=adjustment.amount,
+        hits=adjustment.hits,
+        reason=adjustment.reason,
+        notes=adjustment.notes,
+    )
+
+    # Log email notification
+    log_email(
+        user_id=user_id,
+        email_type="balance_adjusted",
+        to_email=db_user.email,
+        subject="Your balance has been adjusted",
+        status="sent",
+    )
+
+    db.commit()
+    return {
+        "status": "success",
+        "message": f"Balance adjusted: {adjustment.adjustment_type} {adjustment.hits or adjustment.amount} {adjustment.tier}",
+    }
+
+
+@app.post("/admin/users/{user_id}/add-bonus-hits")
+def add_bonus_hits(
+    user_id: str,
+    request: AddBonusHitsRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Add hits to the specified tier
+    if request.tier == "economy":
+        db_user.balance_economy += request.hits
+    elif request.tier == "professional":
+        db_user.balance_professional += request.hits
+    elif request.tier == "expert":
+        db_user.balance_expert += request.hits
+
+    # Create transaction
+    trx = models.Transaction(
+        user_id=user_id,
+        type="credit",
+        amount=0,
+        description=f"Bonus hits added by admin: {request.hits} {request.tier} hits - {request.reason}",
+        status="completed",
+        tier=request.tier,
+        hits=request.hits,
+        admin_id=current_user.id,
+    )
+    db.add(trx)
+
+    # Log the adjustment
+    from admin_utils import log_balance_adjustment, log_email
+
+    log_balance_adjustment(
+        user_id=user_id,
+        admin_id=current_user.id,
+        adjustment_type="credit",
+        tier=request.tier,
+        amount=0,
+        hits=request.hits,
+        reason=request.reason,
+        notes="Bonus hits",
+    )
+
+    # Log email
+    log_email(
+        user_id=user_id,
+        email_type="bonus_hits",
+        to_email=db_user.email,
+        subject=f"You've received {request.hits} bonus {request.tier} hits!",
+        status="sent",
+    )
+
+    db.commit()
+    return {"status": "success", "message": f"Added {request.hits} {request.tier} hits"}
+
+
+@app.get("/admin/users/{user_id}/emails", response_model=List[EmailLogResponse])
+def get_user_emails(
+    user_id: str,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    emails = (
+        db.query(models.EmailLog)
+        .filter(models.EmailLog.user_id == user_id)
+        .order_by(models.EmailLog.sent_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        EmailLogResponse(
+            id=e.id,
+            user_id=e.user_id,
+            email_type=e.email_type,
+            to_email=e.to_email,
+            subject=e.subject,
+            status=e.status,
+            error_message=e.error_message,
+            sent_at=e.sent_at,
+            delivered_at=e.delivered_at,
+        )
+        for e in emails
+    ]
+
+
+@app.get("/admin/users/{user_id}/referrals")
+def get_user_referrals(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    referrals = db.query(models.User).filter(models.User.referred_by == user_id).all()
+
+    referral_data = []
+    for ref in referrals:
+        # Get total spent by this referral
+        total_spent = (
+            db.query(func.sum(models.Transaction.amount))
+            .filter(
+                models.Transaction.user_id == ref.id,
+                models.Transaction.type == "credit",
+            )
+            .scalar()
+            or 0
+        )
+
+        # Get earnings from this referral
+        earnings = (
+            db.query(func.sum(models.AffiliateEarnings.amount))
+            .filter(models.AffiliateEarnings.referee_id == ref.id)
+            .scalar()
+            or 0
+        )
+
+        referral_data.append(
+            {
+                "id": ref.id,
+                "email": ref.email,
+                "name": ref.name or ref.email.split("@")[0],
+                "status": ref.status,
+                "created_at": ref.created_at.isoformat() if ref.created_at else None,
+                "total_spent": total_spent,
+                "earnings_from_ref": earnings,
+            }
+        )
+
+    total_earnings = (
+        db.query(func.sum(models.AffiliateEarnings.amount))
+        .filter(models.AffiliateEarnings.referrer_id == user_id)
+        .scalar()
+        or 0
+    )
+
+    return {
+        "referrals": referral_data,
+        "total_referrals": len(referral_data),
+        "total_earnings": total_earnings,
+    }
+
+
+@app.get(
+    "/admin/users/{user_id}/notification-prefs",
+    response_model=UserNotificationPrefsResponse,
+)
+def get_user_notification_prefs(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    from admin_utils import get_or_create_notification_prefs
+
+    prefs = get_or_create_notification_prefs(user_id)
+
+    if not prefs:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return UserNotificationPrefsResponse(
+        id=prefs.id,
+        user_id=prefs.user_id,
+        email_marketing=prefs.email_marketing,
+        email_transactional=prefs.email_transactional,
+        email_alerts=prefs.email_alerts,
+        browser_notifications=prefs.browser_notifications,
+        newsletter_sub=prefs.newsletter_sub,
+        email_frequency=prefs.email_frequency,
+        updated_at=prefs.updated_at,
+    )
+
+
+@app.put(
+    "/admin/users/{user_id}/notification-prefs",
+    response_model=UserNotificationPrefsResponse,
+)
+def update_user_notification_prefs(
+    user_id: str,
+    prefs_update: UserNotificationPrefsResponse,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    from admin_utils import get_or_create_notification_prefs
+
+    prefs = get_or_create_notification_prefs(user_id)
+
+    prefs.email_marketing = prefs_update.email_marketing
+    prefs.email_transactional = prefs_update.email_transactional
+    prefs.email_alerts = prefs_update.email_alerts
+    prefs.browser_notifications = prefs_update.browser_notifications
+    prefs.newsletter_sub = prefs_update.newsletter_sub
+    prefs.email_frequency = prefs_update.email_frequency
+
+    db.commit()
+    db.refresh(prefs)
+
+    return UserNotificationPrefsResponse(
+        id=prefs.id,
+        user_id=prefs.user_id,
+        email_marketing=prefs.email_marketing,
+        email_transactional=prefs.email_transactional,
+        email_alerts=prefs.email_alerts,
+        browser_notifications=prefs.browser_notifications,
+        newsletter_sub=prefs.newsletter_sub,
+        email_frequency=prefs.email_frequency,
+        updated_at=prefs.updated_at,
+    )
+
+
+@app.post("/admin/users/{user_id}/send-password-reset")
+def send_password_reset(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    db_user.require_password_reset = True
+    db.commit()
+
+    from admin_utils import log_email
+
+    log_email(
+        user_id=user_id,
+        email_type="password_reset",
+        to_email=db_user.email,
+        subject="Password Reset Requested",
+        status="sent",
+    )
+
+    return {"status": "success", "message": "Password reset email sent"}
+
+
+@app.post("/admin/users/{user_id}/resend-verification")
+def resend_verification(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    from admin_utils import log_email
+
+    log_email(
+        user_id=user_id,
+        email_type="verification",
+        to_email=db_user.email,
+        subject="Verify your email address",
+        status="sent",
+    )
+
+    return {"status": "success", "message": "Verification email sent"}
+
+
+@app.post("/admin/users/{user_id}/regenerate-api-key")
+def regenerate_api_key(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    import secrets
+
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    new_api_key = secrets.token_urlsafe(32)
+    db_user.api_key = new_api_key
+
+    from admin_utils import log_activity
+
+    log_activity(
+        user_id=user_id,
+        action_type="api_key_regenerated",
+        action_detail={"by_admin": current_user.id},
+        ip_address=current_user.last_ip,
+    )
+
+    db.commit()
+
+    return {"status": "success", "api_key": new_api_key}
+
+
+@app.post("/admin/impersonate/{user_id}")
+def start_impersonation(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    target_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    from admin_utils import log_impersonation
+
+    log_impersonation(
+        admin_id=current_user.id,
+        target_user_id=user_id,
+        action="start",
+        ip_address=current_user.last_ip,
+    )
+
+    # Generate a token for the target user
+    from datetime import timedelta
+
+    access_token_expires = timedelta(minutes=30)
+    encoded_jwt = create_user_access_token(target_user, access_token_expires)
+
+    return {
+        "status": "success",
+        "token": encoded_jwt,
+        "target_user": target_user.email,
+        "message": f"You are now impersonating {target_user.email}",
+    }
+
+
+@app.post("/admin/impersonate/end")
+def end_impersonation(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    # This would be called when admin ends impersonation
+    # The actual logging happens when starting
+    return {"status": "success", "message": "Impersonation ended"}
+
+
+@app.get("/admin/users/{user_id}/export")
+def export_user_data(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Gather all user data
+    transactions = (
+        db.query(models.Transaction).filter(models.Transaction.user_id == user_id).all()
+    )
+    projects = db.query(models.Project).filter(models.Project.user_id == user_id).all()
+    tickets = db.query(models.Ticket).filter(models.Ticket.user_id == user_id).all()
+    notifications = (
+        db.query(models.Notification)
+        .filter(models.Notification.user_id == user_id)
+        .all()
+    )
+    activity_logs = (
+        db.query(models.ActivityLog).filter(models.ActivityLog.user_id == user_id).all()
+    )
+
+    export_data = {
+        "user": {
+            "id": db_user.id,
+            "email": db_user.email,
+            "name": db_user.name,
+            "role": db_user.role,
+            "status": db_user.status,
+            "created_at": db_user.created_at.isoformat()
+            if db_user.created_at
+            else None,
+            "last_active": db_user.last_active.isoformat()
+            if db_user.last_active
+            else None,
+        },
+        "transactions": [
+            {
+                "id": t.id,
+                "type": t.type,
+                "amount": t.amount,
+                "description": t.description,
+                "tier": t.tier,
+                "hits": t.hits,
+                "status": t.status,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+            }
+            for t in transactions
+        ],
+        "projects": [
+            {
+                "id": p.id,
+                "name": p.name,
+                "status": p.status,
+                "tier": p.tier,
+                "total_target": p.total_target,
+                "total_hits": p.total_hits,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+            }
+            for p in projects
+        ],
+        "tickets": [
+            {
+                "id": t.id,
+                "subject": t.subject,
+                "status": t.status,
+                "priority": t.priority,
+                "messages": t.messages,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+            }
+            for t in tickets
+        ],
+        "notifications": [
+            {
+                "id": n.id,
+                "title": n.title,
+                "message": n.message,
+                "type": n.type,
+                "is_read": n.is_read,
+                "created_at": n.created_at.isoformat() if n.created_at else None,
+            }
+            for n in notifications
+        ],
+        "activity_log": [
+            {
+                "id": a.id,
+                "action_type": a.action_type,
+                "action_detail": a.action_detail,
+                "ip_address": a.ip_address,
+                "created_at": a.created_at.isoformat() if a.created_at else None,
+            }
+            for a in activity_logs
+        ],
+        "exported_at": datetime.utcnow().isoformat(),
+    }
+
+    return export_data
 
 
 @app.get("/admin/transactions", response_model=List[TransactionResponse])
