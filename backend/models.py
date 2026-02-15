@@ -15,6 +15,9 @@ class User(Base):
     password_hash = Column(String)
     role = Column(String, default="user") # 'user', 'admin'
     balance = Column(Float, default=0.00)
+    balance_economy = Column(Float, default=0.00)
+    balance_professional = Column(Float, default=0.00)
+    balance_expert = Column(Float, default=0.00)
     api_key = Column(String, unique=True, nullable=True)
     
     # Affiliate Info
@@ -23,6 +26,7 @@ class User(Base):
     
     status = Column(String, default="active") # 'active', 'suspended'
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    token_version = Column(Integer, default=1)
     
     # Extended Profile
     phone = Column(String, nullable=True)
@@ -31,7 +35,37 @@ class User(Base):
     address = Column(String, nullable=True)
     city = Column(String, nullable=True)
     country = Column(String, nullable=True)
+    zip = Column(String, nullable=True)
+    website = Column(String, nullable=True)
     
+    # New Profile Fields
+    display_name = Column(String, nullable=True)
+    bio = Column(Text, nullable=True)
+    job_title = Column(String, nullable=True)
+    public_profile = Column(Boolean, default=False)
+    two_factor_enabled = Column(Boolean, default=False)
+    email_frequency = Column(String, default="instant")
+    login_notification_enabled = Column(Boolean, default=False)
+    newsletter_sub = Column(Boolean, default=False)
+    sound_effects = Column(Boolean, default=True)
+    developer_mode = Column(Boolean, default=False)
+    api_whitelist = Column(JSON, default=list) # List of IP strings
+    webhook_secret = Column(String, nullable=True)
+    accessibility = Column(JSON, default=lambda: {"colorBlindMode": False, "compactMode": False, "fontSize": "medium", "reduceMotion": False})
+    social_links = Column(JSON, default=dict)
+    login_history = Column(JSON, default=list)
+    recovery_email = Column(String, nullable=True)
+    timezone = Column(String, default="UTC")
+    language = Column(String, default="English")
+    theme_accent_color = Column(String, default="#ff4d00")
+    skills_badges = Column(JSON, default=list)
+    referral_code = Column(String, nullable=True)
+    support_pin = Column(String, nullable=True)
+    date_format = Column(String, default="YYYY-MM-DD")
+    number_format = Column(String, default="en-US")
+    require_password_reset = Column(Boolean, default=False)
+    avatar_url = Column(String, nullable=True)
+
     # Administrative Fields
     plan = Column(String, default="free") # 'free', 'pro', 'agency'
     shadow_banned = Column(Boolean, default=False)
@@ -82,6 +116,14 @@ class Project(Base):
     
     user = relationship("User", back_populates="projects")
     traffic_logs = relationship("TrafficLog", back_populates="project")
+
+    # Admin Fields
+    priority = Column(Integer, default=0)
+    force_stop_reason = Column(String, nullable=True)
+    is_hidden = Column(Boolean, default=False)
+    internal_tags = Column(JSON, default=list)
+    notes = Column(Text, nullable=True)
+    is_flagged = Column(Boolean, default=False)
 
 class Transaction(Base):
     __tablename__ = "transactions"

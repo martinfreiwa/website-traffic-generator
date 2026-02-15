@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
-import { Project, ProjectSettings } from '../../types';
+import { Project, ProjectSettings, User } from '../../types';
 import { db } from '../../services/db';
-import { Globe, Save, ArrowLeft, Settings, Activity, MapPin, MousePointer, Search, CheckCircle, AlertCircle, Smartphone, Monitor, Link, Sliders, Shield, Zap, Globe2, MousePointer2, FileText } from 'lucide-react';
+import { Globe, Save, ArrowLeft, Settings, Activity, MapPin, MousePointer, Search, CheckCircle, AlertCircle, Smartphone, Monitor, Link, Sliders, Shield, Zap, Globe2, MousePointer2, FileText, User as UserIcon } from 'lucide-react';
 import CustomSelect from '../CustomSelect';
 
 interface AdminCreateProjectProps {
@@ -62,6 +62,22 @@ const AdminCreateProject: React.FC<AdminCreateProjectProps> = ({ onBack, onSucce
     const [isDetectingGA, setIsDetectingGA] = useState(false);
     const [gaDetectionStatus, setGaDetectionStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
+    // User Selection State
+    const [users, setUsers] = useState<User[]>([]);
+    const [selectedUserId, setSelectedUserId] = useState<string>('');
+
+    React.useEffect(() => {
+        const loadUsers = async () => {
+            const allUsers = await db.syncUsers(); // Ensure fresh list
+            setUsers(allUsers);
+            // Default to self if no selection, or just leave empty to force choice?
+            // Let's default to current admin
+            const me = db.getCurrentUser();
+            if (me) setSelectedUserId(me.id);
+        };
+        loadUsers();
+    }, []);
+
     const dailyLimit = Math.round(totalVisitors / durationDays);
 
     const updateSetting = (key: keyof ProjectSettings, value: any) => {
@@ -112,7 +128,7 @@ const AdminCreateProject: React.FC<AdminCreateProjectProps> = ({ onBack, onSucce
         try {
             const newProject: Project = {
                 id: 'proj_' + Date.now(),
-                userId: db.getCurrentUser()?.id || 'admin',
+                userId: selectedUserId || db.getCurrentUser()?.id || 'admin',
                 name,
                 plan: 'Custom',
                 customTarget: {
@@ -177,6 +193,25 @@ const AdminCreateProject: React.FC<AdminCreateProjectProps> = ({ onBack, onSucce
                                 className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 outline-none focus:border-[#ff4d00]"
                                 placeholder="My Traffic Campaign"
                             />
+                        </div>
+
+                        <div>
+                            <Label>Project Owner (User)</Label>
+                            <div className="relative">
+                                <UserIcon className="absolute left-3 top-3 text-gray-400" size={16} />
+                                <select
+                                    value={selectedUserId}
+                                    onChange={(e) => setSelectedUserId(e.target.value)}
+                                    className="w-full bg-[#f9fafb] border border-gray-200 p-3 pl-10 text-sm font-bold text-gray-900 outline-none focus:border-[#ff4d00] appearance-none"
+                                >
+                                    <option value="">Select a User...</option>
+                                    {users.map(u => (
+                                        <option key={u.id} value={u.id}>
+                                            {u.name} ({u.email}) - {u.role}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
                         <div>
                             <Label>Target URL (Entry)</Label>

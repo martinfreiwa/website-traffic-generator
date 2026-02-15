@@ -13,7 +13,7 @@ import { db } from '../services/db';
 import {
     ArrowLeft, Calendar, Save, Copy, RefreshCw, Layers,
     HelpCircle, Globe, Activity, Smartphone, Monitor, CheckCircle2, Zap, Radio, Lock, ToggleLeft, ToggleRight,
-    Plus, Trash2, Download, Upload, AlertCircle, FileCode, Search, MapPin, X, Target, BarChart2
+    Plus, Trash2, Download, Upload, AlertCircle, FileCode, Search, MapPin, X, Target, BarChart2, Star
 } from 'lucide-react';
 import CustomSelect from './CustomSelect';
 
@@ -420,7 +420,15 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                         <ArrowLeft size={20} />
                     </button>
                     <div>
-                        <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Project Configuration</div>
+                        <div className="flex items-center gap-2 mb-1">
+                            <div className="text-[10px] font-black uppercase tracking-widest text-gray-400">Project Configuration</div>
+                            <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border ${project.plan === 'Expert' ? 'bg-green-50 text-green-700 border-green-200' :
+                                project.plan === 'Professional' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                    'bg-orange-50 text-orange-700 border-orange-200'
+                                }`}>
+                                {project.plan} Plan
+                            </span>
+                        </div>
                         <h2 className="text-2xl font-black text-gray-900">{project.name}</h2>
                     </div>
                 </div>
@@ -756,6 +764,18 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                 </div>
             </div>
 
+            {project.plan === 'Economy' && (
+                <div className="bg-orange-50 border-l-4 border-orange-400 p-4 mx-6 flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top-4">
+                    <div className="flex items-center gap-3">
+                        <AlertCircle size={20} className="text-orange-600" />
+                        <div>
+                            <p className="text-sm font-bold text-orange-900 uppercase tracking-tight">Tier Limitation: Economy</p>
+                            <p className="text-[10px] text-orange-700 font-medium">Organic/Social sources, Residential IPs, and GA4 Automation are disabled on this plan.</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className={isFreeTrial ? 'opacity-70 pointer-events-none grayscale-[0.5]' : ''}>
                 {/* --- URL CONFIGURATION --- */}
                 <div className="bg-white border border-gray-200 shadow-sm p-6 md:p-8 mt-6">
@@ -1085,10 +1105,114 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Toggle label="Cache Website" checked={settings.cacheWebsite} onChange={(v) => handleChange('cacheWebsite', v)} />
-                        <Toggle label="Minimize CPU Load" checked={settings.minimizeCpu} onChange={(v) => handleChange('minimizeCpu', v)} />
-                        <Toggle label="Randomize Session" checked={settings.randomizeSession} onChange={(v) => handleChange('randomizeSession', v)} />
-                        <Toggle label="Anti-Fingerprint" checked={settings.antiFingerprint} onChange={(v) => handleChange('antiFingerprint', v)} />
+                        <Toggle
+                            label="Cache Website"
+                            checked={settings.cacheWebsite}
+                            onChange={(v) => handleChange('cacheWebsite', v)}
+                        />
+                        <Toggle
+                            label="Minimize CPU Load"
+                            checked={settings.minimizeCpu}
+                            onChange={(v) => handleChange('minimizeCpu', v)}
+                        />
+                        <Toggle
+                            label="Randomize Session"
+                            checked={settings.randomizeSession}
+                            onChange={(v) => handleChange('randomizeSession', v)}
+                        />
+                        <Toggle
+                            label="Anti-Fingerprint"
+                            checked={settings.antiFingerprint}
+                            onChange={(v) => handleChange('antiFingerprint', v)}
+                        />
+                    </div>
+
+                    <div className="h-px bg-gray-100 my-8"></div>
+
+                    <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-6 flex items-center gap-2">
+                        <Star size={14} className="text-yellow-500" /> Premium Expert Features
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Professional + Expert Features */}
+                        <div className={`relative ${project.plan === 'Economy' ? 'opacity-50' : ''}`}>
+                            <Toggle
+                                label="Residential IP Network"
+                                checked={settings.residentialIps || false}
+                                onChange={(v) => project.plan !== 'Economy' && handleChange('residentialIps', v)}
+                            />
+                            {project.plan === 'Economy' && <div className="absolute inset-0 flex items-center justify-center bg-white/10 cursor-not-allowed pointer-events-auto" title="Professional Tier Required"></div>}
+                        </div>
+
+                        <div className={`relative ${project.plan === 'Economy' ? 'opacity-50' : ''}`}>
+                            <Toggle
+                                label="Cities Geo-Targeting"
+                                checked={settings.citiesGeoTargeting || false}
+                                onChange={(v) => project.plan !== 'Economy' && handleChange('citiesGeoTargeting', v)}
+                            />
+                            {project.plan === 'Economy' && <div className="absolute inset-0 flex items-center justify-center bg-white/10 cursor-not-allowed pointer-events-auto" title="Professional Tier Required"></div>}
+                        </div>
+
+                        {/* Expert ONLY Features */}
+                        <div className={`relative ${project.plan !== 'Expert' ? 'opacity-50' : ''}`}>
+                            <Toggle
+                                label="Night & Day Volume"
+                                checked={settings.nightDayVolume || false}
+                                onChange={(v) => project.plan === 'Expert' && handleChange('nightDayVolume', v)}
+                            />
+                            {project.plan !== 'Expert' && <div className="absolute inset-0 flex items-center justify-center bg-white/10 cursor-not-allowed pointer-events-auto" title="Expert Tier Required"></div>}
+                        </div>
+
+                        <div className={`relative ${project.plan !== 'Expert' ? 'opacity-50' : ''}`}>
+                            <Toggle
+                                label="Automatic Website Crawler"
+                                checked={settings.websiteCrawler || false}
+                                onChange={(v) => project.plan === 'Expert' && handleChange('websiteCrawler', v)}
+                            />
+                            {project.plan !== 'Expert' && <div className="absolute inset-0 flex items-center justify-center bg-white/10 cursor-not-allowed pointer-events-auto" title="Expert Tier Required"></div>}
+                        </div>
+
+                        <div className={`relative ${project.plan !== 'Expert' ? 'opacity-50' : ''}`}>
+                            <Toggle
+                                label="GA4 Natural Events"
+                                checked={settings.ga4NaturalEvents || false}
+                                onChange={(v) => project.plan === 'Expert' && handleChange('ga4NaturalEvents', v)}
+                            />
+                            {project.plan !== 'Expert' && <div className="absolute inset-0 flex items-center justify-center bg-white/10 cursor-not-allowed pointer-events-auto" title="Expert Tier Required"></div>}
+                        </div>
+
+                        <div className={`relative ${project.plan !== 'Expert' ? 'opacity-50' : ''}`}>
+                            <Toggle
+                                label="Randomize Daily Volume"
+                                checked={settings.randomizeDailyVolume || false}
+                                onChange={(v) => project.plan === 'Expert' && handleChange('randomizeDailyVolume', v)}
+                            />
+                            {project.plan !== 'Expert' && <div className="absolute inset-0 flex items-center justify-center bg-white/10 cursor-not-allowed pointer-events-auto" title="Expert Tier Required"></div>}
+                        </div>
+
+                        <div className={project.plan === 'Economy' ? 'opacity-50 pointer-events-none' : ''}>
+                            <Label>Sitemap / RSS Feed</Label>
+                            <input
+                                value={settings.sitemap || ''}
+                                onChange={(e) => handleChange('sitemap', e.target.value)}
+                                className="w-full bg-[#f9fafb] border-b-2 border-transparent focus:border-[#ff4d00] p-3 outline-none text-sm font-medium"
+                                placeholder="https://example.com/sitemap.xml"
+                            />
+                        </div>
+
+                        <div className={project.plan === 'Economy' ? 'opacity-50 pointer-events-none' : ''}>
+                            <Label>URL Shortener</Label>
+                            <CustomSelect
+                                value={settings.shortener || 'None'}
+                                onChange={(v) => handleChange('shortener', v)}
+                                options={[
+                                    { value: 'None', label: 'None (Direct)' },
+                                    { value: 'bit.ly', label: 'Bit.ly' },
+                                    { value: 'cutt.ly', label: 'Cutt.ly' },
+                                    { value: 't.co', label: 'X/Twitter (t.co)' }
+                                ]}
+                            />
+                        </div>
                     </div>
                 </div>
             </div>

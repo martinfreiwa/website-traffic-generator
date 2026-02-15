@@ -8,8 +8,8 @@ Super-admin control over all campaigns on the platform.
 
 ## Features
 *   [x] **Project List**: Global list of all campaigns.
-*   [ ] **Create Project**: Manually create campaign for any user.
-*   [ ] **Edit Project**: Force stop/pause, adjust hidden parameters (priority, weight).
+*   [x] **Create Project**: Manually create campaign for any user.
+*   [x] **Edit Project**: Force stop/pause, adjust hidden parameters (priority, weight).
 *   [ ] **Debug**: View raw logs for specific project execution.
 
 ## Planned Improvements

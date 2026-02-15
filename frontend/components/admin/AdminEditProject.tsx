@@ -42,7 +42,11 @@ const AdminEditProject: React.FC<AdminEditProjectProps> = ({ projectId, onBack, 
                     sitemap: '', shortener: '',
                     autoRenew: false, cacheWebsite: false, minimizeCpu: false,
                     randomizeSession: true, antiFingerprint: true,
-                    pageViewsWithScroll: 0, clickExternal: 0, clickInternal: 0
+                    pageViewsWithScroll: 0, clickExternal: 0, clickInternal: 0,
+                    // Hidden Params (Admin Only)
+                    adminPriority: 0,
+                    adminWeight: 1,
+                    forceStopReason: ''
                 };
             }
             // Ensure languages array
@@ -162,9 +166,58 @@ const AdminEditProject: React.FC<AdminEditProjectProps> = ({ projectId, onBack, 
                                     options={[
                                         { value: "active", label: "Active" },
                                         { value: "stopped", label: "Stopped" },
-                                        { value: "completed", label: "Completed" }
+                                        { value: "completed", label: "Completed" },
+                                        { value: "archived", label: "Archived (Admin)" }
                                     ]}
                                 />
+                            </div>
+                        </div>
+
+                        {/* Force Stop / Status Reason */}
+                        {project.status === 'stopped' && (
+                            <div className="bg-red-50 border border-red-100 p-4">
+                                <Label>Force Stop Reason (Visible to User)</Label>
+                                <input
+                                    value={s.forceStopReason || ''}
+                                    onChange={(e) => updateSetting('forceStopReason', e.target.value)}
+                                    className="w-full bg-white border border-red-200 p-3 text-sm font-medium text-red-900 outline-none focus:border-red-500 placeholder-red-300"
+                                    placeholder="e.g. Violation of TOS, Payment Failed..."
+                                />
+                            </div>
+                        )}
+
+                        {/* Admin Hidden Parameters */}
+                        <div className="bg-gray-50 border border-gray-200 p-4 border-l-4 border-l-gray-400">
+                            <div className="flex items-center gap-2 mb-4">
+                                <Activity size={12} className="text-gray-500" />
+                                <span className="text-xs font-black uppercase tracking-widest text-gray-500">Admin Controls</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <Label>Queue Priority (-10 to 10)</Label>
+                                    <input
+                                        type="number"
+                                        min="-10"
+                                        max="10"
+                                        value={s.adminPriority || 0}
+                                        onChange={(e) => updateSetting('adminPriority', parseInt(e.target.value))}
+                                        className="w-full bg-white border border-gray-200 p-2 text-sm font-bold text-gray-900 outline-none focus:border-gray-500"
+                                    />
+                                    <p className="text-[9px] text-gray-400 mt-1">Higher = processed first.</p>
+                                </div>
+                                <div>
+                                    <Label>Traffic Weight (0.1 - 5.0)</Label>
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        min="0.1"
+                                        max="5.0"
+                                        value={s.adminWeight || 1}
+                                        onChange={(e) => updateSetting('adminWeight', parseFloat(e.target.value))}
+                                        className="w-full bg-white border border-gray-200 p-2 text-sm font-bold text-gray-900 outline-none focus:border-gray-500"
+                                    />
+                                    <p className="text-[9px] text-gray-400 mt-1">Multiplier for resource allocation.</p>
+                                </div>
                             </div>
                         </div>
                         <div>

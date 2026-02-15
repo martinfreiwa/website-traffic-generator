@@ -72,7 +72,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
   useEffect(() => {
     db.init();
     const initData = async () => {
-      await db.syncProjects();
+      await Promise.all([
+        db.syncProjects(),
+        db.syncAdminProjects()
+      ]);
       await refreshData();
     };
     initData();
@@ -82,7 +85,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
     try {
       const [usersData, projectsData, transactionsData, ticketsData, settingsData, statsData] = await Promise.all([
         db.getUsers(),
-        db.getProjects(), // returns sync cache
+        db.getAdminProjects(),
         db.getAllTransactionsAdmin(),
         db.getTickets(),
         db.getSystemSettings(),
@@ -239,6 +242,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
               <Route path="users" element={
                 <AdminUsers
                   users={users}
+                  projects={projects}
                   transactions={transactions}
                   tickets={tickets}
                   onRefresh={refreshData}

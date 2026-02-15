@@ -99,6 +99,19 @@ export interface ProjectSettings {
   pageViewsWithScroll: number;
   clickExternal: number;
   clickInternal: number;
+
+  // Expert Features
+  residentialIps?: boolean;
+  nightDayVolume?: boolean;
+  websiteCrawler?: boolean;
+  ga4NaturalEvents?: boolean;
+  randomizeDailyVolume?: boolean;
+  citiesGeoTargeting?: boolean;
+
+  // Admin Hidden Params
+  adminPriority?: number;
+  adminWeight?: number;
+  forceStopReason?: string;
 }
 
 export interface ProjectStats {
@@ -135,6 +148,15 @@ export interface Project {
   status: 'active' | 'stopped' | 'completed';
   settings?: ProjectSettings;
   stats?: ProjectStats[];
+
+  // Admin Fields
+  priority?: number;
+  forceStopReason?: string;
+  isHidden?: boolean;
+  internalTags?: string[];
+  notes?: string;
+  isFlagged?: boolean;
+  createdAt?: string;
 }
 
 export interface Transaction {
@@ -185,6 +207,9 @@ export interface User {
   name: string;
   role: 'user' | 'admin';
   balance: number;
+  balanceEconomy?: number;
+  balanceProfessional?: number;
+  balanceExpert?: number;
   status: 'active' | 'suspended';
   joinedDate: string;
   projectsCount: number;
@@ -209,6 +234,39 @@ export interface User {
   plan?: 'free' | 'pro' | 'agency'; // User-level plan
   lastIp?: string;
   banReason?: string;
+  // New Profile & Security Fields
+  twoFactorEnabled?: boolean;
+  bio?: string;
+  jobTitle?: string;
+  loginHistory?: { ip: string; device: string; date: string }[];
+  socialLinks?: { discord?: string; twitter?: string; linkedin?: string };
+  recoveryEmail?: string;
+  timezone?: string;
+  language?: string;
+  themeAccentColor?: string;
+  accessibility?: {
+    colorBlindMode: boolean;
+    compactMode: boolean;
+    fontSize: 'small' | 'medium' | 'large';
+    reduceMotion: boolean;
+  };
+  developerMode?: boolean;
+  apiWhitelist?: string[];
+  webhookSecret?: string;
+  soundEffects?: boolean;
+  browserNotifications?: boolean;
+  newsletterSub?: boolean;
+  publicProfile?: boolean;
+  skillsBadges?: string[];
+  emailFrequency?: 'instant' | 'daily';
+  referralCode?: string;
+  supportPin?: string;
+  dateFormat?: string;
+  numberFormat?: string;
+  loginNotificationEnabled?: boolean;
+  displayName?: string;
+  requirePasswordReset?: boolean;
+  avatarUrl?: string;
 }
 
 export interface LiveVisitor {

@@ -1,18 +1,19 @@
 
 import React, { useState, useMemo } from 'react';
-import { User, Transaction, Ticket } from '../../types';
+import { User, Project, Transaction, Ticket } from '../../types';
 import { db } from '../../services/db';
 import { Search, CheckCircle, Ban, DollarSign, Plus, Minus, Layers, Users, Zap, Clock, ChevronLeft, ChevronRight, Edit2 } from 'lucide-react';
 
 interface AdminUsersProps {
     users: User[];
+    projects: Project[]; // New prop
     transactions: Transaction[];
     tickets: Ticket[];
     onRefresh: () => void;
     onEditUser: (id: string) => void;
 }
 
-const AdminUsers: React.FC<AdminUsersProps> = ({ users, transactions, tickets, onRefresh, onEditUser }) => {
+const AdminUsers: React.FC<AdminUsersProps> = ({ users, projects: allProjects, transactions, tickets, onRefresh, onEditUser }) => {
     const [searchTerm, setSearchTerm] = useState('');
 
     // Pagination State
@@ -22,8 +23,8 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users, transactions, tickets, o
     // Filter State
     const [activeTab, setActiveTab] = useState<'all' | 'balance' | 'spent' | 'projects' | 'new_24h' | 'new_7d' | 'new_30d'>('all');
 
-    // Fetch all projects for aggregation
-    const allProjects = useMemo(() => db.getProjects(), [users]);
+    // Remove legacy useMemo
+    // const allProjects = useMemo(() => db.getProjects(), [users]);
 
     // --- HELPERS ---
 
@@ -221,10 +222,16 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users, transactions, tickets, o
                                                     <div className="flex items-center gap-2 text-[10px] uppercase font-bold text-gray-600">
                                                         <Layers size={10} className="text-[#ff4d00]" /> {stats.total} Total
                                                     </div>
-                                                    <div className="flex gap-3 text-[9px] text-gray-400 font-medium">
-                                                        <span className="text-green-600">{stats.active} Active</span>
-                                                        <span>{stats.expired} Expired</span>
-                                                        {stats.demo > 0 && <span className="text-blue-500 flex items-center gap-0.5"><Zap size={8} /> {stats.demo} Demo</span>}
+                                                    <div className="flex flex-col gap-1 text-[9px] text-gray-400 font-medium mt-1">
+                                                        <span className="text-green-600 flex items-center gap-1">
+                                                            <div className="w-1 h-1 rounded-full bg-green-500"></div>
+                                                            {stats.active} Active
+                                                        </span>
+                                                        <span className="text-gray-500 flex items-center gap-1">
+                                                            <div className="w-1 h-1 rounded-full bg-gray-300"></div>
+                                                            {stats.expired} Inactive
+                                                        </span>
+                                                        {stats.demo > 0 && <span className="text-blue-500 flex items-center gap-1"><Zap size={8} /> {stats.demo} Demo</span>}
                                                     </div>
                                                 </div>
                                             </td>

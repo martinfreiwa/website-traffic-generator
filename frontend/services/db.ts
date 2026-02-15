@@ -3,8 +3,16 @@ import { Project, PriceClass, ProjectSettings, Transaction, User, Ticket, System
 
 const API_BASE_URL = "http://127.0.0.1:8001";
 
-let authToken = localStorage.getItem('tgp_token');
-let currentUserId = localStorage.getItem('modus_current_user_id');
+
+const getStorageItem = (key: string) => {
+    if (typeof localStorage !== 'undefined') {
+        return localStorage.getItem(key);
+    }
+    return null;
+};
+
+let authToken = getStorageItem('tgp_token');
+let currentUserId = getStorageItem('modus_current_user_id');
 
 const fetchWithAuth = async (url: string, options: any = {}) => {
     const headers = {
@@ -48,6 +56,16 @@ export const db = {
         }
     },
 
+    logout: () => {
+        authToken = null;
+        currentUserId = null;
+        localStorage.removeItem('tgp_token');
+        localStorage.removeItem('modus_current_user');
+        localStorage.removeItem('modus_current_user_id');
+        window.localStorage.clear();
+        window.location.href = '/login';
+    },
+
     // Auth
     login: async (email: string, pass: string) => {
         const formData = new URLSearchParams();
@@ -76,10 +94,48 @@ export const db = {
             name: userData.email.split('@')[0],
             role: userData.role,
             balance: userData.balance,
+            balanceEconomy: userData.balance_economy,
+            balanceProfessional: userData.balance_professional,
+            balanceExpert: userData.balance_expert,
             status: 'active',
             joinedDate: userData.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
             projectsCount: 0,
-            apiKey: userData.api_key
+            apiKey: userData.api_key,
+
+            // Profile fields
+            phone: userData.phone,
+            company: userData.company,
+            vatId: userData.vat_id,
+            address: userData.address,
+            city: userData.city,
+            country: userData.country,
+            zip: userData.zip,
+            website: userData.website,
+            displayName: userData.display_name,
+            bio: userData.bio,
+            jobTitle: userData.job_title,
+            publicProfile: userData.public_profile,
+            twoFactorEnabled: userData.two_factor_enabled,
+            emailFrequency: userData.email_frequency,
+            loginNotificationEnabled: userData.login_notification_enabled,
+            newsletterSub: userData.newsletter_sub,
+            soundEffects: userData.sound_effects,
+            developerMode: userData.developer_mode,
+            apiWhitelist: userData.api_whitelist,
+            webhookSecret: userData.webhook_secret,
+            accessibility: userData.accessibility,
+            socialLinks: userData.social_links,
+            loginHistory: userData.login_history,
+            recoveryEmail: userData.recovery_email,
+            timezone: userData.timezone,
+            language: userData.language,
+            themeAccentColor: userData.theme_accent_color,
+            skillsBadges: userData.skills_badges,
+            referralCode: userData.referral_code,
+            supportPin: userData.support_pin,
+            dateFormat: userData.date_format,
+            numberFormat: userData.number_format,
+            requirePasswordReset: userData.require_password_reset
         };
 
         db.setCurrentUser(mappedUser);
@@ -101,10 +157,12 @@ export const db = {
 
     // Projects
     getProjects: (): Project[] => {
-        // In the dashboard, this is called after syncProjects or initData.
-        // For a real API, we should probably make this async, but the dashboard expects sync.
-        // We'll return the cached projects and provide a separate sync function.
         const data = localStorage.getItem('modus_projects_cache');
+        return data ? JSON.parse(data) : [];
+    },
+
+    getAdminProjects: (): Project[] => {
+        const data = localStorage.getItem('modus_admin_projects_cache');
         return data ? JSON.parse(data) : [];
     },
 
@@ -114,16 +172,16 @@ export const db = {
             if (!response.ok) return;
             const data = await response.json();
 
-            // Map backend ProjectResponse to frontend Project type
             const mapped: Project[] = data.map((p: any) => ({
                 id: p.id,
                 userId: p.user_id,
                 name: p.name,
-                plan: p.plan_type || 'Custom', // Ensure plan is populated
+                plan: p.plan_type || 'Custom',
                 status: p.status,
                 expires: p.expires_at || 'Never',
+                createdAt: p.created_at,
                 settings: p.settings,
-                stats: [] // Would need a separate endpoint for stats history
+                stats: []
             }));
 
             localStorage.setItem('modus_projects_cache', JSON.stringify(mapped));
@@ -132,9 +190,38 @@ export const db = {
         }
     },
 
+    syncAdminProjects: async () => {
+        try {
+            const response = await fetchWithAuth(`${API_BASE_URL}/admin/projects`);
+            if (!response.ok) return;
+            const data = await response.json();
+
+            const mapped: Project[] = data.map((p: any) => ({
+                id: p.id,
+                userId: p.user_id,
+                name: p.name,
+                plan: p.plan_type || 'Custom',
+                status: p.status,
+                expires: p.expires_at || 'Never',
+                createdAt: p.created_at,
+                settings: p.settings,
+                stats: []
+            }));
+
+            localStorage.setItem('modus_admin_projects_cache', JSON.stringify(mapped));
+        } catch (e) {
+            console.error("Failed to sync admin projects:", e);
+        }
+    },
+
     getProjectById: (id: string): Project | undefined => {
         const projects = db.getProjects();
-        return projects.find(p => p.id === id);
+        let project = projects.find(p => p.id === id);
+        if (!project) {
+            const adminProjects = db.getAdminProjects();
+            project = adminProjects.find(p => p.id === id);
+        }
+        return project;
     },
 
     addProject: async (project: Project) => {
@@ -174,6 +261,31 @@ export const db = {
         return db.getProjects();
     },
 
+    deleteProject: async (id: string) => {
+        await fetchWithAuth(`${API_BASE_URL}/projects/${id}`, {
+            method: 'DELETE'
+        });
+        await db.syncProjects();
+        return db.getProjects();
+    },
+
+    // Bulk Actions
+    bulkUpdateProjectStatus: async (ids: string[], status: 'active' | 'stopped') => {
+        await Promise.all(ids.map(id =>
+            fetchWithAuth(`${API_BASE_URL}/projects/${id}/${status === 'active' ? 'start' : 'stop'}`, { method: 'POST' })
+        ));
+        await db.syncProjects();
+        return db.getProjects();
+    },
+
+    bulkDeleteProjects: async (ids: string[]) => {
+        await Promise.all(ids.map(id =>
+            fetchWithAuth(`${API_BASE_URL}/projects/${id}`, { method: 'DELETE' })
+        ));
+        await db.syncProjects();
+        return db.getProjects();
+    },
+
     // Financials
     getBalance: (): number => {
         const user = db.getCurrentUser();
@@ -209,6 +321,9 @@ export const db = {
             name: u.name || u.email.split('@')[0],
             role: u.role,
             balance: u.balance,
+            balanceEconomy: u.balance_economy,
+            balanceProfessional: u.balance_professional,
+            balanceExpert: u.balance_expert,
             status: u.status || 'active',
             joinedDate: u.created_at?.split('T')[0] || u.joinedDate || new Date().toISOString().split('T')[0],
             projectsCount: u.projects_count || 0,
@@ -297,7 +412,27 @@ export const db = {
         return mapped;
     },
 
-    purchaseCredits: async (amount: number, description: string) => {
+    createPaymentIntent: async (amount: number, currency: string = 'eur') => {
+        const token = localStorage.getItem('tgp_token');
+        if (!token) throw new Error("Not authenticated");
+
+        const response = await fetch(`${API_BASE_URL}/create-payment-intent`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ amount, currency })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to create payment intent');
+        }
+        return await response.json();
+    },
+
+    purchaseCredits: async (amount: number, description: string, tier?: string) => {
         const user = db.getCurrentUser();
         if (!user) return 0;
 
@@ -306,15 +441,22 @@ export const db = {
             body: JSON.stringify({
                 user_email: user.email,
                 amount: amount,
-                description: description
+                description: description,
+                tier: tier
             })
         });
 
         const userRes = await fetchWithAuth(`${API_BASE_URL}/users/me`);
         const userData = await userRes.json();
-        db.setCurrentUser({ ...user, balance: userData.balance });
+        db.setCurrentUser({
+            ...user,
+            balance: userData.balance,
+            balanceEconomy: userData.balance_economy,
+            balanceProfessional: userData.balance_professional,
+            balanceExpert: userData.balance_expert
+        });
         await db.syncTransactions();
-        return userData.balance;
+        return userData.balance; // We might want to return the specific balance but keeping signature for now
     },
 
     // Tickets
@@ -425,8 +567,132 @@ export const db = {
     },
 
     updateUserProfile: async (user: User) => {
-        console.log("Updating profile:", user);
+        console.log("Updating profile on backend:", user);
+
+        // Map camelCase to snake_case for backend
+        const updatePayload = {
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
+            company: user.company,
+            vat_id: user.vatId,
+            address: user.address,
+            city: user.city,
+            country: user.country,
+            zip: user.zip,
+            website: user.website,
+            display_name: user.displayName,
+            bio: user.bio,
+            job_title: user.jobTitle,
+            public_profile: user.publicProfile,
+            two_factor_enabled: user.twoFactorEnabled,
+            email_frequency: user.emailFrequency,
+            login_notification_enabled: user.loginNotificationEnabled,
+            newsletter_sub: user.newsletterSub,
+            sound_effects: user.soundEffects,
+            developer_mode: user.developerMode,
+            api_whitelist: user.apiWhitelist,
+            webhook_secret: user.webhookSecret,
+            accessibility: user.accessibility,
+            social_links: user.socialLinks,
+            recovery_email: user.recoveryEmail,
+            timezone: user.timezone,
+            language: user.language,
+            theme_accent_color: user.themeAccentColor,
+            date_format: user.dateFormat,
+            number_format: user.numberFormat,
+            require_password_reset: user.requirePasswordReset
+        };
+
+        const response = await fetchWithAuth(`${API_BASE_URL}/users/me`, {
+            method: 'PUT',
+            body: JSON.stringify(updatePayload)
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || "Failed to update profile");
+        }
+
+        const updatedUser = await response.json();
+        // Update local state with the returned mapped user if needed,
+        // but for now we'll just update localStorage with the current frontend object
+        // assuming it's consistent.
         db.setCurrentUser(user);
+    },
+
+    regenerateApiKey: async (): Promise<string> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/auth/api-key`, {
+            method: 'POST'
+        });
+        if (!response.ok) throw new Error("Failed to regenerate key");
+        const data = await response.json();
+
+        const user = db.getCurrentUser();
+        if (user) {
+            user.apiKey = data.api_key;
+            db.setCurrentUser(user);
+        }
+        return data.api_key;
+    },
+
+    changePassword: async (current: string, newPass: string, confirm: string) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/auth/password`, {
+            method: 'PUT',
+            body: JSON.stringify({ current_password: current, new_password: newPass, confirm_password: confirm })
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || "Password update failed");
+        }
+        return await response.json();
+    },
+
+    logoutAllSessions: async () => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/auth/logout-all`, {
+            method: 'POST'
+        });
+        if (!response.ok) throw new Error("Failed to logout all sessions");
+        return await response.json();
+    },
+
+    exportUserData: async () => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/users/me/export`);
+        if (!response.ok) throw new Error("Export failed");
+        return await response.json();
+    },
+
+    uploadAvatar: async (file: File): Promise<string> => {
+        const token = localStorage.getItem('tgp_token');
+        const headers: any = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`${API_BASE_URL}/users/me/avatar`, {
+            method: 'POST',
+            headers: headers,
+            body: formData
+        });
+
+        if (!response.ok) throw new Error("Avatar upload failed");
+
+        const data = await response.json();
+        const user = db.getCurrentUser();
+        if (user) {
+            user.avatarUrl = data.avatar_url;
+            db.setCurrentUser(user);
+        }
+        return data.avatar_url;
+    },
+
+    deleteAccount: async (): Promise<void> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/users/me`, {
+            method: 'DELETE'
+        });
+        if (!response.ok) throw new Error("Account deletion failed");
+        db.logout();
     },
 
     getPricing: (): PriceClass[] => {

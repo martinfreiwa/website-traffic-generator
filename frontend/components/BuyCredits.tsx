@@ -1,366 +1,452 @@
-
 import React, { useState, useEffect } from 'react';
-import { Check, CreditCard, Zap, Shield, Wallet, ArrowRight, Lock, Loader2, Landmark, Smartphone, Calculator } from 'lucide-react';
 import { db } from '../services/db';
+import {
+    Check, CreditCard, Zap, Shield, Wallet, ArrowRight, Lock,
+    Loader2, Landmark, Smartphone, Calculator, Star, Sliders,
+    Layers, AlertCircle, ShoppingCart, Percent
+} from 'lucide-react';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+
+// Initialize Stripe with the provided Publishable Key
+const stripePromise = loadStripe("pk_test_51ST5n8JLE5bW6f8EIM08iRjnjfGIHo84FmVCqEoHAFQ4KFa2dVBAH4BPuLoZhvQaBWJ2Ody3F0YgYyAl0OdJEsbr00mnzqV12v");
 
 interface BuyCreditsProps {
-  onBack: () => void;
-  onPurchase?: () => void;
+    onBack: () => void;
+    onPurchase?: () => void;
 }
 
-type PaymentMethod = 'apple_pay' | 'bank_transfer' | 'visa' | 'mastercard' | 'revolut_card';
+interface TierDef {
+    id: 'economy' | 'professional' | 'expert';
+    name: string;
+    factor: number;
+    quality: string;
+    popular?: boolean;
+    features: string[];
+    color: string;
+}
 
-const PRESET_AMOUNTS = [
-    { val: 29, label: 'Starter', visits: '50k Visits' },
-    { val: 129, label: 'Growth', visits: '300k Visits' },
-    { val: 399, label: 'Business', visits: '1M Visits', popular: true },
-    { val: 999, label: 'Enterprise', visits: '3M Visits' },
-    { val: 1249, label: 'Agency Pro', visits: '5M Visits' },
-    { val: 2999, label: 'Agency Scale', visits: '15M Visits' },
+const TIERS: TierDef[] = [
+    {
+        id: 'economy',
+        name: 'Economy',
+        factor: 0.35,
+        quality: '10% Quality',
+        features: ['Residential IPs', 'Direct Traffic Only', 'Standard Proxy Pool', 'No Geo Targeting'],
+        color: 'border-gray-200'
+    },
+    {
+        id: 'professional',
+        name: 'Professional',
+        factor: 0.65,
+        quality: '50% Quality',
+        popular: true,
+        features: ['Residential Geo IPs', 'Country Geo Targeting', 'RSS and Sitemap Support', 'URL Shorteners'],
+        color: 'border-orange-300'
+    },
+    {
+        id: 'expert',
+        name: 'Expert',
+        factor: 1.0,
+        quality: '100% Quality',
+        features: ['State & City Targeting', 'Night & Day Volume', 'Automatic Website Crawler', 'GA4 Natural Events'],
+        color: 'border-[#ff4d00]'
+    }
 ];
 
-const WISE_LINKS: Record<number, string> = {
-    29: 'https://wise.com/pay/r/Z8n972iVe9Weh9g',
-    129: 'https://wise.com/pay/r/28ekryVPGRMo7V8',
-    399: 'https://wise.com/pay/r/8aLMxQj9sk0lOHA',
-    999: 'https://wise.com/pay/r/T-8pXdsj-EGvuqU',
-    1249: 'https://wise.com/pay/r/bz2NsKVEAxNyGBU',
-    2999: 'https://wise.com/pay/r/3ollLtm3W1VZv7M'
+const VOLUME_STEPS = [60000, 500000, 1000000, 10000000, 50000000];
+const BULK_OPTIONS = [1, 6, 24];
+
+const PRICING_MATRIX: Record<string, Record<number, Record<number, number>>> = {
+    economy: {
+        60000: { 1: 9.96, 6: 47.81, 24: 143.42 },
+        500000: { 1: 57.96, 6: 278.21, 24: 834.62 },
+        1000000: { 1: 99.96, 6: 479.81, 24: 1439.42 },
+        10000000: { 1: 699.96, 6: 3359.81, 24: 10079.42 },
+        50000000: { 1: 2799.96, 6: 13439.81, 24: 40319.42 },
+    },
+    professional: {
+        60000: { 1: 19.96, 6: 95.81, 24: 287.42 },
+        500000: { 1: 115.92, 6: 556.42, 24: 1669.25 },
+        1000000: { 1: 199.96, 6: 959.81, 24: 2879.42 },
+        10000000: { 1: 1399.96, 6: 6719.81, 24: 20159.42 },
+        50000000: { 1: 5599.96, 6: 26879.81, 24: 80639.42 },
+    },
+    expert: {
+        60000: { 1: 29.96, 6: 143.81, 24: 431.42 },
+        500000: { 1: 173.96, 6: 835.01, 24: 2505.02 },
+        1000000: { 1: 299.96, 6: 1439.81, 24: 4319.42 },
+        10000000: { 1: 2099.96, 6: 10079.81, 24: 30239.42 },
+        50000000: { 1: 8399.96, 6: 40319.81, 24: 120959.42 },
+    }
 };
 
-const CUSTOM_PAYMENT_LINK = 'https://revolut.me/easytrafficbot';
-const MIN_CUSTOM_AMOUNT = 29;
+const CheckoutForm = ({ amount, onSuccess, onError }: { amount: number, onSuccess: (pid: string) => void, onError: (msg: string) => void }) => {
+    const stripe = useStripe();
+    const elements = useElements();
+    const [message, setMessage] = useState<string | null>(null);
+    const [isProcessing, setIsProcessing] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!stripe || !elements) return;
+
+        setIsProcessing(true);
+
+        const { error, paymentIntent } = await stripe.confirmPayment({
+            elements,
+            confirmParams: {
+                return_url: window.location.href, // This might need distinct success page handling
+            },
+            redirect: "if_required",
+        });
+
+        if (error) {
+            setMessage(error.message || "An unexpected error occurred.");
+            onError(error.message || "Payment failed");
+            setIsProcessing(false);
+        } else if (paymentIntent && paymentIntent.status === "succeeded") {
+            setMessage("Payment successful!");
+            onSuccess(paymentIntent.id);
+        } else {
+            setMessage("Unexpected state.");
+            setIsProcessing(false);
+        }
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-6">
+            <PaymentElement />
+            {message && <div className="text-red-500 text-sm font-bold bg-red-50 p-3 rounded">{message}</div>}
+            <button
+                disabled={isProcessing || !stripe || !elements}
+                className="w-full bg-[#ff4d00] text-white py-4 text-sm font-black uppercase tracking-widest hover:bg-black transition-colors disabled:opacity-50 mt-4 flex items-center justify-center gap-2"
+            >
+                {isProcessing ? <Loader2 className="animate-spin" size={16} /> : <Lock size={16} />}
+                {isProcessing ? "Processing..." : `Pay €${amount.toFixed(2)}`}
+            </button>
+        </form>
+    );
+};
 
 const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
-  const [balance, setBalance] = useState(0);
-  const [selectedPreset, setSelectedPreset] = useState<number | null>(399); 
-  const [customAmount, setCustomAmount] = useState<string>('');
-  const [method, setMethod] = useState<PaymentMethod>('visa');
-  const [isProcessing, setIsProcessing] = useState(false);
+    const [step, setStep] = useState(1);
+    const [selectedTier, setSelectedTier] = useState<TierDef>(TIERS[1]); // Default Professional
+    const [volumeIndex, setVolumeIndex] = useState(1); // Default 500k
+    const [bulkPack, setBulkPack] = useState(1); // 1, 6, or 24
+    const [balance, setBalance] = useState(0);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [paymentMethod, setPaymentMethod] = useState<'card' | 'bank' | 'apple'>('card');
+    const [clientSecret, setClientSecret] = useState("");
 
-  useEffect(() => {
-      setBalance(db.getBalance());
-  }, []);
+    useEffect(() => {
+        setBalance(db.getBalance());
+    }, []);
 
-  // Helper to handle switching between Preset and Custom
-  const handlePresetSelect = (val: number) => {
-      setSelectedPreset(val);
-      setCustomAmount(''); // Clear custom
-      setMethod('visa'); // Default to standard methods
-  };
+    const visitors = VOLUME_STEPS[volumeIndex];
+    const totalPrice = PRICING_MATRIX[selectedTier.id][visitors][bulkPack];
 
-  const handleCustomChange = (val: string) => {
-      setCustomAmount(val);
-      setSelectedPreset(null); // Clear preset
-      setMethod('revolut_card'); // Force/Default to Revolut for custom
-  };
+    const totalVisitors = visitors * bulkPack;
+    const cpm = totalPrice / (totalVisitors / 1000);
 
-  // Dynamic Rate Calculation based on Volume Tiers
-  const getRateForAmount = (amount: number) => {
-      if (amount >= 2999) return 0.000199933; // ~Agency Scale
-      if (amount >= 1249) return 0.0002498;   // ~Agency Pro
-      if (amount >= 999) return 0.000333;     // ~Enterprise
-      if (amount >= 399) return 0.000399;     // ~Business
-      if (amount >= 129) return 0.00043;      // ~Growth
-      return 0.00058;                         // ~Starter
-  };
+    const handleCreatePayment = async () => {
+        // Only for Card payment we need intent
+        if (paymentMethod === 'card') {
+            setIsProcessing(true);
+            try {
+                // Convert to cents
+                const amountInCents = Math.round(totalPrice * 100);
+                const data = await db.createPaymentIntent(amountInCents, 'eur');
+                if (data.clientSecret) {
+                    setClientSecret(data.clientSecret);
+                    setStep(2);
+                } else {
+                    alert("Failed to initialize payment gateway.");
+                }
+            } catch (error: any) {
+                alert("Payment Error: " + error.message);
+            } finally {
+                setIsProcessing(false);
+            }
+        } else {
+            // Other methods (Bank/Apple) - Placeholder flow
+            setStep(2);
+        }
+    };
 
-  // Derived Values
-  const activeAmount = selectedPreset !== null ? selectedPreset : (parseFloat(customAmount) || 0);
-  const currentRate = getRateForAmount(activeAmount);
-  
-  const estimatedCustomVisits = activeAmount > 0 
-    ? Math.floor(activeAmount / currentRate) 
-    : 0;
+    const handlePaymentSuccess = async (paymentId: string) => {
+        setIsProcessing(true);
+        // Add credits to account
+        await db.purchaseCredits(totalPrice, `Traffic Credits (${totalVisitors.toLocaleString()} ${selectedTier.name}) - Stripe ${paymentId}`, selectedTier.id);
+        setBalance(db.getBalance());
+        setIsProcessing(false);
+        if (onPurchase) onPurchase();
+        alert("Payment Successful! Credits added.");
+        onBack();
+    };
 
-  const displayVisits = selectedPreset 
-    ? PRESET_AMOUNTS.find(p => p.val === selectedPreset)?.visits 
-    : `${estimatedCustomVisits.toLocaleString()} Visits`;
-
-  const handlePayment = () => {
-      // 1. Determine Link
-      let link = '';
-      
-      if (selectedPreset) {
-          link = WISE_LINKS[selectedPreset];
-      } else {
-          // Custom Logic
-          if (activeAmount < MIN_CUSTOM_AMOUNT) {
-              alert(`Minimum custom funding amount is €${MIN_CUSTOM_AMOUNT}.`);
-              return;
-          }
-          link = CUSTOM_PAYMENT_LINK;
-      }
-
-      if (!link) {
-          alert('Configuration error: No payment link available.');
-          return;
-      }
-
-      setIsProcessing(true);
-      
-      // Simulate processing state before redirect
-      setTimeout(() => {
-          window.location.href = link;
-          setIsProcessing(false); 
-      }, 1500);
-  };
-
-  const getMethodLabel = (m: PaymentMethod) => {
-      switch(m) {
-          case 'apple_pay': return 'Apple Pay';
-          case 'bank_transfer': return 'Bank Transfer';
-          case 'visa': return 'Visa Card';
-          case 'mastercard': return 'Mastercard';
-          case 'revolut_card': return 'Credit Card (Revolut)';
-      }
-  };
-
-  if (isProcessing) {
-      return (
-          <div className="flex flex-col items-center justify-center min-h-[400px] text-center animate-in fade-in">
-              <Loader2 className="w-16 h-16 text-[#ff4d00] animate-spin mb-6" />
-              <h3 className="text-2xl font-black uppercase text-gray-900 mb-2">Redirecting to Secure Payment</h3>
-              <p className="text-gray-500">Please wait while we connect you to the payment gateway...</p>
-          </div>
-      )
-  }
-
-  return (
-    <div className="space-y-8 animate-in fade-in duration-500 pb-20">
-      
-      {/* Header with Balance */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-200 pb-8">
-        <div>
-          <div className="text-[10px] font-black uppercase tracking-widest text-[#ff4d00] mb-1">Financials</div>
-          <h2 className="text-3xl font-black text-gray-900 uppercase tracking-tight">Add Funds</h2>
-        </div>
-        <div className="bg-[#111] text-white px-6 py-4 flex items-center gap-4 shadow-xl">
-            <div className="text-right">
-                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Current Balance</div>
-                <div className="text-2xl font-black text-white">€{balance.toFixed(2)}</div>
+    if (isProcessing && step === 1) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[500px] text-center">
+                <Loader2 className="w-16 h-16 text-[#ff4d00] animate-spin mb-6" />
+                <h3 className="text-2xl font-black uppercase text-gray-900 mb-2">Connecting Secure Gateway</h3>
+                <p className="text-gray-500 font-medium">Please wait...</p>
             </div>
-            <Wallet className="text-[#ff4d00]" size={32} />
+        );
+    }
+
+    return (
+        <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-200 pb-8">
+                <div>
+                    <div className="text-[10px] font-black uppercase tracking-widest text-[#ff4d00] mb-1">Exchange & Funding</div>
+                    <h2 className="text-3xl font-black text-gray-900 uppercase tracking-tight">Purchase Traffic Credits</h2>
+                </div>
+                <div className="bg-[#111] text-white px-6 py-4 flex items-center gap-6 shadow-xl border-l-4 border-[#ff4d00]">
+                    <div className="text-right">
+                        <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Active Balance</div>
+                        <div className="text-2xl font-black text-white">€{balance.toFixed(2)}</div>
+                    </div>
+                    <Wallet className="text-[#ff4d00]" size={32} />
+                </div>
+            </div>
+
+            {step === 1 ? (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+                    {/* Left: Configuration */}
+                    <div className="lg:col-span-2 space-y-8">
+                        {/* Tier Selection */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {TIERS.map((tier) => (
+                                <button
+                                    key={tier.id}
+                                    onClick={() => setSelectedTier(tier)}
+                                    className={`relative p-6 border-2 transition-all duration-300 text-left flex flex-col ${selectedTier.id === tier.id
+                                        ? `${tier.color} bg-white shadow-xl translate-y-[-4px]`
+                                        : 'border-transparent bg-gray-50 opacity-60 hover:opacity-100'
+                                        }`}
+                                >
+                                    {tier.popular && (
+                                        <div className="absolute top-0 right-0 bg-[#ff4d00] text-white text-[8px] font-black uppercase px-2 py-1">Recommended</div>
+                                    )}
+                                    <div className="flex items-center gap-2 mb-4 text-gray-400">
+                                        <Layers size={16} />
+                                        <span className="text-[10px] font-black uppercase tracking-widest">{tier.quality}</span>
+                                    </div>
+                                    <h3 className="text-xl font-black uppercase tracking-tighter mb-1">{tier.name}</h3>
+                                    <div className="text-[10px] font-bold text-[#ff4d00] mb-6">×{tier.factor.toFixed(2)} Price Factor</div>
+
+                                    <ul className="space-y-2 mt-auto">
+                                        {tier.features.slice(0, 3).map((f, i) => (
+                                            <li key={i} className="text-[10px] font-medium text-gray-500 flex items-center gap-2">
+                                                <Check size={10} className="text-[#ff4d00]" /> {f}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Volume Configuration */}
+                        <div className="bg-white border border-gray-200 p-8 shadow-sm">
+                            <div className="flex justify-between items-center mb-12">
+                                <div>
+                                    <h3 className="text-xs font-black uppercase tracking-widest text-gray-900 flex items-center gap-2">
+                                        <Sliders size={14} className="text-[#ff4d00]" /> Volume Configurator
+                                    </h3>
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">Select your traffic volume</p>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-2xl font-black text-gray-900">{visitors.toLocaleString()}</div>
+                                    <div className="text-[10px] font-black text-[#ff4d00] uppercase tracking-widest">Hits Per Credit</div>
+                                </div>
+                            </div>
+
+                            <div className="relative mb-16 px-4">
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="4"
+                                    step="1"
+                                    value={volumeIndex}
+                                    onChange={(e) => setVolumeIndex(parseInt(e.target.value))}
+                                    className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-[#ff4d00] relative z-20"
+                                />
+                                <div className="absolute top-6 left-0 w-full flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">
+                                    {VOLUME_STEPS.map((v, i) => (
+                                        <div key={v} className="flex flex-col items-center cursor-pointer hover:text-black" onClick={() => setVolumeIndex(i)}>
+                                            <div className="h-2 w-0.5 bg-gray-300 mb-1"></div>
+                                            <span>
+                                                {v >= 1000000 ? `${v / 1000000}M` : `${v / 1000}k`}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="border-t border-gray-100 pt-8">
+                                <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-4">Bulk Packages</h4>
+                                <div className="grid grid-cols-3 gap-4">
+                                    {BULK_OPTIONS.map(opt => (
+                                        <button
+                                            key={opt}
+                                            onClick={() => setBulkPack(opt)}
+                                            className={`relative py-4 border-2 flex flex-col items-center justify-center transition-all ${bulkPack === opt
+                                                ? 'border-[#ff4d00] bg-orange-50 text-black'
+                                                : 'border-gray-100 text-gray-400 hover:border-gray-300'
+                                                }`}
+                                        >
+                                            {opt > 1 && (
+                                                <div className="absolute -top-3 bg-[#ff4d00] text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full shadow-sm">
+                                                    Save {opt === 6 ? '20%' : '40%'}
+                                                </div>
+                                            )}
+                                            <div className="text-xl font-black">{opt}x</div>
+                                            <div className="text-[9px] font-bold uppercase tracking-widest opacity-60">Credits Included</div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Payment Method Selector (Step 1) */}
+                        <div className="bg-white border border-gray-200 p-8 shadow-sm">
+                            <h3 className="text-xs font-black uppercase tracking-widest text-gray-900 mb-6 flex items-center gap-2">
+                                <Wallet size={14} className="text-[#ff4d00]" /> Payment Method
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <button
+                                    onClick={() => setPaymentMethod('card')}
+                                    className={`p-6 border-2 transition-all flex flex-col items-center gap-4 ${paymentMethod === 'card' ? 'border-[#ff4d00] bg-orange-50 shadow-lg ring-1 ring-[#ff4d00]' : 'border-gray-100 hover:border-gray-200'}`}
+                                >
+                                    <CreditCard size={32} className={paymentMethod === 'card' ? 'text-[#ff4d00]' : 'text-gray-300'} />
+                                    <span className="text-xs font-black uppercase tracking-widest">Credit Card (Stripe)</span>
+                                </button>
+                                <button
+                                    onClick={() => setPaymentMethod('bank')}
+                                    className={`p-6 border-2 transition-all flex flex-col items-center gap-4 ${paymentMethod === 'bank' ? 'border-[#ff4d00] bg-orange-50 shadow-lg' : 'border-gray-100 hover:border-gray-200'}`}
+                                >
+                                    <Landmark size={32} className={paymentMethod === 'bank' ? 'text-[#ff4d00]' : 'text-gray-300'} />
+                                    <span className="text-xs font-black uppercase tracking-widest">Bank Wire</span>
+                                </button>
+                                <button
+                                    onClick={() => setPaymentMethod('apple')}
+                                    className={`p-6 border-2 transition-all flex flex-col items-center gap-4 ${paymentMethod === 'apple' ? 'border-[#ff4d00] bg-orange-50 shadow-lg' : 'border-gray-100 hover:border-gray-200'}`}
+                                >
+                                    <Smartphone size={32} className={paymentMethod === 'apple' ? 'text-[#ff4d00]' : 'text-gray-300'} />
+                                    <span className="text-xs font-black uppercase tracking-widest">Apple Pay</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right: Summary Card */}
+                    <div className="lg:col-span-1">
+                        <div className="bg-[#111] text-white p-8 shadow-2xl relative overflow-hidden sticky top-8">
+                            <div className="absolute top-0 right-0 p-8 opacity-10 rotate-12">
+                                <ShoppingCart size={140} />
+                            </div>
+
+                            <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-10 relative">Package Summary</h3>
+
+                            <div className="space-y-6 relative">
+                                <div className="flex justify-between items-end">
+                                    <div className="text-gray-400 text-[10px] font-black uppercase tracking-widest">Plan</div>
+                                    <div className="font-black text-sm uppercase">{selectedTier.name}</div>
+                                </div>
+                                <div className="flex justify-between items-end">
+                                    <div className="text-gray-400 text-[10px] font-black uppercase tracking-widest">Volume</div>
+                                    <div className="font-black text-sm">{visitors.toLocaleString()} <span className="text-gray-500">x{bulkPack}</span></div>
+                                </div>
+                                <div className="flex justify-between items-end">
+                                    <div className="text-gray-400 text-[10px] font-black uppercase tracking-widest">Total Hits</div>
+                                    <div className="font-black text-sm text-[#ff4d00]">{totalVisitors.toLocaleString()}</div>
+                                </div>
+                                <div className="flex justify-between items-end">
+                                    <div className="text-gray-400 text-[10px] font-black uppercase tracking-widest">Effective CPM</div>
+                                    <div className="font-black text-sm text-gray-300">€{cpm.toFixed(2)}</div>
+                                </div>
+
+                                <div className="h-px bg-gray-800 my-8"></div>
+
+                                <div className="flex justify-between items-center">
+                                    <div className="text-xs font-black uppercase tracking-widest">Total Due</div>
+                                    <div className="text-3xl font-black text-white">€{totalPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                </div>
+
+                                <button
+                                    onClick={handleCreatePayment}
+                                    className="w-full bg-[#ff4d00] text-white py-5 text-xs font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all flex items-center justify-center gap-3 mt-8 shadow-[0_15px_30px_rgba(255,77,0,0.3)] group"
+                                >
+                                    Proceed to Checkout <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                                </button>
+
+                                <div className="mt-8 flex items-center justify-center gap-2 text-gray-500">
+                                    <Lock size={12} />
+                                    <span className="text-[9px] uppercase font-black tracking-[0.2em]">Tiered Rate Calculator v4.1</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                /* Step 2: Payment Execution */
+                <div className="max-w-2xl mx-auto space-y-8 animate-in slide-in-from-right-8 duration-500 pb-20">
+                    <button onClick={() => setStep(1)} className="flex items-center gap-2 text-gray-500 hover:text-black text-sm font-bold uppercase tracking-wider mb-6">
+                        <ArrowRight size={16} className="rotate-180" /> Back to Configuration
+                    </button>
+
+                    <div className="bg-white border border-gray-200 p-12 shadow-xl">
+                        <div className="text-center mb-10">
+                            <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tighter mb-2">Secure Checkout</h3>
+                            <p className="text-gray-500 text-sm">Completing payment of <span className="font-bold text-black">€{totalPrice.toFixed(2)}</span> via {paymentMethod === 'card' ? 'Stripe Secure' : paymentMethod}</p>
+                        </div>
+
+                        {paymentMethod === 'card' && clientSecret && (
+                            <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'stripe', variables: { colorPrimary: '#ff4d00' } } }}>
+                                <CheckoutForm
+                                    amount={totalPrice}
+                                    onSuccess={handlePaymentSuccess}
+                                    onError={(msg) => alert(msg)}
+                                />
+                            </Elements>
+                        )}
+
+                        {paymentMethod === 'bank' && (
+                            <div className="text-center space-y-4">
+                                <div className="p-6 bg-gray-50 border border-gray-200 text-left space-y-2 font-mono text-sm">
+                                    <p><strong>Bank Name:</strong> Global Traffic Bank</p>
+                                    <p><strong>IBAN:</strong> DE89 3704 0044 0532 0150 00</p>
+                                    <p><strong>BIC:</strong> COBADEFFXXX</p>
+                                    <p><strong>Ref:</strong> USER-{db.getCurrentUser()?.id.substring(0, 8).toUpperCase()}</p>
+                                </div>
+                                <button onClick={() => handlePaymentSuccess("WIRE-PENDING")} className="w-full bg-[#111] text-white py-4 font-black uppercase hover:bg-[#ff4d00]">
+                                    I have sent the wire
+                                </button>
+                            </div>
+                        )}
+
+                        {paymentMethod === 'apple' && (
+                            <div className="text-center py-12">
+                                <Smartphone size={64} className="mx-auto text-gray-200 mb-4" />
+                                <p className="text-gray-500 mb-6">Apple Pay integration requires HTTPS on production domain.</p>
+                                <button onClick={() => handlePaymentSuccess("APPLE-SIM")} className="bg-black text-white px-8 py-3 rounded-full font-bold">
+                                    Pay with Pay (Simulated)
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex justify-center items-center gap-2 opacity-50">
+                        <Lock size={12} className="text-gray-400" />
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">256-Bit SSL Encrypted & Verified</span>
+                    </div>
+                </div>
+            )}
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-          
-          {/* Left Column: Selection */}
-          <div className="lg:col-span-2 space-y-8">
-              
-              {/* Preset Selection */}
-              <div className="bg-white border border-gray-200 p-8 shadow-sm">
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-gray-900 mb-6 flex items-center gap-2">
-                      <Zap size={14} /> Select Package
-                  </h3>
-                  
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-                      {PRESET_AMOUNTS.map((item) => (
-                          <button
-                              key={item.val}
-                              onClick={() => handlePresetSelect(item.val)}
-                              className={`relative border-2 p-4 flex flex-col items-center justify-between transition-all duration-200 min-h-[140px]
-                                  ${selectedPreset === item.val 
-                                      ? 'border-[#ff4d00] bg-[#fff5f2]' 
-                                      : 'border-gray-100 hover:border-gray-300'
-                                  }
-                              `}
-                          >
-                              {item.popular && (
-                                  <div className="absolute top-0 right-0 bg-[#ff4d00] text-white text-[9px] font-bold px-2 py-0.5 uppercase tracking-wide">
-                                      Best Value
-                                  </div>
-                              )}
-                              <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-2">{item.label}</div>
-                              <div className="text-3xl font-black text-gray-900 my-2">€{item.val}</div>
-                              <div className="text-xs font-bold text-[#ff4d00] mb-2">{item.visits}</div>
-                              
-                              {selectedPreset === item.val && (
-                                  <div className="absolute bottom-2 text-[#ff4d00]">
-                                      <Check size={16} />
-                                  </div>
-                              )}
-                          </button>
-                      ))}
-                  </div>
-              </div>
-
-              {/* Custom Amount Section */}
-              <div className={`bg-white border p-8 shadow-sm transition-colors ${customAmount ? 'border-[#ff4d00] ring-1 ring-[#ff4d00]' : 'border-gray-200'}`}>
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-gray-900 mb-6 flex items-center gap-2">
-                      <Calculator size={14} /> Or Enter Custom Amount
-                  </h3>
-                  <div className="flex flex-col md:flex-row gap-6 items-start">
-                      <div className="flex-1 w-full">
-                          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-2">Amount (€)</label>
-                          <div className="relative">
-                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-bold text-gray-400">€</span>
-                              <input 
-                                  type="number" 
-                                  min={MIN_CUSTOM_AMOUNT}
-                                  value={customAmount}
-                                  onChange={(e) => handleCustomChange(e.target.value)}
-                                  className="w-full bg-[#f9fafb] border border-gray-200 p-4 pl-10 text-xl font-black text-gray-900 outline-none focus:border-[#ff4d00] transition-colors placeholder:text-gray-300"
-                                  placeholder="500"
-                              />
-                          </div>
-                          <p className="text-[10px] text-gray-400 mt-2 font-medium">Minimum amount: €{MIN_CUSTOM_AMOUNT}</p>
-                      </div>
-                      
-                      <div className="flex-1 w-full bg-[#111] p-4 rounded-sm text-white flex flex-col justify-center min-h-[100px]">
-                          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Estimated Traffic</div>
-                          <div className="text-3xl font-black text-[#ff4d00]">
-                              {activeAmount > 0 && !selectedPreset ? estimatedCustomVisits.toLocaleString() : (selectedPreset ? displayVisits.split(' ')[0] : '0')}
-                          </div>
-                          <div className="text-[10px] text-gray-500 mt-1">Based on rate €{currentRate.toFixed(6)}/visit</div>
-                      </div>
-                  </div>
-              </div>
-
-              {/* Payment Method */}
-              <div className="bg-white border border-gray-200 p-8 shadow-sm">
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-gray-900 mb-6 flex items-center gap-2">
-                      <CreditCard size={14} /> Payment Method
-                  </h3>
-                  
-                  {selectedPreset ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <button 
-                              onClick={() => setMethod('apple_pay')}
-                              className={`flex items-center justify-between p-6 border transition-all ${method === 'apple_pay' ? 'border-[#ff4d00] bg-[#fff5f2] ring-1 ring-[#ff4d00]' : 'border-gray-200 hover:border-gray-300'}`}
-                          >
-                              <div className="flex items-center gap-4">
-                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${method === 'apple_pay' ? 'bg-[#ff4d00] text-white' : 'bg-gray-100 text-gray-500'}`}>
-                                      <Smartphone size={18} />
-                                  </div>
-                                  <span className="text-sm font-bold text-gray-900">Apple Pay</span>
-                              </div>
-                              {method === 'apple_pay' && <Check className="text-[#ff4d00]" size={18} />}
-                          </button>
-
-                          <button 
-                              onClick={() => setMethod('bank_transfer')}
-                              className={`flex items-center justify-between p-6 border transition-all ${method === 'bank_transfer' ? 'border-[#ff4d00] bg-[#fff5f2] ring-1 ring-[#ff4d00]' : 'border-gray-200 hover:border-gray-300'}`}
-                          >
-                              <div className="flex items-center gap-4">
-                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${method === 'bank_transfer' ? 'bg-[#ff4d00] text-white' : 'bg-gray-100 text-gray-500'}`}>
-                                      <Landmark size={18} />
-                                  </div>
-                                  <span className="text-sm font-bold text-gray-900">Bank Transfer</span>
-                              </div>
-                              {method === 'bank_transfer' && <Check className="text-[#ff4d00]" size={18} />}
-                          </button>
-
-                          <button 
-                              onClick={() => setMethod('visa')}
-                              className={`flex items-center justify-between p-6 border transition-all ${method === 'visa' ? 'border-[#ff4d00] bg-[#fff5f2] ring-1 ring-[#ff4d00]' : 'border-gray-200 hover:border-gray-300'}`}
-                          >
-                              <div className="flex items-center gap-4">
-                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${method === 'visa' ? 'bg-[#ff4d00] text-white' : 'bg-gray-100 text-gray-500'}`}>
-                                      <CreditCard size={18} />
-                                  </div>
-                                  <span className="text-sm font-bold text-gray-900">Visa Card</span>
-                              </div>
-                              {method === 'visa' && <Check className="text-[#ff4d00]" size={18} />}
-                          </button>
-
-                          <button 
-                              onClick={() => setMethod('mastercard')}
-                              className={`flex items-center justify-between p-6 border transition-all ${method === 'mastercard' ? 'border-[#ff4d00] bg-[#fff5f2] ring-1 ring-[#ff4d00]' : 'border-gray-200 hover:border-gray-300'}`}
-                          >
-                              <div className="flex items-center gap-4">
-                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${method === 'mastercard' ? 'bg-[#ff4d00] text-white' : 'bg-gray-100 text-gray-500'}`}>
-                                      <CreditCard size={18} />
-                                  </div>
-                                  <span className="text-sm font-bold text-gray-900">Mastercard</span>
-                              </div>
-                              {method === 'mastercard' && <Check className="text-[#ff4d00]" size={18} />}
-                          </button>
-                      </div>
-                  ) : (
-                      /* Custom Payment Method Only */
-                      <div className="p-4 bg-orange-50 border border-orange-100 rounded-sm">
-                          <div className="flex items-center justify-between p-6 border border-[#ff4d00] bg-white ring-1 ring-[#ff4d00]">
-                              <div className="flex items-center gap-4">
-                                  <div className="w-10 h-10 rounded-full flex items-center justify-center bg-[#ff4d00] text-white">
-                                      <CreditCard size={18} />
-                                  </div>
-                                  <div>
-                                      <span className="text-sm font-bold text-gray-900 block">Credit Card</span>
-                                      <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wide">via Revolut Secure Pay</span>
-                                  </div>
-                              </div>
-                              <Check className="text-[#ff4d00]" size={18} />
-                          </div>
-                      </div>
-                  )}
-              </div>
-
-          </div>
-
-          {/* Right Column: Summary */}
-          <div className="lg:col-span-1 space-y-6">
-              <div className="bg-[#111] text-white p-8 shadow-2xl relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-8 opacity-10">
-                      <Wallet size={120} />
-                  </div>
-                  
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-8 relative z-10">Order Summary</h3>
-
-                  <div className="space-y-4 mb-8 relative z-10">
-                      <div className="flex justify-between items-center text-sm">
-                          <span className="text-gray-400">Package Type</span>
-                          <span className="font-bold text-white">{selectedPreset ? 'Standard' : 'Custom'}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                          <span className="text-gray-400">Est. Traffic</span>
-                          <span className="font-bold text-[#ff4d00]">{displayVisits}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                          <span className="text-gray-400">Processing Fee</span>
-                          <span className="font-bold text-green-400">Free</span>
-                      </div>
-                      <div className="h-px bg-gray-800 my-4"></div>
-                      
-                      <div className="flex justify-between items-end">
-                          <span className="text-xs font-bold uppercase tracking-widest text-gray-400">Total Due</span>
-                          <span className="text-3xl font-black text-white">€{activeAmount.toLocaleString()}</span>
-                      </div>
-                  </div>
-
-                  <button 
-                      onClick={handlePayment}
-                      disabled={activeAmount < (selectedPreset ? 0 : MIN_CUSTOM_AMOUNT)}
-                      className="w-full bg-[#ff4d00] text-white py-4 text-xs font-bold uppercase tracking-widest hover:bg-white hover:text-black transition-colors flex items-center justify-center gap-2 relative z-10 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                      Pay with {getMethodLabel(method)} <ArrowRight size={14} />
-                  </button>
-                  
-                  <div className="mt-6 flex items-center justify-center gap-2 text-gray-500 relative z-10">
-                      <Lock size={12} />
-                      <span className="text-[10px] uppercase font-bold tracking-widest">Secure Checkout</span>
-                  </div>
-              </div>
-
-              {/* Trust Badges */}
-              <div className="bg-gray-50 border border-gray-200 p-6">
-                  <div className="flex items-start gap-4">
-                      <Shield className="text-[#ff4d00] shrink-0" size={24} />
-                      <div>
-                          <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wide mb-1">Buyer Protection</h4>
-                          <p className="text-xs text-gray-500 leading-relaxed">
-                              Payments are processed securely. Your funds are credited instantly upon confirmation.
-                          </p>
-                      </div>
-                  </div>
-              </div>
-          </div>
-
-      </div>
-
-    </div>
-  );
+    );
 };
 
 export default BuyCredits;

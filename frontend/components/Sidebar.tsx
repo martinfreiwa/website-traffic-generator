@@ -1,7 +1,8 @@
 
 import React from 'react';
 import { MenuSection } from '../types';
-import { LogOut, ChevronRight } from 'lucide-react';
+import { LogOut, ChevronRight, User } from 'lucide-react';
+import { db } from '../services/db';
 
 interface SidebarProps {
   menuSections: MenuSection[];
@@ -11,6 +12,8 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ menuSections, currentView, onNavigate, onLogout }) => {
+  const user = db.getCurrentUser();
+
   return (
     <aside className="w-64 bg-[#111111] text-white flex flex-col h-screen fixed left-0 top-0 z-20 hidden md:flex border-r border-gray-800 shadow-xl">
       {/* Logo Area */}
@@ -59,7 +62,21 @@ const Sidebar: React.FC<SidebarProps> = ({ menuSections, currentView, onNavigate
       </nav>
 
       {/* Footer Area */}
-      <div className="p-4 border-t border-gray-800 bg-[#0a0a0a]">
+      <div className="p-4 border-t border-gray-800 bg-[#0a0a0a] space-y-4">
+        {user && (
+          <div className="px-4 py-2 bg-[#1a1a1a] rounded-sm border border-gray-800/50">
+            <div className="flex items-center gap-2 mb-1">
+              <User size={12} className="text-[#ff4d00]" />
+              <span className="text-[10px] font-black text-white uppercase tracking-tighter truncate">
+                {user.email}
+              </span>
+            </div>
+            <div className="text-[9px] font-mono text-gray-500 truncate" title={user.id}>
+              ID: {user.id.substring(0, 8).toUpperCase()}
+            </div>
+          </div>
+        )}
+
         <button
           onClick={onLogout}
           className="w-full flex items-center justify-center gap-2 py-3 border border-gray-800 text-[11px] font-bold text-gray-400 uppercase tracking-widest hover:text-[#ff4d00] hover:border-[#ff4d00] hover:bg-[#111] transition-all rounded-sm"

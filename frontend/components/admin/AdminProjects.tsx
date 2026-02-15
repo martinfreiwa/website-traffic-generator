@@ -100,14 +100,14 @@ const AdminProjects: React.FC<AdminProjectsProps> = ({ projects, onEditProject }
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="flex items-center gap-2 text-xs font-medium text-gray-700">
+                                            <div className="flex items-center gap-2 text-[11px] font-bold text-gray-500 uppercase tracking-tighter">
                                                 <User size={12} className="text-gray-400" />
-                                                <span>{p.userId || 'Unknown User'}</span>
+                                                <span>{(p.userId || 'Unknown User').split('-')[0]}</span>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className={`inline-block px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded mb-1 ${p.plan.toLowerCase().includes('agency') ? 'bg-purple-100 text-purple-700' :
-                                                    p.plan.toLowerCase().includes('pro') ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                                                p.plan.toLowerCase().includes('pro') ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
                                                 }`}>
                                                 {p.plan}
                                             </span>
@@ -117,7 +117,7 @@ const AdminProjects: React.FC<AdminProjectsProps> = ({ projects, onEditProject }
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider rounded-full ${p.status === 'active' ? 'bg-[#ff4d00]/10 text-[#ff4d00] ring-1 ring-[#ff4d00]/20' :
-                                                    p.status === 'completed' ? 'bg-green-100 text-green-700 ring-1 ring-green-600/20' : 'bg-gray-100 text-gray-500 ring-1 ring-gray-200'
+                                                p.status === 'completed' ? 'bg-green-100 text-green-700 ring-1 ring-green-600/20' : 'bg-gray-100 text-gray-500 ring-1 ring-gray-200'
                                                 }`}>
                                                 {p.status === 'active' ? <PlayCircle size={10} className="fill-current" /> :
                                                     p.status === 'stopped' ? <PauseCircle size={10} /> : null}

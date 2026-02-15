@@ -185,7 +185,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
             <div className="hidden md:flex gap-8 text-sm font-bold uppercase tracking-wide text-gray-500">
               <a href="#problem" className="hover:text-[#ff4d00] transition-colors">The Problem</a>
               <a href="#features" className="hover:text-[#ff4d00] transition-colors">Features</a>
-              <a href="#pricing" className="hover:text-[#ff4d00] transition-colors">Pricing</a>
+              <Link to="/pricing" className="hover:text-[#ff4d00] transition-colors uppercase">Pricing</Link>
             </div>
             <Link
               to="/login"
@@ -482,8 +482,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
                 { name: "Apex", traffic: "3,000,000+", price: "€999", desc: "Maximum power for competitive niches and large e-commerce sites." },
               ].map((p, i) => (
                 <div key={i} className={`flex flex-col bg-white relative transition-all duration-300 rounded-2xl ${p.featured
-                    ? 'border-2 border-[#ff4d00] shadow-2xl scale-105 z-10'
-                    : 'border border-gray-100 hover:border-gray-200 hover:shadow-xl'
+                  ? 'border-2 border-[#ff4d00] shadow-2xl scale-105 z-10'
+                  : 'border border-gray-100 hover:border-gray-200 hover:shadow-xl'
                   } p-8`}>
                   {p.featured && (
                     <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#ff4d00] text-white px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest shadow-md rounded-full">
@@ -514,8 +514,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
                   </ul>
 
                   <Link to="/signup" className={`w-full py-4 text-xs font-bold uppercase tracking-widest transition-all text-center rounded-lg ${p.featured
-                      ? 'bg-[#ff4d00] text-white hover:bg-black shadow-lg hover:shadow-xl'
-                      : 'bg-black text-white hover:bg-gray-800'
+                    ? 'bg-[#ff4d00] text-white hover:bg-black shadow-lg hover:shadow-xl'
+                    : 'bg-black text-white hover:bg-gray-800'
                     }`}>
                     Select Plan
                   </Link>
@@ -530,8 +530,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
                 { name: "Agency Enterprise", traffic: "50 Million+", price: "Custom", features: ["Everything in Scale", "Full API Access", "Custom Integrations", "Strategy Calls"] },
               ].map((p, i) => (
                 <div key={i} className={`flex flex-col bg-white relative transition-all duration-300 rounded-2xl ${p.featured
-                    ? 'border-2 border-[#ff4d00] shadow-2xl z-10 scale-105'
-                    : 'border border-gray-100 hover:shadow-xl'
+                  ? 'border-2 border-[#ff4d00] shadow-2xl z-10 scale-105'
+                  : 'border border-gray-100 hover:shadow-xl'
                   } p-10`}>
                   {p.featured && <div className="absolute top-0 right-10 -translate-y-1/2 bg-[#ff4d00] text-white px-4 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full">Top Value</div>}
                   <h3 className="text-lg font-black uppercase tracking-tight text-gray-900 mb-2">{p.name}</h3>

@@ -65,10 +65,8 @@ const AdminEditUser: React.FC<AdminEditUserProps> = ({ userId, onBack, onUpdate 
                 <div className="flex items-center gap-2">
                     <button
                         onClick={() => {
-                            if (confirm(`Are you sure you want to login as ${user.name}? You will be signed out of your admin account.`)) {
-                                db.setCurrentUser(user);
-                                window.location.href = '/dashboard';
-                            }
+                            db.setCurrentUser(user);
+                            window.location.href = '/dashboard';
                         }}
                         className="bg-white border border-gray-300 text-gray-700 px-4 py-3 text-xs font-bold uppercase tracking-wider hover:bg-gray-50 transition-colors flex items-center gap-2"
                     >

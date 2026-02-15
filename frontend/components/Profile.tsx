@@ -1,388 +1,834 @@
-import React, { useState, useEffect } from 'react';
-import { User, Lock, Bell, Save, Camera, Mail, Terminal, Eye, EyeOff, RefreshCw, Copy, Phone, MapPin, Building2, Globe, Hash, CreditCard, Trash2, Plus, Home } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+    User, Lock, Bell, Save, Camera, Mail, Terminal, Eye, EyeOff,
+    RefreshCw, Copy, Phone, MapPin, Building2, Globe, Hash,
+    CreditCard, Trash2, Plus, Home, Shield, Settings, Monitor,
+    Download, LogOut, ChevronRight, CheckCircle2, AlertTriangle, Languages, Clock
+} from 'lucide-react';
 import { db } from '../services/db';
 import { User as UserType, PaymentMethod } from '../types';
 
+type ProfileTab = 'account' | 'security' | 'billing' | 'notifications' | 'developer' | 'accessibility';
+
 const Profile: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'account' | 'billing'>('account');
-  const [isLoading, setIsLoading] = useState(false);
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [user, setUser] = useState<UserType | undefined>(undefined);
-  
-  // New Card State
-  const [showAddCard, setShowAddCard] = useState(false);
-  const [newCardNumber, setNewCardNumber] = useState('');
-  const [newCardExpiry, setNewCardExpiry] = useState('');
+    const [activeTab, setActiveTab] = useState<ProfileTab>('account');
+    const [isLoading, setIsLoading] = useState(false);
+    const [showApiKey, setShowApiKey] = useState(false);
+    const [user, setUser] = useState<UserType | undefined>(undefined);
 
-  useEffect(() => {
-      const currentUser = db.getCurrentUser();
-      setUser(currentUser);
-  }, []);
+    // New Card State
+    const [showAddCard, setShowAddCard] = useState(false);
+    const [newCardNumber, setNewCardNumber] = useState('');
+    const [newCardExpiry, setNewCardExpiry] = useState('');
 
-  const handleSave = () => {
-    if (!user) return;
-    setIsLoading(true);
-    
-    // Simulate API save
-    setTimeout(() => {
-      db.updateUserProfile(user);
-      setIsLoading(false);
-      alert('Profile settings saved successfully.');
-    }, 800);
-  };
+    // Password Change State
+    const [passwordForm, setPasswordForm] = useState({ current: '', new: '', confirm: '' });
+    const [passwordError, setPasswordError] = useState('');
+    const [passwordSuccess, setPasswordSuccess] = useState('');
 
-  const handleInputChange = (field: keyof UserType, value: string) => {
-      if (user) {
-          setUser({ ...user, [field]: value });
-      }
-  };
+    // Avatar Upload
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleRegenerateKey = () => {
-      if(confirm('Are you sure? This will invalidate your old key.')) {
-          const newKey = db.regenerateApiKey('u1');
-          if (user) setUser({...user, apiKey: newKey});
-      }
-  }
+    const handleAvatarClick = () => {
+        fileInputRef.current?.click();
+    };
 
-  const handleCopyKey = () => {
-      if(user?.apiKey) {
-          navigator.clipboard.writeText(user.apiKey);
-          alert('API Key copied to clipboard');
-      }
-  }
-  
-  // Payment Method Handlers
-  const handleAddCard = () => {
-      if (!newCardNumber || !newCardExpiry || !user) return;
-      
-      const newPaymentMethod: PaymentMethod = {
-          id: `pm_${Date.now()}`,
-          type: newCardNumber.startsWith('4') ? 'visa' : 'mastercard',
-          last4: newCardNumber.slice(-4),
-          expiry: newCardExpiry,
-          isDefault: user.paymentMethods && user.paymentMethods.length === 0 ? true : false
-      };
-      
-      const updatedMethods = [...(user.paymentMethods || []), newPaymentMethod];
-      setUser({ ...user, paymentMethods: updatedMethods });
-      setShowAddCard(false);
-      setNewCardNumber('');
-      setNewCardExpiry('');
-  }
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            try {
+                const url = await db.uploadAvatar(e.target.files[0]);
+                if (user) setUser({ ...user, avatarUrl: url });
+                alert("Avatar updated successfully!");
+            } catch (err: any) {
+                alert("Failed to upload avatar: " + err.message);
+            }
+        }
+    };
 
-  const handleDeleteCard = (id: string) => {
-      if (!user || !confirm('Are you sure you want to remove this payment method?')) return;
-      const updatedMethods = (user.paymentMethods || []).filter(pm => pm.id !== id);
-      setUser({ ...user, paymentMethods: updatedMethods });
-  }
+    const handleDeleteAccount = async () => {
+        if (confirm("DANGER: Are you sure you want to delete your account? This action is irreversible.")) {
+            const extraConfirm = prompt("Type 'DELETE' to confirm account deletion:");
+            if (extraConfirm === 'DELETE') {
+                try {
+                    await db.deleteAccount();
+                    alert("Account deleted. Goodbye.");
+                } catch (err: any) {
+                    alert(err.message);
+                }
+            }
+        }
+    };
 
-  if (!user) return <div>Loading...</div>;
+    useEffect(() => {
+        const currentUser = db.getCurrentUser();
+        setUser(currentUser);
+    }, []);
 
-  return (
-    <div className="space-y-6 animate-in fade-in duration-500 pb-12">
-      <div className="flex items-end justify-between">
-        <div>
-           <div className="text-[10px] font-black uppercase tracking-widest text-[#ff4d00] mb-1">Account Management</div>
-           <h2 className="text-3xl font-black text-gray-900 uppercase tracking-tight">My Profile</h2>
-        </div>
-        <button 
-            onClick={handleSave}
-            disabled={isLoading}
-            className="bg-black text-white px-6 py-3 text-xs font-bold uppercase tracking-wider hover:bg-[#ff4d00] transition-colors disabled:opacity-70 flex items-center gap-2"
-        >
-            <Save size={14} /> {isLoading ? 'Saving...' : 'Save Changes'}
-        </button>
-      </div>
+    const handleSave = async () => {
+        if (!user) return;
+        setIsLoading(true);
+        try {
+            await db.updateUserProfile(user);
+            // Re-fetch to ensure sync
+            const freshUser = await db.login(user.email, ''); // Hacky refresh or use a fetchUser
+            if (freshUser) setUser(freshUser);
+            alert('Profile settings saved successfully.');
+        } catch (e: any) {
+            alert('Failed to save settings: ' + e.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Left Column: Avatar & Basic Info */}
-        <div className="lg:col-span-1 space-y-6">
-            {/* Avatar Card */}
-            <div className="bg-white border border-gray-200 p-8 text-center shadow-sm">
-                <div className="relative inline-block mb-6 group">
-                    <div className="w-32 h-32 bg-gray-100 rounded-full flex items-center justify-center border-4 border-white shadow-lg mx-auto overflow-hidden">
-                        <span className="text-4xl font-black text-gray-300">
-                            {user.name.split(' ').map(n => n[0]).join('')}
-                        </span>
-                    </div>
-                    <button className="absolute bottom-0 right-0 bg-[#ff4d00] text-white p-2 rounded-full hover:bg-black transition-colors shadow-md">
-                        <Camera size={16} />
-                    </button>
+    const handleInputChange = (field: keyof UserType, value: string) => {
+        if (user) {
+            setUser({ ...user, [field]: value });
+        }
+    };
+
+    const handleRegenerateKey = async () => {
+        if (user && confirm('Are you sure? This will invalidate your old key.')) {
+            try {
+                const newKey = await db.regenerateApiKey();
+                setUser({ ...user, apiKey: newKey });
+                alert('API Key regenerated successfully.');
+            } catch (e: any) {
+                alert('Failed to regenerate key: ' + e.message);
+            }
+        }
+    }
+
+    const handlePasswordChange = async () => {
+        setPasswordError('');
+        setPasswordSuccess('');
+        if (passwordForm.new !== passwordForm.confirm) {
+            setPasswordError("New passwords do not match.");
+            return;
+        }
+        try {
+            await db.changePassword(passwordForm.current, passwordForm.new, passwordForm.confirm);
+            setPasswordSuccess("Password updated successfully.");
+            setPasswordForm({ current: '', new: '', confirm: '' });
+        } catch (e: any) {
+            setPasswordError(e.message);
+        }
+    };
+
+    const handleLogoutAll = async () => {
+        if (confirm("Log out of all other sessions? You will need to log in again on other devices.")) {
+            try {
+                await db.logoutAllSessions();
+                alert("All other sessions invalidted.");
+            } catch (e: any) {
+                alert(e.message);
+            }
+        }
+    };
+
+    const handleExportData = async () => {
+        try {
+            const data = await db.exportUserData();
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `user_data_${user?.id}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (e: any) {
+            alert('Export failed: ' + e.message);
+        }
+    };
+
+    const handleCopyKey = () => {
+        if (user?.apiKey) {
+            navigator.clipboard.writeText(user.apiKey);
+            alert('API Key copied to clipboard');
+        }
+    }
+
+    // Payment Method Handlers
+    const handleAddCard = () => {
+        if (!newCardNumber || !newCardExpiry || !user) return;
+
+        const newPaymentMethod: PaymentMethod = {
+            id: `pm_${Date.now()}`,
+            type: newCardNumber.startsWith('4') ? 'visa' : 'mastercard',
+            last4: newCardNumber.slice(-4),
+            expiry: newCardExpiry,
+            isDefault: user.paymentMethods && user.paymentMethods.length === 0 ? true : false
+        };
+
+        const updatedMethods = [...(user.paymentMethods || []), newPaymentMethod];
+        setUser({ ...user, paymentMethods: updatedMethods });
+        setShowAddCard(false);
+        setNewCardNumber('');
+        setNewCardExpiry('');
+    }
+
+    const handleDeleteCard = (id: string) => {
+        if (!user || !confirm('Are you sure you want to remove this payment method?')) return;
+        const updatedMethods = (user.paymentMethods || []).filter(pm => pm.id !== id);
+        setUser({ ...user, paymentMethods: updatedMethods });
+    }
+
+    if (!user) return <div>Loading...</div>;
+
+    return (
+        <div className="space-y-6 animate-in fade-in duration-500 pb-12">
+            <div className="flex items-end justify-between">
+                <div>
+                    <div className="text-[10px] font-black uppercase tracking-widest text-[#ff4d00] mb-1">Account Management</div>
+                    <h2 className="text-3xl font-black text-gray-900 uppercase tracking-tight">My Profile</h2>
                 </div>
-                <h3 className="text-xl font-bold text-gray-900">{user.name}</h3>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">{user.role}</p>
-                
-                <div className="mt-6 pt-6 border-t border-gray-100 flex justify-center gap-4">
-                    <div className="text-center">
-                        <div className="text-lg font-black text-gray-900">{user.projectsCount}</div>
-                        <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Campaigns</div>
-                    </div>
-                    <div className="w-px bg-gray-200"></div>
-                    <div className="text-center">
-                        <div className="text-lg font-black text-green-600">{user.status}</div>
-                        <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Status</div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Navigation Tabs (Vertical for Desktop) */}
-            <div className="bg-white border border-gray-200 shadow-sm overflow-hidden">
-                <button 
-                    onClick={() => setActiveTab('account')}
-                    className={`w-full text-left px-6 py-4 text-xs font-bold uppercase tracking-wider flex items-center gap-3 border-l-4 transition-colors ${
-                        activeTab === 'account' ? 'border-[#ff4d00] bg-gray-50 text-[#ff4d00]' : 'border-transparent text-gray-500 hover:bg-gray-50'
-                    }`}
+                <button
+                    onClick={handleSave}
+                    disabled={isLoading}
+                    className="bg-black text-white px-6 py-3 text-xs font-bold uppercase tracking-wider hover:bg-[#ff4d00] transition-colors disabled:opacity-70 flex items-center gap-2"
                 >
-                    <User size={16} /> Account Details
-                </button>
-                <button 
-                    onClick={() => setActiveTab('billing')}
-                    className={`w-full text-left px-6 py-4 text-xs font-bold uppercase tracking-wider flex items-center gap-3 border-l-4 transition-colors ${
-                        activeTab === 'billing' ? 'border-[#ff4d00] bg-gray-50 text-[#ff4d00]' : 'border-transparent text-gray-500 hover:bg-gray-50'
-                    }`}
-                >
-                    <CreditCard size={16} /> Billing & Payments
+                    <Save size={14} /> {isLoading ? 'Saving...' : 'Save Changes'}
                 </button>
             </div>
-            
-             {/* Developer Settings (Always visible) */}
-             <div className="bg-white border border-gray-200 p-8 shadow-sm relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-gray-50 rounded-full -mt-16 -mr-16 z-0"></div>
-                <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-6 flex items-center gap-2 relative z-10">
-                    <Terminal size={14} /> Developer Settings
-                </h3>
-                <div className="relative z-10">
-                    <p className="text-sm text-gray-500 mb-4">Use this key to access the Modus Traffic API for programmatic campaign management.</p>
-                    <div className="flex gap-2 items-center">
-                        <div className="flex-1 bg-[#f9fafb] border border-gray-200 p-3 flex justify-between items-center font-mono text-sm">
-                            <span className="text-gray-800 font-bold">
-                                {showApiKey ? user.apiKey : '••••••••••••••••••••••••••••••'}
-                            </span>
-                            <button onClick={() => setShowApiKey(!showApiKey)} className="text-gray-400 hover:text-black">
-                                {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                            </button>
-                        </div>
-                        <button 
-                            onClick={handleCopyKey}
-                            className="bg-gray-100 hover:bg-gray-200 text-gray-900 p-3 border border-gray-200" title="Copy Key"
-                        >
-                            <Copy size={16} />
-                        </button>
-                        <button 
-                            onClick={handleRegenerateKey}
-                            className="bg-black hover:bg-[#ff4d00] text-white p-3 shadow-sm transition-colors" title="Regenerate Key"
-                        >
-                            <RefreshCw size={16} />
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
 
-        {/* Right Column: Forms based on Tab */}
-        <div className="lg:col-span-2 space-y-6">
-            
-            {activeTab === 'account' ? (
-                <>
-                    {/* Contact & Identity */}
-                    <div className="bg-white border border-gray-200 p-8 shadow-sm">
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-6 flex items-center gap-2">
-                            <User size={14} /> Identity & Contact
-                        </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <Label>Full Name</Label>
-                                <Input 
-                                    value={user.name} 
-                                    onChange={(v) => handleInputChange('name', v)} 
-                                    icon={<User size={16} />}
-                                />
-                            </div>
-                            <div>
-                                <Label>Email Address</Label>
-                                <Input 
-                                    value={user.email} 
-                                    onChange={(v) => handleInputChange('email', v)} 
-                                    icon={<Mail size={16} />}
-                                />
-                            </div>
-                            <div>
-                                <Label>Phone Number</Label>
-                                <Input 
-                                    value={user.phone || ''} 
-                                    onChange={(v) => handleInputChange('phone', v)} 
-                                    icon={<Phone size={16} />}
-                                    placeholder="+1 (555) 000-0000"
-                                />
-                            </div>
-                            <div>
-                                <Label>Telegram / Messenger</Label>
-                                <Input 
-                                    value={user.telegram || ''} 
-                                    onChange={(v) => handleInputChange('telegram', v)} 
-                                    icon={<Hash size={16} />}
-                                    placeholder="@username"
-                                />
-                            </div>
-                        </div>
-                    </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-                    {/* Notification Settings */}
-                    <div className="bg-white border border-gray-200 p-6 shadow-sm">
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-6 flex items-center gap-2">
-                            <Bell size={14} /> Notifications
-                        </h3>
-                        <div className="space-y-4">
-                            <Toggle label="Campaign Alerts" checked={true} />
-                            <Toggle label="Low Balance Warning" checked={true} />
-                            <Toggle label="Marketing Emails" checked={false} />
-                            <Toggle label="Weekly Reports" checked={true} />
-                        </div>
-                    </div>
-                </>
-            ) : (
-                <>
-                     {/* Payment Methods */}
-                    <div className="bg-white border border-gray-200 p-8 shadow-sm">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] flex items-center gap-2">
-                                <CreditCard size={14} /> Saved Payment Methods
-                            </h3>
-                            <button 
-                                onClick={() => setShowAddCard(!showAddCard)}
-                                className="text-[#ff4d00] text-[10px] font-bold uppercase tracking-widest hover:text-black flex items-center gap-1"
+                {/* Left Column: Avatar & Basic Info */}
+                <div className="lg:col-span-1 space-y-6">
+                    {/* Avatar Card */}
+                    <div className="bg-white border border-gray-200 p-8 text-center shadow-sm">
+                        <div className="relative inline-block mb-6 group">
+                            <div className="w-32 h-32 bg-gray-100 rounded-full flex items-center justify-center border-4 border-white shadow-lg mx-auto overflow-hidden">
+                                {user.avatarUrl ? (
+                                    <img src={`http://127.0.0.1:8001${user.avatarUrl}`} alt={user.name} className="w-full h-full object-cover" />
+                                ) : (
+                                    <span className="text-4xl font-black text-gray-300">
+                                        {user.name.split(' ').map(n => n[0]).join('')}
+                                    </span>
+                                )}
+                            </div>
+                            <button
+                                onClick={handleAvatarClick}
+                                className="absolute bottom-0 right-0 bg-[#ff4d00] text-white p-2 rounded-full hover:bg-black transition-colors shadow-md"
                             >
-                                <Plus size={12} /> Add New
+                                <Camera size={16} />
                             </button>
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                onChange={handleFileChange}
+                                className="hidden"
+                                accept="image/png, image/jpeg, image/webp"
+                            />
                         </div>
+                        <h3 className="text-xl font-bold text-gray-900">{user.name}</h3>
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">{user.role}</p>
 
-                        {showAddCard && (
-                            <div className="mb-6 p-6 bg-gray-50 border border-gray-200 animate-in fade-in slide-in-from-top-2">
-                                <div className="grid grid-cols-2 gap-4 mb-4">
-                                    <div>
-                                        <Label>Card Number</Label>
-                                        <Input value={newCardNumber} onChange={setNewCardNumber} placeholder="0000 0000 0000 0000" />
-                                    </div>
-                                    <div>
-                                        <Label>Expiry</Label>
-                                        <Input value={newCardExpiry} onChange={setNewCardExpiry} placeholder="MM/YY" />
-                                    </div>
+                        <div className="mt-6 pt-6 border-t border-gray-100 flex justify-center gap-4">
+                            <div className="text-center">
+                                <div className="text-lg font-black text-gray-900">{user.projectsCount}</div>
+                                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Campaigns</div>
+                            </div>
+                            <div className="w-px bg-gray-200"></div>
+                            <div className="text-center">
+                                <div className="text-lg font-black text-green-600">{user.status}</div>
+                                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Status</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Navigation Tabs (Vertical for Desktop) */}
+                    <div className="bg-white border border-gray-200 shadow-sm overflow-hidden">
+                        <button
+                            onClick={() => setActiveTab('account')}
+                            className={`w-full text-left px-6 py-4 text-xs font-bold uppercase tracking-wider flex items-center gap-3 border-l-4 transition-colors ${activeTab === 'account' ? 'border-[#ff4d00] bg-gray-50 text-[#ff4d00]' : 'border-transparent text-gray-500 hover:bg-gray-50'
+                                }`}
+                        >
+                            <User size={16} /> Account Details
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('security')}
+                            className={`w-full text-left px-6 py-4 text-xs font-bold uppercase tracking-wider flex items-center gap-3 border-l-4 transition-colors ${activeTab === 'security' ? 'border-[#ff4d00] bg-gray-50 text-[#ff4d00]' : 'border-transparent text-gray-500 hover:bg-gray-50'
+                                }`}
+                        >
+                            <Shield size={16} /> Security & 2FA
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('billing')}
+                            className={`w-full text-left px-6 py-4 text-xs font-bold uppercase tracking-wider flex items-center gap-3 border-l-4 transition-colors ${activeTab === 'billing' ? 'border-[#ff4d00] bg-gray-50 text-[#ff4d00]' : 'border-transparent text-gray-500 hover:bg-gray-50'
+                                }`}
+                        >
+                            <CreditCard size={16} /> Billing & Payments
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('notifications')}
+                            className={`w-full text-left px-6 py-4 text-xs font-bold uppercase tracking-wider flex items-center gap-3 border-l-4 transition-colors ${activeTab === 'notifications' ? 'border-[#ff4d00] bg-gray-50 text-[#ff4d00]' : 'border-transparent text-gray-500 hover:bg-gray-50'
+                                }`}
+                        >
+                            <Bell size={16} /> Notifications
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('developer')}
+                            className={`w-full text-left px-6 py-4 text-xs font-bold uppercase tracking-wider flex items-center gap-3 border-l-4 transition-colors ${activeTab === 'developer' ? 'border-[#ff4d00] bg-gray-50 text-[#ff4d00]' : 'border-transparent text-gray-500 hover:bg-gray-50'
+                                }`}
+                        >
+                            <Terminal size={16} /> Developer Mode
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('accessibility')}
+                            className={`w-full text-left px-6 py-4 text-xs font-bold uppercase tracking-wider flex items-center gap-3 border-l-4 transition-colors ${activeTab === 'accessibility' ? 'border-[#ff4d00] bg-gray-50 text-[#ff4d00]' : 'border-transparent text-gray-500 hover:bg-gray-50'
+                                }`}
+                        >
+                            <Monitor size={16} /> Accessibility
+                        </button>
+                    </div>
+
+                    {/* Developer Settings (Always visible) */}
+                    <div className="bg-white border border-gray-200 p-8 shadow-sm relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-gray-50 rounded-full -mt-16 -mr-16 z-0"></div>
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-6 flex items-center gap-2 relative z-10">
+                            <Terminal size={14} /> Developer Settings
+                        </h3>
+                        <div className="relative z-10">
+                            <p className="text-sm text-gray-500 mb-4">Use this key to access the Modus Traffic API for programmatic campaign management.</p>
+                            <div className="flex gap-2 items-center">
+                                <div className="flex-1 bg-[#f9fafb] border border-gray-200 p-3 flex justify-between items-center font-mono text-sm">
+                                    <span className="text-gray-800 font-bold">
+                                        {showApiKey ? user.apiKey : '••••••••••••••••••••••••••••••'}
+                                    </span>
+                                    <button onClick={() => setShowApiKey(!showApiKey)} className="text-gray-400 hover:text-black">
+                                        {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
                                 </div>
-                                <button 
-                                    onClick={handleAddCard}
-                                    className="bg-black text-white px-4 py-2 text-xs font-bold uppercase tracking-wider hover:bg-[#ff4d00] transition-colors"
+                                <button
+                                    onClick={handleCopyKey}
+                                    className="bg-gray-100 hover:bg-gray-200 text-gray-900 p-3 border border-gray-200" title="Copy Key"
                                 >
-                                    Save Card
+                                    <Copy size={16} />
+                                </button>
+                                <button
+                                    onClick={handleRegenerateKey}
+                                    className="bg-black hover:bg-[#ff4d00] text-white p-3 shadow-sm transition-colors" title="Regenerate Key"
+                                >
+                                    <RefreshCw size={16} />
                                 </button>
                             </div>
-                        )}
+                        </div>
+                    </div>
+                </div>
 
-                        <div className="grid grid-cols-1 gap-4">
-                            {(user.paymentMethods && user.paymentMethods.length > 0) ? (
-                                user.paymentMethods.map(pm => (
-                                    <div key={pm.id} className="border border-gray-200 p-6 flex justify-between items-center bg-[#f9fafb]">
-                                        <div className="flex items-center gap-4">
-                                            <div className={`w-12 h-8 rounded-sm flex items-center justify-center text-white text-[10px] font-bold ${pm.type === 'visa' ? 'bg-[#1a1f71]' : 'bg-[#eb001b]'}`}>
-                                                {pm.type === 'visa' ? 'VISA' : 'MC'}
+                {/* Right Column: Forms based on Tab */}
+                <div className="lg:col-span-2 space-y-6">
+
+                    {activeTab === 'account' ? (
+                        <>
+                            {/* Contact & Identity */}
+                            <div className="bg-white border border-gray-200 p-8 shadow-sm">
+                                <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-6 flex items-center gap-2">
+                                    <User size={14} /> Identity & Contact
+                                </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <Label>Full Name</Label>
+                                        <Input
+                                            value={user.name}
+                                            onChange={(v) => handleInputChange('name', v)}
+                                            icon={<User size={16} />}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>Display Name (Nickname)</Label>
+                                        <Input
+                                            value={user.displayName || ''}
+                                            onChange={(v) => handleInputChange('displayName', v)}
+                                            icon={<Hash size={16} />}
+                                            placeholder="The Traffic King"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>Email Address</Label>
+                                        <Input
+                                            value={user.email}
+                                            onChange={(v) => handleInputChange('email', v)}
+                                            icon={<Mail size={16} />}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>Job Title</Label>
+                                        <Input
+                                            value={user.jobTitle || ''}
+                                            onChange={(v) => handleInputChange('jobTitle', v)}
+                                            icon={<Building2 size={16} />}
+                                            placeholder="SEO Manager"
+                                        />
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <Label>Personal Bio</Label>
+                                        <textarea
+                                            value={user.bio || ''}
+                                            onChange={(e) => handleInputChange('bio', e.target.value)}
+                                            className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 focus:border-[#ff4d00] outline-none min-h-[100px]"
+                                            placeholder="Tell us a bit about yourself..."
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>Phone Number</Label>
+                                        <Input
+                                            value={user.phone || ''}
+                                            onChange={(v) => handleInputChange('phone', v)}
+                                            icon={<Phone size={16} />}
+                                            placeholder="+1 (555) 000-0000"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>Website</Label>
+                                        <Input
+                                            value={user.website || ''}
+                                            onChange={(v) => handleInputChange('website', v)}
+                                            icon={<Globe size={16} />}
+                                            placeholder="https://yourpage.com"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="mt-8 pt-8 border-t border-gray-100">
+                                    <Toggle
+                                        label="Public Profile Visibility"
+                                        checked={user.publicProfile || false}
+                                        onChange={(v) => setUser({ ...user, publicProfile: v })}
+                                    />
+                                    <p className="text-[10px] text-gray-400 mt-2 lowercase">when enabled, other users can see your shared campaign stats and badges.</p>
+                                </div>
+                            </div>
+                        </>
+                    ) : activeTab === 'security' ? (
+                        <>
+                            {/* Security Settings */}
+                            <div className="bg-white border border-gray-200 p-8 shadow-sm">
+                                <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-6 flex items-center gap-2">
+                                    <Shield size={14} /> Security & Authentication
+                                </h3>
+                                <div className="space-y-6">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-sm font-bold text-gray-600">Two-Factor Authentication (2FA)</span>
+                                        <button className="bg-black text-white px-4 py-2 text-xs font-bold uppercase tracking-wider hover:bg-[#ff4d00] transition-colors">
+                                            Enable 2FA
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-gray-500">
+                                        Add an extra layer of security to your account by requiring a verification code from your phone.
+                                    </p>
+                                    <div className="border-t border-gray-100 pt-6">
+                                        <Toggle
+                                            label="Require password on all devices every 30 days"
+                                            checked={user.requirePasswordReset || false}
+                                            onChange={(v) => handleInputChange('requirePasswordReset', v.toString())}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Password Change */}
+                            <div className="bg-white border border-gray-200 p-8 shadow-sm">
+                                <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-6 flex items-center gap-2">
+                                    <Lock size={14} /> Change Password
+                                </h3>
+                                {passwordError && <p className="text-red-500 text-xs mb-4">{passwordError}</p>}
+                                {passwordSuccess && <p className="text-green-500 text-xs mb-4">{passwordSuccess}</p>}
+                                <div className="grid grid-cols-1 gap-6">
+                                    <div>
+                                        <Label>Current Password</Label>
+                                        <Input type="password" value={passwordForm.current} onChange={(v) => setPasswordForm({ ...passwordForm, current: v })} icon={<Lock size={16} />} />
+                                    </div>
+                                    <div>
+                                        <Label>New Password</Label>
+                                        <Input type="password" value={passwordForm.new} onChange={(v) => setPasswordForm({ ...passwordForm, new: v })} icon={<Lock size={16} />} />
+                                    </div>
+                                    <div>
+                                        <Label>Confirm New Password</Label>
+                                        <Input type="password" value={passwordForm.confirm} onChange={(v) => setPasswordForm({ ...passwordForm, confirm: v })} icon={<Lock size={16} />} />
+                                    </div>
+                                    <button onClick={handlePasswordChange} className="bg-black text-white px-6 py-3 text-xs font-bold uppercase tracking-wider hover:bg-[#ff4d00] transition-colors self-start">
+                                        Update Password
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Recent Login History */}
+                            <div className="bg-white border border-gray-200 p-8 shadow-sm">
+                                <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-6 flex items-center gap-2">
+                                    <Clock size={14} /> Recent Login History
+                                </h3>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left text-xs font-bold">
+                                        <thead>
+                                            <tr className="border-b border-gray-100 pb-2">
+                                                <th className="py-2 text-gray-400 uppercase tracking-widest">Date & Time</th>
+                                                <th className="py-2 text-gray-400 uppercase tracking-widest">IP Address</th>
+                                                <th className="py-2 text-gray-400 uppercase tracking-widest">Device / Browser</th>
+                                                <th className="py-2 text-gray-400 uppercase tracking-widest text-right">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-50">
+                                            {(user.loginHistory || []).length > 0 ? (
+                                                user.loginHistory?.map((log, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="py-4 text-gray-900">{log.date}</td>
+                                                        <td className="py-4 text-gray-500 font-mono">{log.ip}</td>
+                                                        <td className="py-4 text-gray-600">{log.device}</td>
+                                                        <td className="py-4 text-right">
+                                                            {idx === 0 ? <span className="text-green-600">Current Session</span> : <span className="text-gray-400">Previous</span>}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan={4} className="py-4 text-center text-gray-400">No recent login history found.</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <button onClick={handleLogoutAll} className="mt-6 w-full py-3 border border-gray-200 text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition-colors">
+                                    Log out of all other sessions
+                                </button>
+
+                                <div className="mt-12 pt-12 border-t border-gray-200">
+                                    <h3 className="text-xs font-bold uppercase tracking-widest text-red-600 mb-4 flex items-center gap-2">
+                                        <AlertTriangle size={14} /> Danger Zone
+                                    </h3>
+                                    <p className="text-xs text-gray-500 mb-4">Once you delete your account, there is no going back. Please be certain.</p>
+                                    <button onClick={handleDeleteAccount} className="bg-red-50 text-red-600 border border-red-200 px-6 py-3 text-xs font-bold uppercase tracking-wider hover:bg-red-600 hover:text-white transition-colors">
+                                        Delete My Account
+                                    </button>
+                                </div>
+                            </div>
+                        </>
+                    ) : activeTab === 'notifications' ? (
+                        <>
+                            {/* Notification Settings */}
+                            <div className="bg-white border border-gray-200 p-8 shadow-sm">
+                                <div className="flex items-center justify-between mb-8">
+                                    <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] flex items-center gap-2">
+                                        <Bell size={14} /> Notification Preferences
+                                    </h3>
+                                    <div className="flex items-center gap-3">
+                                        <Label>Email Frequency</Label>
+                                        <select
+                                            value={user.emailFrequency || 'instant'}
+                                            onChange={(e) => handleInputChange('emailFrequency', e.target.value)}
+                                            className="bg-gray-100 border-none p-2 text-[10px] font-black uppercase tracking-widest outline-none"
+                                        >
+                                            <option value="instant">Instant</option>
+                                            <option value="daily">Daily Digest</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div className="space-y-6">
+                                        <Toggle label="Campaign Status Alerts" checked={true} />
+                                        <Toggle label="Low Balance Warnings" checked={true} />
+                                        <Toggle label="New Login Notifications" checked={user.loginNotificationEnabled || false} onChange={(v) => handleInputChange('loginNotificationEnabled', v.toString())} />
+                                    </div>
+                                    <div className="space-y-6">
+                                        <Toggle label="Marketing & Product Updates" checked={user.newsletterSub || false} onChange={(v) => handleInputChange('newsletterSub', v.toString())} />
+                                        <Toggle label="Weekly Performance Reports" checked={true} />
+                                        <Toggle label="Sound Effects (UI)" checked={user.soundEffects || false} onChange={(v) => handleInputChange('soundEffects', v.toString())} />
+                                    </div>
+                                </div>
+                            </div>
+                        </>
+                    ) : activeTab === 'billing' ? (
+                        <>
+                            {/* Payment Methods */}
+                            <div className="bg-white border border-gray-200 p-8 shadow-sm">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] flex items-center gap-2">
+                                        <CreditCard size={14} /> Saved Payment Methods
+                                    </h3>
+                                    <button
+                                        onClick={() => setShowAddCard(!showAddCard)}
+                                        className="text-[#ff4d00] text-[10px] font-bold uppercase tracking-widest hover:text-black flex items-center gap-1"
+                                    >
+                                        <Plus size={12} /> Add New
+                                    </button>
+                                </div>
+
+                                {showAddCard && (
+                                    <div className="mb-6 p-6 bg-gray-50 border border-gray-200 animate-in fade-in slide-in-from-top-2">
+                                        <div className="grid grid-cols-2 gap-4 mb-4">
+                                            <div>
+                                                <Label>Card Number</Label>
+                                                <Input value={newCardNumber} onChange={setNewCardNumber} placeholder="0000 0000 0000 0000" />
                                             </div>
                                             <div>
-                                                <div className="text-sm font-bold text-gray-900">•••• •••• •••• {pm.last4}</div>
-                                                <div className="text-xs text-gray-400 font-medium">Expires {pm.expiry}</div>
+                                                <Label>Expiry</Label>
+                                                <Input value={newCardExpiry} onChange={setNewCardExpiry} placeholder="MM/YY" />
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-3">
-                                            {pm.isDefault && <span className="bg-green-100 text-green-700 text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-sm">Default</span>}
-                                            <button onClick={() => handleDeleteCard(pm.id)} className="text-gray-400 hover:text-red-500 transition-colors">
-                                                <Trash2 size={16} />
+                                        <button
+                                            onClick={handleAddCard}
+                                            className="bg-black text-white px-4 py-2 text-xs font-bold uppercase tracking-wider hover:bg-[#ff4d00] transition-colors"
+                                        >
+                                            Save Card
+                                        </button>
+                                    </div>
+                                )}
+
+                                <div className="grid grid-cols-1 gap-4">
+                                    {(user.paymentMethods && user.paymentMethods.length > 0) ? (
+                                        user.paymentMethods.map(pm => (
+                                            <div key={pm.id} className="border border-gray-200 p-6 flex justify-between items-center bg-[#f9fafb]">
+                                                <div className="flex items-center gap-4">
+                                                    <div className={`w-12 h-8 rounded-sm flex items-center justify-center text-white text-[10px] font-bold ${pm.type === 'visa' ? 'bg-[#1a1f71]' : 'bg-[#eb001b]'}`}>
+                                                        {pm.type === 'visa' ? 'VISA' : 'MC'}
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-sm font-bold text-gray-900">•••• •••• •••• {pm.last4}</div>
+                                                        <div className="text-xs text-gray-400 font-medium">Expires {pm.expiry}</div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    {pm.isDefault && <span className="bg-green-100 text-green-700 text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-sm">Default</span>}
+                                                    <button onClick={() => handleDeleteCard(pm.id)} className="text-gray-400 hover:text-red-500 transition-colors">
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="text-center p-8 text-gray-400 text-sm">No payment methods saved.</div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Billing Address */}
+                            <div className="bg-white border border-gray-200 p-8 shadow-sm">
+                                <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-6 flex items-center gap-2">
+                                    <Home size={14} /> Billing Address
+                                </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <Label>Company Name</Label>
+                                        <Input
+                                            value={user.company || ''}
+                                            onChange={(v) => handleInputChange('company', v)}
+                                            icon={<Building2 size={16} />}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>VAT ID / Tax ID</Label>
+                                        <Input
+                                            value={user.vatId || ''}
+                                            onChange={(v) => handleInputChange('vatId', v)}
+                                            icon={<Hash size={16} />}
+                                        />
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <Label>Street Address</Label>
+                                        <Input
+                                            value={user.address || ''}
+                                            onChange={(v) => handleInputChange('address', v)}
+                                            icon={<MapPin size={16} />}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>City</Label>
+                                        <Input
+                                            value={user.city || ''}
+                                            onChange={(v) => handleInputChange('city', v)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>Zip / Postal Code</Label>
+                                        <Input
+                                            value={user.zip || ''}
+                                            onChange={(v) => handleInputChange('zip', v)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>Country</Label>
+                                        <select
+                                            value={user.country || ''}
+                                            onChange={(e) => handleInputChange('country', e.target.value)}
+                                            className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 focus:border-[#ff4d00] outline-none appearance-none"
+                                        >
+                                            <option value="">Select Country</option>
+                                            <option value="United States">United States</option>
+                                            <option value="United Kingdom">United Kingdom</option>
+                                            <option value="Germany">Germany</option>
+                                            <option value="Canada">Canada</option>
+                                            <option value="France">France</option>
+                                            <option value="Australia">Australia</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </>
+                    ) : activeTab === 'developer' ? (
+                        <>
+                            {/* API Keys & Whitelist */}
+                            <div className="bg-white border border-gray-200 p-8 shadow-sm">
+                                <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-6 flex items-center gap-2">
+                                    <Terminal size={14} /> Developer Configuration
+                                </h3>
+                                <div className="space-y-6">
+                                    <div>
+                                        <Label>IP Whitelist (One per line)</Label>
+                                        <textarea
+                                            value={user.apiWhitelist?.join('\n') || ''}
+                                            onChange={(e) => handleInputChange('apiWhitelist', e.target.value)}
+                                            className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 focus:border-[#ff4d00] outline-none min-h-[80px]"
+                                            placeholder="127.0.0.1"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>Webhook Signing Secret</Label>
+                                        <div className="flex gap-2">
+                                            <div className="flex-1 bg-[#f9fafb] border border-gray-200 p-3 font-mono text-sm">
+                                                {user.webhookSecret || 'whsec_••••••••••••••••'}
+                                            </div>
+                                            <button className="bg-black hover:bg-[#ff4d00] text-white p-3 transition-colors">
+                                                <RefreshCw size={16} />
                                             </button>
                                         </div>
                                     </div>
-                                ))
-                            ) : (
-                                <div className="text-center p-8 text-gray-400 text-sm">No payment methods saved.</div>
-                            )}
-                        </div>
-                    </div>
+                                    <div className="pt-4">
+                                        <Toggle
+                                            label="Developer Mode (Show raw API responses)"
+                                            checked={user.developerMode || false}
+                                            onChange={(v) => handleInputChange('developerMode', v.toString())}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="bg-white border border-gray-200 p-8 shadow-sm">
+                                <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-6 flex items-center gap-2">
+                                    <Monitor size={14} /> Accessibility & Appearance
+                                </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div className="space-y-6">
+                                        <Toggle
+                                            label="Color Blind Mode"
+                                            checked={user.accessibility?.colorBlindMode || false}
+                                            onChange={(v) => setUser({ ...user, accessibility: { ...(user.accessibility || { fontSize: 'medium', compactMode: false, reduceMotion: false, colorBlindMode: false }), colorBlindMode: v } })}
+                                        />
+                                        <Toggle
+                                            label="Compact Mode (Reduced Padding)"
+                                            checked={user.accessibility?.compactMode || false}
+                                            onChange={(v) => setUser({ ...user, accessibility: { ...(user.accessibility || { fontSize: 'medium', compactMode: false, reduceMotion: false, colorBlindMode: false }), compactMode: v } })}
+                                        />
+                                    </div>
+                                    <div className="space-y-6">
+                                        <Toggle
+                                            label="Reduce Motion"
+                                            checked={user.accessibility?.reduceMotion || false}
+                                            onChange={(v) => setUser({ ...user, accessibility: { ...(user.accessibility || { fontSize: 'medium', compactMode: false, reduceMotion: false, colorBlindMode: false }), reduceMotion: v } })}
+                                        />
+                                        <div className="flex flex-col gap-2">
+                                            <Label>Font Size</Label>
+                                            <div className="flex gap-2">
+                                                {['small', 'medium', 'large']?.map((size: any) => (
+                                                    <button
+                                                        key={size}
+                                                        onClick={() => setUser({ ...user, accessibility: { ...(user.accessibility || { fontSize: 'medium', compactMode: false, reduceMotion: false, colorBlindMode: false }), fontSize: size } })}
+                                                        className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest border transition-colors ${user.accessibility?.fontSize === size ? 'bg-black text-white border-black' : 'bg-gray-50 text-gray-400 border-gray-200 hover:border-gray-300'}`}
+                                                    >
+                                                        {size}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
 
-                    {/* Billing Address */}
-                    <div className="bg-white border border-gray-200 p-8 shadow-sm">
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-6 flex items-center gap-2">
-                            <Home size={14} /> Billing Address
-                        </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <Label>Company Name</Label>
-                                <Input 
-                                    value={user.company || ''} 
-                                    onChange={(v) => handleInputChange('company', v)} 
-                                    icon={<Building2 size={16} />}
-                                />
+                            {/* Data Management */}
+                            <div className="bg-white border border-gray-200 p-8 shadow-sm">
+                                <h3 className="text-xs font-bold uppercase tracking-widest text-black mb-6 flex items-center gap-2">
+                                    <Download size={14} /> Data Management
+                                </h3>
+                                <div className="flex items-center justify-between p-4 bg-gray-50 border border-gray-100">
+                                    <div>
+                                        <h4 className="text-sm font-bold text-gray-900">GDPR Data Portability</h4>
+                                        <p className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">Download a full archive of your account data.</p>
+                                    </div>
+                                    <button onClick={handleExportData} className="bg-black text-white px-4 py-2 text-xs font-bold uppercase tracking-widest hover:bg-[#ff4d00] transition-colors flex items-center gap-2">
+                                        <Download size={12} /> Export JSON
+                                    </button>
+                                </div>
                             </div>
-                            <div>
-                                <Label>VAT ID / Tax ID</Label>
-                                <Input 
-                                    value={user.vatId || ''} 
-                                    onChange={(v) => handleInputChange('vatId', v)} 
-                                    icon={<Hash size={16} />}
-                                />
-                            </div>
-                            <div className="md:col-span-2">
-                                <Label>Street Address</Label>
-                                <Input 
-                                    value={user.address || ''} 
-                                    onChange={(v) => handleInputChange('address', v)} 
-                                    icon={<MapPin size={16} />}
-                                />
-                            </div>
-                            <div>
-                                <Label>City</Label>
-                                <Input 
-                                    value={user.city || ''} 
-                                    onChange={(v) => handleInputChange('city', v)} 
-                                />
-                            </div>
-                            <div>
-                                <Label>Zip / Postal Code</Label>
-                                <Input 
-                                    value={user.zip || ''} 
-                                    onChange={(v) => handleInputChange('zip', v)} 
-                                />
-                            </div>
-                            <div>
-                                <Label>Country</Label>
-                                <select 
-                                    value={user.country || ''}
-                                    onChange={(e) => handleInputChange('country', e.target.value)}
-                                    className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 focus:border-[#ff4d00] outline-none appearance-none"
-                                >
-                                    <option value="">Select Country</option>
-                                    <option value="United States">United States</option>
-                                    <option value="United Kingdom">United Kingdom</option>
-                                    <option value="Germany">Germany</option>
-                                    <option value="Canada">Canada</option>
-                                    <option value="France">France</option>
-                                    <option value="Australia">Australia</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                </>
-            )}
 
+                            {/* Miscellaneous Preferences */}
+                            <div className="bg-white border border-gray-200 p-8 shadow-sm">
+                                <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-6 flex items-center gap-2">
+                                    <Settings size={14} /> Misc Preferences
+                                </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <Label>Timezone</Label>
+                                        <select className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 outline-none">
+                                            <option>UTC (London)</option>
+                                            <option>GMT+1 (Berlin)</option>
+                                            <option>EST (New York)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <Label>UI Language</Label>
+                                        <select className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 outline-none">
+                                            <option>English</option>
+                                            <option>Deutsch</option>
+                                            <option>Français</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Danger Zone */}
+                            <div className="bg-white border border-red-100 p-8 shadow-sm">
+                                <h3 className="text-xs font-bold uppercase tracking-widest text-red-500 mb-6 flex items-center gap-2">
+                                    <AlertTriangle size={14} /> Danger Zone
+                                </h3>
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h4 className="text-sm font-bold text-gray-900">Delete Account</h4>
+                                        <p className="text-xs text-gray-500 mt-1">Once deleted, all your campaign data and credits will be lost forever.</p>
+                                    </div>
+                                    <button className="bg-red-50 text-red-600 px-4 py-2 text-xs font-bold uppercase tracking-wider hover:bg-red-600 hover:text-white transition-colors border border-red-200">
+                                        Delete Forever
+                                    </button>
+                                </div>
+                            </div>
+                        </>
+                    )}
+
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 };
 
-const Toggle: React.FC<{label: string, checked: boolean}> = ({label, checked: initialChecked}) => {
+const Toggle: React.FC<{ label: string, checked: boolean, onChange?: (val: boolean) => void }> = ({ label, checked: initialChecked, onChange }) => {
     const [checked, setChecked] = useState(initialChecked);
+
+    useEffect(() => {
+        setChecked(initialChecked);
+    }, [initialChecked]);
+
+    const handleToggle = () => {
+        const newVal = !checked;
+        setChecked(newVal);
+        if (onChange) onChange(newVal);
+    };
+
     return (
         <div className="flex items-center justify-between">
             <span className="text-sm font-bold text-gray-600">{label}</span>
-            <button 
-                onClick={() => setChecked(!checked)}
+            <button
+                onClick={handleToggle}
                 className={`w-10 h-5 flex items-center p-0.5 transition-colors duration-300 ${checked ? 'bg-[#ff4d00]' : 'bg-gray-200'}`}
             >
                 <div className={`w-4 h-4 bg-white shadow-sm transform transition-transform duration-300 ${checked ? 'translate-x-5' : 'translate-x-0'}`}></div>
@@ -391,20 +837,20 @@ const Toggle: React.FC<{label: string, checked: boolean}> = ({label, checked: in
     )
 }
 
-const Label: React.FC<{children: React.ReactNode}> = ({children}) => (
+const Label: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-2">{children}</label>
 )
 
 const Input: React.FC<{
-    value: string; 
-    onChange: (val: string) => void; 
-    icon?: React.ReactNode; 
+    value: string;
+    onChange: (val: string) => void;
+    icon?: React.ReactNode;
     type?: string;
     placeholder?: string;
 }> = ({ value, onChange, icon, type = "text", placeholder }) => (
     <div className="relative">
         {icon && <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">{icon}</div>}
-        <input 
+        <input
             type={type}
             value={value}
             onChange={(e) => onChange(e.target.value)}

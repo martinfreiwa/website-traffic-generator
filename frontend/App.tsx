@@ -11,6 +11,7 @@ import Legal from './components/Legal';
 import HelpDesk from './components/helpdesk/HelpDesk';
 import Blog from './components/blog/Blog';
 import ChatWidget from './components/ChatWidget';
+import PricingPage from './components/PricingPage';
 import { db } from './services/db';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; adminOnly?: boolean }> = ({ children, adminOnly }) => {
@@ -92,7 +93,7 @@ const App: React.FC = () => {
                 <Route path="/forgot" element={<Auth view="forgot" onLogin={handleLogin} onNavigate={(v) => navigate(`/${v}`)} />} />
 
                 {/* Protected Routes */}
-                <Route path="/dashboard" element={
+                <Route path="/dashboard/*" element={
                     <ProtectedRoute>
                         <Dashboard onLogout={handleLogout} onNavigate={(page) => navigate(`/${page}`)} />
                     </ProtectedRoute>
@@ -107,6 +108,7 @@ const App: React.FC = () => {
                 {/* Other Pages */}
                 <Route path="/helpdesk" element={<HelpDesk onBack={handleBack} />} />
                 <Route path="/blog" element={<Blog onBack={handleBack} />} />
+                <Route path="/pricing" element={<PricingPage />} />
 
                 {/* Legal Routes */}
                 <Route path="/legal/:type" element={<LegalWrapper />} />

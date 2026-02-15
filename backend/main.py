@@ -1,5 +1,8 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from dotenv import load_dotenv
+
+load_dotenv()
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -17,8 +20,16 @@ import json
 import asyncio
 import requests
 from fastapi.security import APIKeyHeader
+from fastapi.staticfiles import StaticFiles
+from fastapi import File, UploadFile
+import shutil
+import os
 import secrets
+import stripe
 
+# --- Stripe Configuration ---
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "sk_test_placeholder_if_not_set")
+stripe.api_key = STRIPE_SECRET_KEY
 
 # Create Tables
 models.Base.metadata.create_all(bind=engine)
@@ -33,6 +44,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Ensure static directory exists
+os.makedirs("static/avatars", exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # --- Security & Auth Config ---
 SECRET_KEY = "your-secret-key-change-this-in-prod"
@@ -69,6 +84,9 @@ class UserResponse(BaseModel):
     email: str
     role: str
     balance: float
+    balance_economy: float = 0.0
+    balance_professional: float = 0.0
+    balance_expert: float = 0.0
     api_key: Optional[str] = None
     affiliate_code: Optional[str] = None
     status: str = "active"
@@ -81,6 +99,42 @@ class UserResponse(BaseModel):
     created_at: Optional[datetime] = None
     last_ip: Optional[str] = None
     last_active: Optional[datetime] = None
+    
+    # Extended Fields
+    phone: Optional[str] = None
+    company: Optional[str] = None
+    vat_id: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    zip: Optional[str] = None
+    website: Optional[str] = None
+    display_name: Optional[str] = None
+    bio: Optional[str] = None
+    job_title: Optional[str] = None
+    public_profile: bool = False
+    two_factor_enabled: bool = False
+    email_frequency: str = "instant"
+    login_notification_enabled: bool = False
+    newsletter_sub: bool = False
+    sound_effects: bool = True
+    developer_mode: bool = False
+    api_whitelist: List[str] = []
+    webhook_secret: Optional[str] = None
+    accessibility: Dict[str, Any] = {}
+    social_links: Dict[str, Any] = {}
+    login_history: List[Dict[str, Any]] = []
+    recovery_email: Optional[str] = None
+    timezone: str = "UTC"
+    language: str = "English"
+    theme_accent_color: str = "#ff4d00"
+    skills_badges: List[str] = []
+    referral_code: Optional[str] = None
+    support_pin: Optional[str] = None
+    date_format: str = "YYYY-MM-DD"
+    number_format: str = "en-US"
+    require_password_reset: bool = False
+    avatar_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -116,8 +170,27 @@ class ProjectCreate(BaseModel):
     total_target: int = 0
 
 
+class AdminProjectCreate(ProjectCreate):
+    user_email: str
+    priority: int = 0
+    is_hidden: bool = False
+    internal_tags: List[str] = []
+    notes: Optional[str] = None
+
+
+class AdminProjectUpdate(BaseModel):
+    priority: Optional[int] = None
+    force_stop_reason: Optional[str] = None
+    is_hidden: Optional[bool] = None
+    internal_tags: Optional[List[str]] = None
+    notes: Optional[str] = None
+    is_flagged: Optional[bool] = None
+    status: Optional[str] = None
+
+
 class ProjectResponse(BaseModel):
     id: str
+    user_id: str
     name: str
     status: str
     settings: Dict[str, Any]
@@ -126,6 +199,14 @@ class ProjectResponse(BaseModel):
     hits_today: int
     total_hits: int
     created_at: datetime
+    
+    # Admin Fields (Optional in response, but populated if user is owner or admin)
+    priority: int = 0
+    force_stop_reason: Optional[str] = None
+    is_hidden: bool = False
+    internal_tags: List[str] = []
+    notes: Optional[str] = None
+    is_flagged: bool = False
 
     class Config:
         from_attributes = True
@@ -162,6 +243,7 @@ class QuoteResponse(BaseModel):
 class DepositRequest(BaseModel):
     user_email: str
     amount: float
+    tier: Optional[str] = None
     description: Optional[str] = "Manual Funding"
 
 
@@ -232,6 +314,41 @@ class AdminUserUpdate(BaseModel):
     tags: Optional[List[str]] = None
     ban_reason: Optional[str] = None
 
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    company: Optional[str] = None
+    vat_id: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    zip: Optional[str] = None
+    website: Optional[str] = None
+    display_name: Optional[str] = None
+    bio: Optional[str] = None
+    job_title: Optional[str] = None
+    public_profile: Optional[bool] = None
+    two_factor_enabled: Optional[bool] = None
+    email_frequency: Optional[str] = None
+    login_notification_enabled: Optional[bool] = None
+    newsletter_sub: Optional[bool] = None
+    sound_effects: Optional[bool] = None
+    developer_mode: Optional[bool] = None
+    api_whitelist: Optional[List[str]] = None
+    webhook_secret: Optional[str] = None
+    accessibility: Optional[Dict[str, Any]] = None
+    social_links: Optional[Dict[str, Any]] = None
+    recovery_email: Optional[str] = None
+    timezone: Optional[str] = None
+    language: Optional[str] = None
+    theme_accent_color: Optional[str] = None
+    date_format: Optional[str] = None
+    number_format: Optional[str] = None
+    number_format: Optional[str] = None
+    require_password_reset: Optional[bool] = None
+    avatar_url: Optional[str] = None
+
 class SystemSettingsUpdate(BaseModel):
     settings: Dict[str, Any]
 
@@ -289,6 +406,11 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+def create_user_access_token(user: models.User, expires_delta: Optional[timedelta] = None):
+    """Creates a token bound to the user's specific token version for invalidation support"""
+    data = {"sub": user.email, "ver": user.token_version or 1}
+    return create_access_token(data, expires_delta)
+
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
@@ -311,6 +433,13 @@ async def get_current_user(
     user = db.query(models.User).filter(models.User.email == email).first()
     if user is None:
         raise credentials_exception
+        
+    # Validation of token version (for server-side logout)
+    token_ver = payload.get("ver")
+    if token_ver is not None and user.token_version is not None and token_ver != user.token_version:
+        # Token is old/invalidated
+        raise credentials_exception
+        
     return user
 
 
@@ -332,7 +461,18 @@ async def get_current_user_optional(
             if email:
                 user = db.query(models.User).filter(models.User.email == email).first()
                 if user:
-                    return user
+                    # Validate token version
+                    token_ver = payload.get("ver")
+                    if token_ver is not None and user.token_version is not None and token_ver != user.token_version:
+                        # Token invalid, fall through to raise generic error if strictly required or just return None?
+                        # Since this is 'optional', usually it implies 'soft' auth. 
+                        # But if a token is PRESENT but INVALID, it should probably be rejected or ignored.
+                        # However, for 'users/me', usually we want strict auth. 
+                        # 'read_users_me' uses optional? Why? 
+                        # Ah, likely for mixed access. But if the token is revoked, we should treat it as unauth.
+                        pass # Don't return the user if version mismatch
+                    else:
+                        return user
         except JWTError:
             pass
 
@@ -377,8 +517,10 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
 
 
 @app.post("/auth/token", response_model=Token)
-def login_for_access_token(
-    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
+async def login_for_access_token(
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(), 
+    db: Session = Depends(get_db)
 ):
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
     if not user or not verify_password(form_data.password, user.password_hash):
@@ -387,15 +529,126 @@ def login_for_access_token(
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    
+    # Update Login History
+    try:
+        current_history = user.login_history or []
+        # Keep only last 10 entries
+        if len(current_history) >= 10:
+            current_history.pop() # Remove oldest (last item usually, but we prepend)
+            
+        new_entry = {
+            "date": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+            "ip": request.client.host,
+            "device": request.headers.get("user-agent", "Unknown Device")
+        }
+        # Prepend new entry
+        current_history.insert(0, new_entry)
+        user.login_history = current_history
+        user.last_ip = request.client.host
+        user.last_active = datetime.utcnow()
+        db.commit()
+    except Exception as e:
+        print(f"Error updating login history: {e}")
+
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.email}, expires_delta=access_token_expires
+    # Use version-aware token creator
+    access_token = create_user_access_token(
+        user=user, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+    confirm_password: str
+
+@app.put("/auth/password")
+def change_password(
+    data: PasswordChange,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if not verify_password(data.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password incorrect")
+    
+    if data.new_password != data.confirm_password:
+        raise HTTPException(status_code=400, detail="New passwords do not match")
+
+    current_user.password_hash = get_password_hash(data.new_password)
+    # Optional: Log out other sessions by incrementing version
+    # current_user.token_version += 1 
+    db.commit()
+    return {"status": "password updated"}
+
+@app.post("/auth/logout-all")
+def logout_all_sessions(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Increment token version to invalidate all existing JWTs
+    current_user.token_version = (current_user.token_version or 1) + 1
+    db.commit()
+    return {"status": "all sessions invalidated", "message": "Please log in again."}
+
+@app.get("/users/me/export")
+def export_user_data(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """GDPR Data Download"""
+    projects = db.query(models.Project).filter(models.Project.user_id == current_user.id).all()
+    transactions = db.query(models.Transaction).filter(models.Transaction.user_id == current_user.id).all()
+    
+    export_data = {
+        "user_profile": {
+            "id": current_user.id,
+            "email": current_user.email,
+            "name": current_user.display_name or current_user.email,
+            "created_at": str(current_user.created_at),
+            "balance": current_user.balance,
+            "role": current_user.role,
+            "login_history": current_user.login_history
+        },
+        "projects": [
+            {
+                "id": p.id, 
+                "name": p.name, 
+                "status": p.status, 
+                "created_at": str(p.created_at),
+                "settings": p.settings
+            } for p in projects
+        ],
+        "transactions": [
+            {
+                "id": t.id,
+                "amount": t.amount,
+                "type": t.type,
+                "date": str(t.created_at),
+                "description": t.description
+            } for t in transactions
+        ]
+    }
+    
+    return export_data
 
 
 @app.get("/users/me", response_model=UserResponse)
 def read_users_me(current_user: models.User = Depends(get_current_user_optional)):
+    return current_user
+
+
+@app.put("/users/me", response_model=UserResponse)
+def update_user_me(
+    user_update: UserUpdate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    update_data = user_update.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(current_user, key, value)
+    db.commit()
+    db.refresh(current_user)
     return current_user
 
 
@@ -417,6 +670,54 @@ def revoke_api_key(
     current_user.api_key = None
     db.commit()
     return {"status": "revoked"}
+
+
+@app.post("/users/me/avatar")
+async def upload_avatar(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        file_extension = os.path.splitext(file.filename)[1]
+        if file_extension not in [".jpg", ".jpeg", ".png", ".webp"]:
+            raise HTTPException(status_code=400, detail="Invalid file type. Only jpg, png, webp allowed.")
+        
+        filename = f"avatars/{current_user.id}_{secrets.token_hex(4)}{file_extension}"
+        file_path = os.path.join("static", filename)
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # Update user avatar URL
+        # Assuming backend is served at BACKEND_URL (e.g. localhost:8001)
+        # Frontend should prepend URL if relative, or we serve absolute.
+        # Let's serve relative path from /static
+        current_user.avatar_url = f"/static/{filename}"
+        db.commit()
+        
+        return {"avatar_url": current_user.avatar_url}
+    except Exception as e:
+        print(f"Error uploading avatar: {e}")
+        raise HTTPException(status_code=500, detail="Failed to upload avatar")
+
+@app.delete("/users/me")
+def delete_user_account(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Irreversible account deletion"""
+    try:
+        # Delete related data first if cascade isn't set up perfectly
+        # (SQLAlchemy usually handles cascade if defined, but let's be safe or rely on DB)
+        # For now, just delete the user record.
+        db.delete(current_user)
+        db.commit()
+        return {"status": "account deleted", "message": "We are sorry to see you go."}
+    except Exception as e:
+        print(f"Error deleting user: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to delete account")
 
 
 @app.post("/quick-campaign", response_model=QuickCampaignResponse)
@@ -623,11 +924,11 @@ def create_project(
 def get_projects(
     db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
 ):
-    if current_user.role == "admin":
-        return db.query(models.Project).all()
     return (
         db.query(models.Project).filter(models.Project.user_id == current_user.id).all()
     )
+
+
 
 
 @app.get("/projects/{project_id}", response_model=ProjectResponse)
@@ -636,16 +937,112 @@ def get_project_details(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    project = (
-        db.query(models.Project)
-        .filter(
-            models.Project.id == project_id, models.Project.user_id == current_user.id
-        )
-        .first()
-    )
+    query = db.query(models.Project).filter(models.Project.id == project_id)
+    if current_user.role != "admin":
+        query = query.filter(models.Project.user_id == current_user.id)
+        
+    project = query.first()
+    
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return project
+
+
+# --- Admin Project Management ---
+
+@app.get("/admin/projects", response_model=List[ProjectResponse])
+def get_all_projects_admin(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return db.query(models.Project).all()
+
+@app.post("/admin/projects", response_model=ProjectResponse)
+def create_project_admin(
+    project: AdminProjectCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    target_user = db.query(models.User).filter(models.User.email == project.user_email).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail=f"User {project.user_email} not found")
+
+    db_project = models.Project(
+        user_id=target_user.id,
+        name=project.name,
+        plan_type=project.plan_type,
+        daily_limit=project.daily_limit,
+        total_target=project.total_target,
+        settings=project.settings,
+        # Admin Extras
+        priority=project.priority,
+        is_hidden=project.is_hidden,
+        internal_tags=project.internal_tags,
+        notes=project.notes,
+        status="active"
+    )
+    db.add(db_project)
+    db.commit()
+    db.refresh(db_project)
+    return db_project
+
+
+@app.put("/admin/projects/{project_id}", response_model=ProjectResponse)
+def update_project_admin(
+    project_id: str,
+    update_data: AdminProjectUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Update fields if provided
+    if update_data.priority is not None:
+        project.priority = update_data.priority
+    if update_data.force_stop_reason is not None:
+        project.force_stop_reason = update_data.force_stop_reason
+    if update_data.is_hidden is not None:
+        project.is_hidden = update_data.is_hidden
+    if update_data.internal_tags is not None:
+        project.internal_tags = update_data.internal_tags
+    if update_data.notes is not None:
+        project.notes = update_data.notes
+    if update_data.is_flagged is not None:
+        project.is_flagged = update_data.is_flagged
+    if update_data.status is not None:
+        project.status = update_data.status
+
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+@app.delete("/admin/projects/{project_id}")
+def delete_project_admin(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    db.delete(project)
+    db.commit()
+    return {"status": "success", "message": "Project deleted"}
 
 
 # --- Proxy Management ---
@@ -776,11 +1173,20 @@ def simulate_deposit(data: DepositRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
 
     # 2. Add Balance
-    user.balance += data.amount
+    if data.tier == 'economy':
+        user.balance_economy = (user.balance_economy or 0.0) + data.amount
+    elif data.tier == 'professional':
+        user.balance_professional = (user.balance_professional or 0.0) + data.amount
+    elif data.tier == 'expert':
+        user.balance_expert = (user.balance_expert or 0.0) + data.amount
+    else:
+        # Fallback or General Balance (if we still use it)
+        user.balance += data.amount
 
     # 3. Create Transaction
+    trx_desc = f"{data.description} ({data.tier.capitalize()})" if data.tier else data.description
     trx = models.Transaction(
-        user_id=user.id, type="credit", amount=data.amount, description=data.description
+        user_id=user.id, type="credit", amount=data.amount, description=trx_desc
     )
     db.add(trx)
     db.commit()
@@ -1196,3 +1602,31 @@ def delete_broadcast(
     db.commit()
     return {"status": "success"}
 
+
+# --- Stripe Integration ---
+
+class PaymentIntentRequest(BaseModel):
+    amount: int  # In cents
+    currency: str = "eur"
+
+@app.post("/create-payment-intent")
+async def create_payment_intent(
+    request: PaymentIntentRequest,
+    current_user: models.User = Depends(get_current_user)
+):
+    try:
+        # Create a PaymentIntent with the order amount and currency
+        intent = stripe.PaymentIntent.create(
+            amount=request.amount,
+            currency=request.currency,
+            automatic_payment_methods={
+                'enabled': True,
+            },
+            metadata={
+                "user_id": current_user.id,
+                "email": current_user.email
+            }
+        )
+        return {"clientSecret": intent['client_secret']}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

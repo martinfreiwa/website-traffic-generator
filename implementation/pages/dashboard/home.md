@@ -24,7 +24,6 @@ Provides a high-level overview of the user's account performance, active project
 *   [ ] **Regional Map**: Mini heatmap showing where your traffic is currently coming from.
 *   [ ] **Shortcut Keys**: "Press 'N' to create new project" hint.
 *   [ ] **Affiliate Widget**: "You have earned $X this month" mini card.
-*   [ ] **System Load**: "Network is running at 98% capacity" indicator.
 *   [ ] **Quick Buy**: "Buy 500 Credits" button directly on the dashboard.
 *   [ ] **Account Age**: "User for 342 days" badge.
 *   [ ] **Personal Goal**: Progress bar for "Reach 1 Million hits this month".

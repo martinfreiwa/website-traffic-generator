@@ -7,18 +7,18 @@
 Allows users to view all their traffic campaigns and create new ones.
 
 ## Features
-*   [ ] **Project List**:
-    *   Search and Filter (by status, date).
-    *   Pagination.
-    *   Status indicators (Running, Paused, Completed).
-*   [ ] **Add Project Wizard**:
-    *   Step-by-step creation flow.
-    *   Target URL validation.
-    *   Traffic configuration (Volume, Bounce Rate, Duration).
-    *   Geo-targeting selection.
+*   [x] **Project List**:
+    *   [x] Search and Filter (by status, date).
+    *   [x] Pagination.
+    *   [x] Status indicators (Running, Paused, Completed).
+*   [x] **Add Project Wizard**:
+    *   [x] Step-by-step creation flow.
+    *   [x] Target URL validation.
+    *   [x] Traffic configuration (Volume, Bounce Rate, Duration).
+    *   [x] Geo-targeting selection.
 
 ## Planned Improvements
-*   [ ] **Bulk Actions**: Select multiple projects to Pause, Resume, or Delete.
+*   [x] **Bulk Actions**: Select multiple projects to Pause, Resume, or Delete.
 *   [ ] **Project Templates**: Save configuration as template for fast creation.
 *   [ ] **Estimated Completion**: Calculate and show when the target hits will be reached.
 *   [ ] **Duplicate Project**: One-click clone of an existing campaign.

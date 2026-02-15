@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
-import { Link } from 'react-router-dom';
+import { Link, Routes, Route, useNavigate, useLocation, Navigate, useParams } from 'react-router-dom';
 import Header from './Header';
 import BroadcastBanner from './BroadcastBanner';
 import ProjectList from './ProjectList';
@@ -13,6 +13,7 @@ import Balance from './Balance';
 import Affiliate from './Affiliate';
 import HomeDashboard from './HomeDashboard';
 import Support from './Support';
+import PricingPage from './PricingPage';
 import { MenuSection, Project } from '../types';
 import { MessageSquare, TrendingUp, Users, CreditCard, Activity, Construction, LayoutDashboard, Layers, User, Banknote, Share2, HelpCircle } from 'lucide-react';
 import { db } from '../services/db';
@@ -22,10 +23,13 @@ interface DashboardProps {
   onNavigate: (viewId: string) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [currentView, setCurrentView] = useState('home');
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Extract current view from path for Sidebar highlighting
+  const currentPath = location.pathname.replace('/dashboard', '').substring(1) || 'home';
 
   // Database State
   const [projects, setProjects] = useState<Project[]>([]);
@@ -52,10 +56,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate }) => {
 
   const handleNavigateToProject = (id: string) => {
     if (id === '') {
-      setCurrentView('overview');
+      navigate('/dashboard/campaigns');
     } else {
-      setSelectedProjectId(id);
-      setCurrentView('project-details');
+      navigate(`/dashboard/campaigns/${id}`);
     }
     window.scrollTo(0, 0);
   };
@@ -65,129 +68,62 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate }) => {
     {
       title: 'Main',
       items: [
-        { label: 'Dashboard', id: 'home', icon: <LayoutDashboard size={18} /> },
-        { label: 'Campaigns', id: 'overview', icon: <Layers size={18} />, active: currentView === 'overview' || currentView === 'project-details' || currentView === 'add-project' },
+        { label: 'Dashboard', id: 'home', path: '/dashboard', icon: <LayoutDashboard size={18} /> },
+        { label: 'Campaigns', id: 'campaigns', path: '/dashboard/campaigns', icon: <Layers size={18} />, active: currentPath.startsWith('campaigns') },
       ]
     },
     {
       title: 'Finance',
       items: [
-        { label: 'Buy Credits', id: 'buy-credits', icon: <CreditCard size={18} /> },
-        { label: 'Wallet & History', id: 'balance', icon: <Banknote size={18} /> },
+        { label: 'Buy Credits', id: 'buy-credits', path: '/dashboard/buy-credits', icon: <CreditCard size={18} /> },
+        { label: 'Balance', id: 'balance', path: '/dashboard/balance', icon: <Banknote size={18} /> },
       ]
     },
     {
       title: 'User',
       items: [
-        { label: 'Support Tickets', id: 'support', icon: <HelpCircle size={18} /> },
-        { label: 'Profile & Billing', id: 'profile', icon: <User size={18} /> },
-        { label: 'Affiliate', id: 'affiliate', icon: <Share2 size={18} /> },
+        { label: 'Support Tickets', id: 'support', path: '/dashboard/support', icon: <HelpCircle size={18} /> },
+        { label: 'Profile & Billing', id: 'profile', path: '/dashboard/profile', icon: <User size={18} /> },
+        { label: 'Affiliate', id: 'affiliate', path: '/dashboard/affiliate', icon: <Share2 size={18} /> },
       ]
     }
   ];
 
-  const renderContent = () => {
-    if (loading) return (
-      <div className="flex flex-col items-center justify-center h-64 text-gray-400 animate-pulse">
-        <div className="w-8 h-8 bg-gray-200 mb-4 rounded-sm"></div>
-        <div className="text-xs font-bold uppercase tracking-widest">Loading Database...</div>
-      </div>
-    );
-
-    switch (currentView) {
-      case 'home':
-        return (
-          <HomeDashboard
-            projects={projects}
-            balance={balance}
-            onNavigateToProject={handleNavigateToProject}
-            onNavigateToBuyCredits={() => {
-              setCurrentView('buy-credits');
-              window.scrollTo(0, 0);
-            }}
-          />
-        );
-      case 'overview':
-        return (
-          <ProjectList
-            projects={projects}
-            onUpdate={handleDataChange}
-            onNavigateToProject={handleNavigateToProject}
-            onAddProject={() => {
-              setCurrentView('add-project');
-              window.scrollTo(0, 0);
-            }}
-          />
-        );
-      case 'project-details':
-        if (!selectedProjectId) return <div>No Project Selected</div>;
-        return (
-          <ProjectDetails
-            projectId={selectedProjectId}
-            onBack={() => setCurrentView('overview')}
-            onUpdate={handleDataChange}
-          />
-        );
-      case 'add-project':
-        return (
-          <AddProject
-            onBack={() => setCurrentView('overview')}
-            onCreated={handleDataChange}
-          />
-        );
-      case 'buy-credits':
-        return <BuyCredits onBack={() => setCurrentView('home')} onPurchase={handleDataChange} />;
-      case 'profile':
-        return <Profile />;
-      case 'balance':
-        return <Balance />;
-      case 'affiliate':
-        return <Affiliate />;
-      case 'support':
-        return <Support />;
-      default:
-        return (
-          <div className="flex flex-col items-center justify-center min-h-[500px] text-center p-12 bg-white border border-gray-200 shadow-sm border-dashed">
-            <div className="bg-orange-50 p-6 rounded-full mb-6">
-              <Construction className="w-12 h-12 text-[#ff4d00]" strokeWidth={1.5} />
-            </div>
-            <h3 className="text-2xl font-black text-gray-900 mb-2 uppercase tracking-tight">Under Construction</h3>
-            <p className="text-gray-500 mb-8 max-w-md mx-auto leading-relaxed">
-              The <span className="font-bold text-gray-900">{currentView.replace(/-/g, ' ')}</span> module is currently being upgraded to our new V2 architecture.
-            </p>
-            <button
-              onClick={() => setCurrentView('overview')}
-              className="bg-black text-white px-8 py-4 text-xs font-bold uppercase tracking-wider hover:bg-[#ff4d00] transition-colors"
-            >
-              Return to Dashboard
-            </button>
-          </div>
-        );
-    }
+  const getPageTitle = () => {
+    if (currentPath === 'home' || currentPath === '') return 'Dashboard';
+    if (currentPath.startsWith('campaigns')) return 'Campaigns';
+    if (currentPath === 'buy-credits') return 'Wallet Top-Up';
+    if (currentPath === 'profile') return 'My Profile';
+    if (currentPath === 'balance') return 'Balance';
+    if (currentPath === 'affiliate') return 'Affiliate Program';
+    if (currentPath === 'support') return 'Support Helpdesk';
+    return currentPath.replace(/-/g, ' ');
   };
 
-  const getPageTitle = () => {
-    switch (currentView) {
-      case 'overview': return 'Campaigns';
-      case 'home': return 'Dashboard';
-      case 'project-details': return 'Campaign Configuration';
-      case 'add-project': return 'New Campaign';
-      case 'buy-credits': return 'Wallet Top-Up';
-      case 'profile': return 'My Profile';
-      case 'balance': return 'Wallet & Transactions';
-      case 'affiliate': return 'Affiliate Program';
-      case 'support': return 'Support Helpdesk';
-      default: return currentView.replace(/-/g, ' ');
-    }
-  }
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center h-screen text-gray-400 animate-pulse bg-[#f3f4f6]">
+      <div className="w-8 h-8 bg-gray-200 mb-4 rounded-sm"></div>
+      <div className="text-xs font-bold uppercase tracking-widest">Loading Database...</div>
+    </div>
+  );
+
+
 
   return (
     <div className="bg-[#f3f4f6] min-h-screen flex font-sans text-gray-900">
       <Sidebar
         menuSections={menuSections}
-        currentView={currentView === 'project-details' || currentView === 'add-project' ? 'overview' : currentView}
-        onNavigate={(id) => {
-          setCurrentView(id);
+        currentView={currentPath.startsWith('campaigns') ? 'campaigns' : (currentPath === '' ? 'home' : currentPath)}
+        onNavigate={(viewId) => {
+          // Find the item in menuSections to get its path
+          const allItems = menuSections.flatMap(s => s.items);
+          const item = allItems.find(i => i.id === viewId);
+          if (item?.path) {
+            navigate(item.path);
+          } else {
+            // Fallback for home or if path is missing
+            navigate('/dashboard');
+          }
           setMobileMenuOpen(false);
           window.scrollTo(0, 0);
         }}
@@ -214,11 +150,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate }) => {
                     <li key={item.id}>
                       <button
                         onClick={() => {
-                          setCurrentView(item.id);
+                          navigate(item.path || '/dashboard');
                           setMobileMenuOpen(false);
                         }}
                         className={`w-full text-left px-8 py-3 text-xs font-bold uppercase tracking-wider flex items-center gap-3
-                                        ${currentView === item.id ? 'text-[#ff4d00] bg-gray-900' : 'text-gray-400'}`}
+                                        ${currentPath === item.id ? 'text-[#ff4d00] bg-gray-900' : 'text-gray-400'}`}
                       >
                         {item.icon}
                         {item.label}
@@ -241,7 +177,43 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate }) => {
 
         <div className="flex-1 p-6 md:p-12 overflow-y-auto relative">
           <div className="max-w-screen-2xl mx-auto">
-            {renderContent()}
+            <Routes>
+              <Route path="/" element={
+                <HomeDashboard
+                  projects={projects}
+                  balance={balance}
+                  onNavigateToProject={handleNavigateToProject}
+                  onNavigateToBuyCredits={() => navigate('/dashboard/buy-credits')}
+                />
+              } />
+
+              <Route path="/campaigns" element={
+                <ProjectList
+                  projects={projects}
+                  onUpdate={handleDataChange}
+                  onNavigateToProject={handleNavigateToProject}
+                  onAddProject={() => navigate('/dashboard/campaigns/new')}
+                />
+              } />
+
+              <Route path="/campaigns/new" element={
+                <AddProject
+                  onBack={() => navigate('/dashboard/campaigns')}
+                  onCreated={handleDataChange}
+                />
+              } />
+
+              <Route path="/campaigns/:projectId" element={<ProjectDetailsWrapper onUpdate={handleDataChange} />} />
+
+              <Route path="/buy-credits" element={<BuyCredits onBack={() => navigate('/dashboard')} onPurchase={handleDataChange} />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/balance" element={<Balance />} />
+              <Route path="/pricing" element={<PricingPage />} />
+              <Route path="/affiliate" element={<Affiliate />} />
+              <Route path="/support" element={<Support />} />
+
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
           </div>
         </div>
 
@@ -265,6 +237,22 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate }) => {
 
       </main>
     </div>
+  );
+};
+
+// Wrapper component to handle useParams for ProjectDetails
+const ProjectDetailsWrapper: React.FC<{ onUpdate: () => void }> = ({ onUpdate }) => {
+  const { projectId } = useParams();
+  const navigate = useNavigate();
+
+  if (!projectId) return <div>Invalid Project ID</div>;
+
+  return (
+    <ProjectDetails
+      projectId={projectId}
+      onBack={() => navigate('/dashboard/campaigns')}
+      onUpdate={onUpdate}
+    />
   );
 };
 
