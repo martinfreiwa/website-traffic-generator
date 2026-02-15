@@ -21,7 +21,7 @@ import asyncio
 import requests
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
-from fastapi import File, UploadFile
+from fastapi import File, UploadFile, Form
 import shutil
 import os
 import secrets
@@ -165,6 +165,7 @@ class Token(BaseModel):
 class ProjectCreate(BaseModel):
     name: str
     plan_type: str = "Custom"
+    tier: Optional[str] = None
     settings: Dict[str, Any]  # THE JSONB PAYLOAD
     daily_limit: int = 0
     total_target: int = 0
@@ -193,6 +194,7 @@ class ProjectResponse(BaseModel):
     user_id: str
     name: str
     status: str
+    tier: Optional[str] = None
     settings: Dict[str, Any]
     daily_limit: int
     total_target: int
@@ -219,6 +221,7 @@ class TransactionResponse(BaseModel):
     description: Optional[str]
     status: str
     tier: Optional[str]
+    hits: Optional[int]
     reference: Optional[str]
     created_at: datetime
 
@@ -247,6 +250,7 @@ class DepositRequest(BaseModel):
     amount: float
     tier: Optional[str] = None
     description: Optional[str] = "Manual Funding"
+    hits: Optional[int] = None
 
 
 class TicketCreate(BaseModel):
@@ -931,13 +935,11 @@ def create_project(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    # 1. Billing Check? (Skipped for Foundation Phase, to be added in Phase 2)
-    # if current_user.balance < cost: ...
-
     db_project = models.Project(
         user_id=current_user.id,
         name=project.name,
         plan_type=project.plan_type,
+        tier=project.tier,
         daily_limit=project.daily_limit,
         total_target=project.total_target,
         settings=project.settings,  # Just dump the JSON!
@@ -1135,8 +1137,58 @@ def start_project(
     )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    if project.tier and project.total_target and project.total_target > 0:
+        user = db.query(models.User).filter(models.User.id == current_user.id).first()
+
+        if user:
+            purchased_hits = (
+                db.query(models.Transaction)
+                .filter(
+                    models.Transaction.user_id == user.id,
+                    models.Transaction.type == "credit",
+                    models.Transaction.tier == project.tier,
+                    models.Transaction.hits.isnot(None),
+                )
+                .all()
+            )
+            total_purchased = sum(t.hits or 0 for t in purchased_hits)
+
+            used_hits = (
+                db.query(models.Transaction)
+                .filter(
+                    models.Transaction.user_id == user.id,
+                    models.Transaction.type == "debit",
+                    models.Transaction.tier == project.tier,
+                    models.Transaction.hits.isnot(None),
+                )
+                .all()
+            )
+            total_used = sum(t.hits or 0 for t in used_hits)
+
+            available_hits = total_purchased - total_used
+
+            if available_hits < project.total_target:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Insufficient {project.tier} hits. Required: {project.total_target}, Available: {available_hits}",
+                )
+
+            trx = models.Transaction(
+                user_id=user.id,
+                type="debit",
+                amount=0,
+                description=f"Project started: {project.name}",
+                tier=project.tier,
+                hits=project.total_target,
+                status="completed",
+            )
+            db.add(trx)
+            db.commit()
+
     project.status = "active"
     db.commit()
+    db.refresh(project)
     return project
 
 
@@ -1227,6 +1279,7 @@ def simulate_deposit(data: DepositRequest, db: Session = Depends(get_db)):
         amount=data.amount,
         description=trx_desc,
         tier=data.tier,
+        hits=data.hits,
     )
     db.add(trx)
     db.commit()
@@ -1501,6 +1554,47 @@ def get_all_transactions(
     return db.query(models.Transaction).all()
 
 
+class TransactionUpdate(BaseModel):
+    description: Optional[str] = None
+    amount: Optional[float] = None
+    type: Optional[str] = None
+    status: Optional[str] = None
+    tier: Optional[str] = None
+    reference: Optional[str] = None
+
+
+@app.put("/admin/transactions/{trx_id}", response_model=TransactionResponse)
+def update_transaction(
+    trx_id: str,
+    update_data: TransactionUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    trx = db.query(models.Transaction).filter(models.Transaction.id == trx_id).first()
+    if not trx:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    if update_data.description is not None:
+        trx.description = update_data.description
+    if update_data.amount is not None:
+        trx.amount = update_data.amount
+    if update_data.type is not None:
+        trx.type = update_data.type
+    if update_data.status is not None:
+        trx.status = update_data.status
+    if update_data.tier is not None:
+        trx.tier = update_data.tier
+    if update_data.reference is not None:
+        trx.reference = update_data.reference
+
+    db.commit()
+    db.refresh(trx)
+    return trx
+
+
 # --- Ticket & Notification Endpoints ---
 
 
@@ -1685,6 +1779,7 @@ class BankTransferProofResponse(BaseModel):
     user_id: str
     amount: float
     tier: Optional[str]
+    hits: Optional[int]
     currency: str
     status: str
     file_url: Optional[str]
@@ -1703,6 +1798,7 @@ class BankTransferProofResponse(BaseModel):
 class BankTransferProofCreate(BaseModel):
     amount: float
     tier: Optional[str] = None
+    hits: Optional[int] = None
     currency: str = "USD"
     notes: Optional[str] = None
 
@@ -1715,10 +1811,11 @@ class BankTransferApproval(BaseModel):
 @app.post("/bank-transfer/proof", response_model=BankTransferProofResponse)
 async def upload_bank_transfer_proof(
     file: UploadFile = File(...),
-    amount: float = 0.0,
-    tier: str = "",
-    currency: str = "USD",
-    notes: str = "",
+    amount: float = Form(...),
+    tier: str = Form(""),
+    hits: int = Form(0),
+    currency: str = Form("USD"),
+    notes: str = Form(""),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1743,6 +1840,7 @@ async def upload_bank_transfer_proof(
         user_id=current_user.id,
         amount=amount,
         tier=tier if tier else None,
+        hits=hits if hits > 0 else None,
         currency=currency,
         status="pending",
         file_url=f"/static/{filename}",
@@ -1759,6 +1857,7 @@ async def upload_bank_transfer_proof(
         user_id=proof.user_id,
         amount=proof.amount,
         tier=proof.tier,
+        hits=proof.hits,
         currency=proof.currency,
         status=proof.status,
         file_url=proof.file_url,
@@ -1789,6 +1888,7 @@ def get_my_bank_transfers(
             user_id=p.user_id,
             amount=p.amount,
             tier=p.tier,
+            hits=p.hits,
             currency=p.currency,
             status=p.status,
             file_url=p.file_url,
@@ -1828,6 +1928,7 @@ def get_all_bank_transfers(
                 user_id=p.user_id,
                 amount=p.amount,
                 tier=p.tier,
+                hits=p.hits,
                 currency=p.currency,
                 status=p.status,
                 file_url=p.file_url,
@@ -1886,6 +1987,7 @@ def approve_bank_transfer(
             amount=proof.amount,
             description=f"Bank Transfer ({proof.currency}) - Ref: {proof.reference}",
             tier=proof.tier,
+            hits=proof.hits,
             reference=proof.reference,
         )
         db.add(trx)

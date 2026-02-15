@@ -14,16 +14,24 @@ const AdminEditTransaction: React.FC<AdminEditTransactionProps> = ({ trxId, onBa
     const [trx, setTrx] = useState<Transaction | null>(null);
 
     useEffect(() => {
-        const transactions = db.getTransactions();
-        const found = transactions.find(t => t.id === trxId);
-        setTrx(found || null);
+        const loadTransaction = async () => {
+            await db.syncAllTransactions();
+            const transactions = db.getAllTransactionsAdmin();
+            const found = transactions.find(t => t.id === trxId);
+            setTrx(found || null);
+        };
+        loadTransaction();
     }, [trxId]);
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!trx) return;
-        db.updateTransaction(trx);
-        onUpdate();
-        alert('Transaction updated.');
+        try {
+            await db.updateTransaction(trx);
+            onUpdate();
+            alert('Transaction updated.');
+        } catch (e: any) {
+            alert('Error: ' + e.message);
+        }
     };
 
     if (!trx) return <div>Transaction not found.</div>;
@@ -95,6 +103,30 @@ const AdminEditTransaction: React.FC<AdminEditTransactionProps> = ({ trxId, onBa
                                 value={trx.date}
                                 onChange={(e) => setTrx({...trx, date: e.target.value})}
                                 className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 outline-none focus:border-[#ff4d00]"
+                            />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-2">Balance Tier</label>
+                            <select 
+                                value={trx.tier || ''}
+                                onChange={(e) => setTrx({...trx, tier: e.target.value || undefined})}
+                                className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 outline-none focus:border-[#ff4d00]"
+                            >
+                                <option value="">General</option>
+                                <option value="economy">Economy</option>
+                                <option value="professional">Professional</option>
+                                <option value="expert">Expert</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-2">Reference</label>
+                            <input 
+                                value={trx.reference || ''}
+                                onChange={(e) => setTrx({...trx, reference: e.target.value || undefined})}
+                                className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-mono text-gray-900 outline-none focus:border-[#ff4d00]"
+                                placeholder="TGP-XXXXXXXX-XXXXXX"
                             />
                         </div>
                     </div>

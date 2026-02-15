@@ -256,7 +256,7 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
 
     const handlePaymentSuccess = async (paymentId: string) => {
         setIsProcessing(true);
-        await db.purchaseCredits(totalPrice, `Traffic Credits (${totalVisitors.toLocaleString()} ${selectedTier.name}) - Stripe ${paymentId}`, selectedTier.id);
+        await db.purchaseCredits(totalPrice, `Traffic Credits (${totalVisitors.toLocaleString()} ${selectedTier.name}) - Stripe ${paymentId}`, selectedTier.id, totalVisitors);
         setBalance(db.getBalance());
         setIsProcessing(false);
         if (onPurchase) onPurchase();
@@ -288,6 +288,7 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
             formData.append('file', proofFile);
             formData.append('amount', totalPrice.toString());
             formData.append('tier', selectedTier.id);
+            formData.append('hits', totalVisitors.toString());
             formData.append('currency', selectedCurrency);
             formData.append('notes', `Bank transfer for ${totalVisitors.toLocaleString()} ${selectedTier.name} visitors - Ref: ${transferReference}`);
 

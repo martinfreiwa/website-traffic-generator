@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../services/db';
-import { CheckCircle, XCircle, Clock, Eye, ExternalLink, FileText, AlertCircle, RefreshCw } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Eye, ExternalLink, FileText, AlertCircle, RefreshCw, Download } from 'lucide-react';
 
 interface BankTransferProof {
     id: string;
@@ -139,12 +139,22 @@ const AdminBankTransfers: React.FC = () => {
                                     <td className="px-6 py-4 text-xs font-bold text-gray-600 capitalize">{transfer.tier || 'General'}</td>
                                     <td className="px-6 py-4">{getStatusBadge(transfer.status)}</td>
                                     <td className="px-6 py-4 text-right">
-                                        <button
-                                            onClick={() => setSelectedTransfer(transfer)}
-                                            className="bg-black text-white px-4 py-2 text-[10px] font-bold uppercase tracking-wider hover:bg-[#ff4d00] transition-colors flex items-center gap-2 ml-auto"
-                                        >
-                                            <Eye size={12} /> View
-                                        </button>
+                                        <div className="flex items-center gap-2 justify-end">
+                                            <a
+                                                href={`http://127.0.0.1:8001${transfer.file_url}`}
+                                                download={transfer.file_name}
+                                                className="text-gray-400 hover:text-[#ff4d00] transition-colors"
+                                                title="Download"
+                                            >
+                                                <Download size={14} />
+                                            </a>
+                                            <button
+                                                onClick={() => setSelectedTransfer(transfer)}
+                                                className="bg-black text-white px-4 py-2 text-[10px] font-bold uppercase tracking-wider hover:bg-[#ff4d00] transition-colors flex items-center gap-2"
+                                            >
+                                                <Eye size={12} /> View
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -201,17 +211,35 @@ const AdminBankTransfers: React.FC = () => {
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-wide block mb-1">Proof Document</label>
                                     <div className="bg-gray-50 border border-gray-200 p-4">
                                         {selectedTransfer.file_url.endsWith('.pdf') ? (
-                                            <div className="flex items-center gap-3">
-                                                <FileText size={32} className="text-red-500" />
-                                                <div>
-                                                    <p className="text-sm font-bold">{selectedTransfer.file_name}</p>
-                                                    <a href={`http://127.0.0.1:8001${selectedTransfer.file_url}`} target="_blank" rel="noopener noreferrer" className="text-xs text-[#ff4d00] hover:underline flex items-center gap-1">
-                                                        Open PDF <ExternalLink size={10} />
-                                                    </a>
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <FileText size={32} className="text-red-500" />
+                                                    <div>
+                                                        <p className="text-sm font-bold">{selectedTransfer.file_name}</p>
+                                                        <a href={`http://127.0.0.1:8001${selectedTransfer.file_url}`} target="_blank" rel="noopener noreferrer" className="text-xs text-[#ff4d00] hover:underline flex items-center gap-1">
+                                                            Open PDF <ExternalLink size={10} />
+                                                        </a>
+                                                    </div>
                                                 </div>
+                                                <a 
+                                                    href={`http://127.0.0.1:8001${selectedTransfer.file_url}`}
+                                                    download={selectedTransfer.file_name}
+                                                    className="bg-black text-white px-4 py-2 text-xs font-bold uppercase tracking-wider hover:bg-[#ff4d00] transition-colors flex items-center gap-2"
+                                                >
+                                                    <Download size={14} /> Download
+                                                </a>
                                             </div>
                                         ) : (
-                                            <img src={`http://127.0.0.1:8001${selectedTransfer.file_url}`} alt="Proof" className="w-full h-auto max-h-64 object-contain" />
+                                            <div className="space-y-3">
+                                                <img src={`http://127.0.0.1:8001${selectedTransfer.file_url}`} alt="Proof" className="w-full h-auto max-h-64 object-contain" />
+                                                <a 
+                                                    href={`http://127.0.0.1:8001${selectedTransfer.file_url}`}
+                                                    download={selectedTransfer.file_name}
+                                                    className="inline-flex items-center gap-2 bg-black text-white px-4 py-2 text-xs font-bold uppercase tracking-wider hover:bg-[#ff4d00] transition-colors"
+                                                >
+                                                    <Download size={14} /> Download Image
+                                                </a>
+                                            </div>
                                         )}
                                     </div>
                                 </div>

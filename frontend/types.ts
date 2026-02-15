@@ -143,6 +143,7 @@ export interface Project {
   name: string;
   domain?: string; // New: Extracted from entryUrls for filtering
   plan: string; // "Custom" or legacy plan name
+  tier?: string; // 'economy', 'professional', 'expert'
   customTarget?: CustomTarget; // New field for volume/duration
   expires: string;
   status: 'active' | 'stopped' | 'completed';
@@ -168,6 +169,7 @@ export interface Transaction {
   type: 'credit' | 'debit';
   userId?: string;
   tier?: string;
+  hits?: number;
   reference?: string;
 }
 

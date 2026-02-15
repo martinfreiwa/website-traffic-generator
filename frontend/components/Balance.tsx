@@ -25,6 +25,18 @@ const Balance: React.FC = () => {
         return () => clearInterval(interval);
     }, []);
 
+    const calculateAvailableHits = (tier: string): number => {
+        const purchasedHits = transactions
+            .filter(t => t.type === 'credit' && t.tier === tier && t.hits)
+            .reduce((sum, t) => sum + (t.hits || 0), 0);
+        
+        const usedHits = transactions
+            .filter(t => t.type === 'debit' && t.tier === tier && t.hits)
+            .reduce((sum, t) => sum + (t.hits || 0), 0);
+        
+        return purchasedHits - usedHits;
+    };
+
     const getTierLabel = (tier?: string): string => {
         if (!tier) return 'General';
         const tierMap: Record<string, string> = {
@@ -64,7 +76,7 @@ const Balance: React.FC = () => {
             return;
         }
 
-        const headers = ['ID', 'Date', 'Description', 'Type', 'Amount', 'Status', 'Balance Tier', 'Reference'];
+        const headers = ['ID', 'Date', 'Description', 'Type', 'Amount', 'Status', 'Balance Tier', 'Hits', 'Reference'];
         const rows = filteredTransactions.map(t => [
             t.id,
             t.date,
@@ -73,6 +85,7 @@ const Balance: React.FC = () => {
             t.amount.toFixed(2),
             t.status,
             getTierLabel(t.tier),
+            t.hits ? (t.type === 'credit' ? '+' : '-') + t.hits.toString() : '',
             t.reference || ''
         ]);
 
@@ -105,6 +118,11 @@ const Balance: React.FC = () => {
                     </div>
                     <div className="text-right">
                         <div className="text-xl font-bold text-gray-900 mb-1">€{trx.amount.toFixed(2)}</div>
+                        {trx.hits && (
+                            <div className={`text-sm font-bold mb-1 ${trx.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>
+                                ({trx.type === 'credit' ? '+' : '-'}{trx.hits.toLocaleString()} hits)
+                            </div>
+                        )}
                         <div className={`text-xs font-bold uppercase tracking-wide px-2 py-0.5 inline-block ${trx.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-gray-100'}`}>
                             {trx.status}
                         </div>
@@ -186,8 +204,8 @@ const Balance: React.FC = () => {
                         </div>
                         <span className="text-[10px] font-bold bg-gray-100 px-2 py-1 uppercase tracking-widest text-gray-500">Economy</span>
                     </div>
-                    <div className="text-3xl font-black text-gray-900 mb-1">€{(user?.balanceEconomy || 0).toFixed(2)}</div>
-                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wide">Available Credits</div>
+                    <div className="text-3xl font-black text-gray-900 mb-1">{calculateAvailableHits('economy').toLocaleString()}</div>
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wide">Hits Available</div>
                 </div>
 
                 {/* Professional Balance */}
@@ -198,8 +216,8 @@ const Balance: React.FC = () => {
                         </div>
                         <span className="text-[10px] font-bold bg-orange-100 text-orange-600 px-2 py-1 uppercase tracking-widest">Professional</span>
                     </div>
-                    <div className="text-3xl font-black text-gray-900 mb-1 relative z-10">€{(user?.balanceProfessional || 0).toFixed(2)}</div>
-                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wide relative z-10">Available Credits</div>
+                    <div className="text-3xl font-black text-gray-900 mb-1 relative z-10">{calculateAvailableHits('professional').toLocaleString()}</div>
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wide relative z-10">Hits Available</div>
                     <Award className="absolute -bottom-4 -right-4 text-orange-50 w-32 h-32 rotate-12" />
                 </div>
 
@@ -211,8 +229,8 @@ const Balance: React.FC = () => {
                         </div>
                         <span className="text-[10px] font-bold bg-[#ff4d00] text-white px-2 py-1 uppercase tracking-widest">Expert</span>
                     </div>
-                    <div className="text-3xl font-black text-white mb-1 relative z-10">€{(user?.balanceExpert || 0).toFixed(2)}</div>
-                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wide relative z-10">Available Credits</div>
+                    <div className="text-3xl font-black text-white mb-1 relative z-10">{calculateAvailableHits('expert').toLocaleString()}</div>
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wide relative z-10">Hits Available</div>
                     <Zap className="absolute -bottom-4 -right-4 text-gray-800 w-32 h-32 rotate-12 opacity-20" />
                 </div>
             </div>
@@ -253,6 +271,7 @@ const Balance: React.FC = () => {
                                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Date</th>
                                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Description</th>
                                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Balance</th>
+                                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Hits</th>
                                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Reference</th>
                                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
                                 <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Amount</th>
@@ -261,7 +280,7 @@ const Balance: React.FC = () => {
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {filteredTransactions.length === 0 ? (
-                                <tr><td colSpan={7} className="text-center p-8 text-sm text-gray-400">No transactions found.</td></tr>
+                                <tr><td colSpan={8} className="text-center p-8 text-sm text-gray-400">No transactions found.</td></tr>
                             ) : (
                                 filteredTransactions.map((trx) => (
                                     <tr key={trx.id} className="hover:bg-gray-50 transition-colors">
@@ -272,6 +291,13 @@ const Balance: React.FC = () => {
                                                 {getTierLabel(trx.tier)}
                                             </span>
                                         </td>
+                                        <td className="px-6 py-4 text-xs font-bold text-gray-900">
+                                            {trx.hits ? (
+                                                <span className={trx.type === 'credit' ? 'text-green-600' : 'text-red-600'}>
+                                                    {trx.type === 'credit' ? '+' : '-'}{trx.hits.toLocaleString()}
+                                                </span>
+                                            ) : '-'}
+                                        </td>
                                         <td className="px-6 py-4 text-xs font-mono text-gray-500">{trx.reference || '-'}</td>
                                         <td className="px-6 py-4">
                                             <span className="px-2 py-1 bg-green-100 text-green-700 text-[9px] font-black uppercase tracking-wider rounded-sm">
@@ -280,6 +306,11 @@ const Balance: React.FC = () => {
                                         </td>
                                         <td className={`px-6 py-4 text-sm font-black text-right ${trx.type === 'credit' ? 'text-green-600' : 'text-gray-900'}`}>
                                             {trx.type === 'debit' ? '-' : '+'}€{trx.amount.toFixed(2)}
+                                            {trx.hits ? (
+                                                <span className={`block text-[10px] ${trx.type === 'credit' ? 'text-green-500' : 'text-red-500'}`}>
+                                                    ({trx.type === 'credit' ? '+' : '-'}{trx.hits.toLocaleString()} hits)
+                                                </span>
+                                            ) : null}
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <button

@@ -122,6 +122,7 @@ class Project(Base):
     name = Column(String, index=True)
     status = Column(String, default="active")  # 'active', 'stopped', 'completed'
     plan_type = Column(String, default="Custom")
+    tier = Column(String, nullable=True)  # 'economy', 'professional', 'expert'
 
     # High Level Constraints (for easy querying without parsing JSON)
     daily_limit = Column(Integer, default=0)
@@ -159,6 +160,7 @@ class Transaction(Base):
     status = Column(String, default="completed")
     tier = Column(String, nullable=True)
     reference = Column(String, nullable=True)
+    hits = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     user = relationship("User", back_populates="transactions")
@@ -253,6 +255,7 @@ class BankTransferProof(Base):
     user_id = Column(String, ForeignKey("users.id"))
     amount = Column(Float, nullable=False)
     tier = Column(String, nullable=True)
+    hits = Column(Integer, nullable=True)
     currency = Column(String, default="USD")
     status = Column(String, default="pending")
     file_url = Column(String, nullable=True)

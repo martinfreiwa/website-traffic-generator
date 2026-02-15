@@ -177,6 +177,7 @@ export const db = {
                 userId: p.user_id,
                 name: p.name,
                 plan: p.plan_type || 'Custom',
+                tier: p.tier,
                 status: p.status,
                 expires: p.expires_at || 'Never',
                 createdAt: p.created_at,
@@ -201,6 +202,7 @@ export const db = {
                 userId: p.user_id,
                 name: p.name,
                 plan: p.plan_type || 'Custom',
+                tier: p.tier,
                 status: p.status,
                 expires: p.expires_at || 'Never',
                 createdAt: p.created_at,
@@ -228,6 +230,7 @@ export const db = {
         const projectData = {
             name: project.name,
             plan_type: project.plan,
+            tier: project.tier,
             settings: project.settings,
             daily_limit: project.customTarget?.dailyLimit || 0,
             total_target: project.customTarget?.totalVisitors || 0
@@ -386,6 +389,7 @@ export const db = {
             type: t.type,
             userId: t.user_id || t.userId,
             tier: t.tier,
+            hits: t.hits,
             reference: t.reference
         }));
         localStorage.setItem('modus_transactions_cache', JSON.stringify(mapped));
@@ -410,6 +414,7 @@ export const db = {
             type: t.type,
             userId: t.user_id || t.userId,
             tier: t.tier,
+            hits: t.hits,
             reference: t.reference
         }));
         localStorage.setItem('modus_admin_transactions_cache', JSON.stringify(mapped));
@@ -436,7 +441,7 @@ export const db = {
         return await response.json();
     },
 
-    purchaseCredits: async (amount: number, description: string, tier?: string) => {
+    purchaseCredits: async (amount: number, description: string, tier?: string, hits?: number) => {
         const user = db.getCurrentUser();
         if (!user) return 0;
 
@@ -446,7 +451,8 @@ export const db = {
                 user_email: user.email,
                 amount: amount,
                 description: description,
-                tier: tier
+                tier: tier,
+                hits: hits
             })
         });
 
@@ -741,7 +747,8 @@ export const db = {
     scanGA4: async (url: string): Promise<string> => {
         const response = await fetchWithAuth(`${API_BASE_URL}/tools/scan-ga4?url=${encodeURIComponent(url)}`);
         if (!response.ok) {
-            throw new Error('GA4 ID not found');
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'GA4 ID not found');
         }
         const data = await response.json();
         return data.tid;
@@ -983,5 +990,36 @@ export const db = {
             throw new Error(err.detail || "Failed to process transfer");
         }
         return await response.json();
+    },
+
+    updateTransaction: async (trx: Transaction): Promise<Transaction> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/transactions/${trx.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                description: trx.desc,
+                amount: trx.amount,
+                type: trx.type,
+                status: trx.status,
+                tier: trx.tier,
+                reference: trx.reference
+            })
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || "Failed to update transaction");
+        }
+        const updated = await response.json();
+        await db.syncAllTransactions();
+        return {
+            id: updated.id,
+            date: updated.created_at?.split('T')[0] || trx.date,
+            desc: updated.description || trx.desc,
+            amount: updated.amount,
+            status: updated.status,
+            type: updated.type,
+            userId: updated.user_id,
+            tier: updated.tier,
+            reference: updated.reference
+        };
     }
 };

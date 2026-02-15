@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../services/db';
-import { Project, ProjectSettings, GeoTarget, PayloadTemplate } from '../types';
-import { ArrowLeft, Save, Globe, Info, Zap, Calculator, Calendar, BarChart2, Check, ExternalLink, MapPin, Search, Upload, X } from 'lucide-react';
+import { Project, ProjectSettings, GeoTarget, PayloadTemplate, Transaction } from '../types';
+import { ArrowLeft, Save, Globe, Info, Zap, Calculator, Calendar, BarChart2, Check, ExternalLink, MapPin, Search, Upload, X, Layers, Award } from 'lucide-react';
 import CustomSelect from './CustomSelect';
 
 interface AddProjectProps {
@@ -26,6 +26,29 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
     const [url, setUrl] = useState('');
     const [gaId, setGaId] = useState('');
     const [isScanningGA, setIsScanningGA] = useState(false);
+
+    // State: Transactions for balance lookup
+    const [transactions, setTransactions] = useState<Transaction[]>([]);
+
+    useEffect(() => {
+        const loadTransactions = async () => {
+            await db.syncTransactions();
+            setTransactions(db.getTransactions());
+        };
+        loadTransactions();
+    }, []);
+
+    const calculateAvailableHits = (tier: string): number => {
+        const purchasedHits = transactions
+            .filter(t => t.type === 'credit' && t.tier === tier && t.hits)
+            .reduce((sum, t) => sum + (t.hits || 0), 0);
+        
+        const usedHits = transactions
+            .filter(t => t.type === 'debit' && t.tier === tier && t.hits)
+            .reduce((sum, t) => sum + (t.hits || 0), 0);
+        
+        return purchasedHits - usedHits;
+    };
 
     // Template State
     const [showLoadTemplate, setShowLoadTemplate] = useState(false);
@@ -128,8 +151,11 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
         if (currentStep === 4) {
             if (totalVisitors < 1000) return setError('Minimum 1,000 visitors required for this tier.');
             if (durationDays < 1) return setError('Minimum 1 day duration.');
-            const currentBalance = db.getBalance();
-            if (totalCost > currentBalance) return setError(`Insufficient funds. Need €${totalCost.toFixed(2)}.`);
+            
+            const availableHits = calculateAvailableHits(selectedTier);
+            if (totalVisitors > availableHits) {
+                return setError(`Insufficient ${selectedTier} hits. Required: ${totalVisitors.toLocaleString()}, Available: ${availableHits.toLocaleString()}`);
+            }
         }
 
         if (currentStep < 5) {
@@ -146,16 +172,20 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
 
     const handleScanGA = async () => {
         if (!url) return;
-        if (selectedTier === 'economy') {
-            setError('GA4 Scanning is only available for Professional & Expert plans.');
-            return;
-        }
         setIsScanningGA(true);
+        setError('');
         try {
             const tid = await db.scanGA4(url);
-            if (tid) setGaId(tid);
-        } catch (e) {
+            if (tid) {
+                setGaId(tid);
+                alert(`Found Analytics ID: ${tid}`);
+            } else {
+                setError('No GA4 ID found on this page. Please enter manually.');
+            }
+        } catch (e: any) {
             console.error("GA Scan failed", e);
+            const errorMsg = e?.message || 'Failed to scan for GA4. Please enter manually.';
+            setError(errorMsg);
         } finally {
             setIsScanningGA(false);
         }
@@ -226,6 +256,7 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
                 userId: db.getCurrentUser()?.id || 'unknown',
                 name: title,
                 plan: selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1),
+                tier: selectedTier,
                 customTarget: {
                     totalVisitors: totalVisitors,
                     durationDays: durationDays,
@@ -565,6 +596,40 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
                                 <p className="text-sm text-gray-500">Define the scale of your campaign.</p>
                             </div>
 
+                            {/* Available Hits Display */}
+                            <div className="grid grid-cols-3 gap-4">
+                                <div className={`p-4 border-2 transition-all ${selectedTier === 'economy' ? 'border-[#ff4d00] bg-orange-50' : 'border-gray-100 bg-gray-50 opacity-50'}`}>
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <Layers size={14} className={selectedTier === 'economy' ? 'text-[#ff4d00]' : 'text-gray-400'} />
+                                        <span className="text-[10px] font-bold text-gray-400 uppercase">Economy Balance</span>
+                                    </div>
+                                    <div className={`text-xl font-black ${selectedTier === 'economy' ? 'text-gray-900' : 'text-gray-400'}`}>
+                                        {calculateAvailableHits('economy').toLocaleString()}
+                                    </div>
+                                    <div className="text-[10px] text-gray-400 uppercase">hits available</div>
+                                </div>
+                                <div className={`p-4 border-2 transition-all ${selectedTier === 'professional' ? 'border-orange-400 bg-orange-50' : 'border-gray-100 bg-gray-50 opacity-50'}`}>
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <Award size={14} className={selectedTier === 'professional' ? 'text-orange-500' : 'text-gray-400'} />
+                                        <span className="text-[10px] font-bold text-gray-400 uppercase">Professional Balance</span>
+                                    </div>
+                                    <div className={`text-xl font-black ${selectedTier === 'professional' ? 'text-gray-900' : 'text-gray-400'}`}>
+                                        {calculateAvailableHits('professional').toLocaleString()}
+                                    </div>
+                                    <div className="text-[10px] text-gray-400 uppercase">hits available</div>
+                                </div>
+                                <div className={`p-4 border-2 transition-all ${selectedTier === 'expert' ? 'border-[#ff4d00] bg-[#ff4d00]/5' : 'border-gray-100 bg-gray-50 opacity-50'}`}>
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <Zap size={14} className={selectedTier === 'expert' ? 'text-[#ff4d00]' : 'text-gray-400'} />
+                                        <span className="text-[10px] font-bold text-gray-400 uppercase">Expert Balance</span>
+                                    </div>
+                                    <div className={`text-xl font-black ${selectedTier === 'expert' ? 'text-[#ff4d00]' : 'text-gray-400'}`}>
+                                        {calculateAvailableHits('expert').toLocaleString()}
+                                    </div>
+                                    <div className="text-[10px] text-gray-400 uppercase">hits available</div>
+                                </div>
+                            </div>
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
                                 <div>
                                     <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Total Visitors Goal</label>
@@ -621,6 +686,31 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
                             <div>
                                 <h2 className="text-2xl font-black text-gray-900 mb-2">Review Campaign</h2>
                                 <p className="text-sm text-gray-500">Confirm details before launching.</p>
+                            </div>
+
+                            {/* Hits Balance Check */}
+                            <div className={`p-4 border-2 ${calculateAvailableHits(selectedTier) >= totalVisitors ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'}`}>
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                                            {selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)} Balance Check
+                                        </div>
+                                        <div className="text-lg font-black text-gray-900">
+                                            {calculateAvailableHits(selectedTier).toLocaleString()} available
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-xs text-gray-500 font-bold">Required</div>
+                                        <div className={`text-xl font-black ${calculateAvailableHits(selectedTier) >= totalVisitors ? 'text-green-600' : 'text-red-600'}`}>
+                                            {totalVisitors.toLocaleString()}
+                                        </div>
+                                    </div>
+                                </div>
+                                {calculateAvailableHits(selectedTier) < totalVisitors && (
+                                    <div className="mt-3 text-xs font-bold text-red-600">
+                                        Insufficient hits! Please purchase more {selectedTier} hits or reduce your volume.
+                                    </div>
+                                )}
                             </div>
 
                             <div className="space-y-4">
