@@ -108,6 +108,7 @@ backend/
 ├── enhanced_hit_emulator.py  # Traffic simulation logic
 ├── web_utils.py         # GA4 TID extraction utilities
 ├── sitemap_crawler.py   # Sitemap parsing
+├── email_service.py     # Email sending utilities
 └── tests/               # Pytest suite
     ├── test_saas_flow.py
     └── test_api_internal.py
@@ -140,6 +141,9 @@ frontend/
 - **Field Mapping:** Backend `snake_case` fields must be mapped to frontend `camelCase` in `db.ts`.
 - **Protected Routes:** Use `ProtectedRoute` component with `adminOnly` prop for role-based access.
 - **Balance Tiers:** Users have multiple balances: `balance`, `balance_economy`, `balance_professional`, `balance_expert`.
+- **Rate Limiting:** Uses `slowapi` with `Limiter` middleware. Handler at `@app.exception_handler(RateLimitExceeded)`.
+- **Static Files:** Served from `static/avatars` and `static/assets` directories.
+- **Stripe Integration:** Uses `stripe` Python SDK with `STRIPE_SECRET_KEY` environment variable.
 
 ### Environment Variables
 | Variable | Purpose |
@@ -148,6 +152,7 @@ frontend/
 | `DATABASE_URL` | Postgres URL; defaults to SQLite if unset |
 | `ALLOWED_ORIGINS` | CORS origins (comma-separated) |
 | `STRIPE_SECRET_KEY` | Stripe API key for payments |
+| `SECRET_KEY` | FastAPI secret key (hardcoded in main.py as fallback) |
 
 ---
 
@@ -157,8 +162,9 @@ frontend/
 - **Database Safety:** Always use `get_db` with `Depends()` in FastAPI endpoints.
 - **Frontend Sync:** `db.ts` caches data in `localStorage`. If modifying backend responses, ensure `syncProjects` or similar functions handle new fields.
 - **Test Verification:** After changes, run `pytest backend/tests/` and `npx tsc --noEmit` to verify.
-- **No Cursor/Copilot Rules:** No `.cursorrules` or `.github/copilot-instructions.md` detected. Follow patterns in `main.py` and `db.ts`.
+- **Pydantic Models:** Use `BaseModel` for request/response schemas. Use `model_validator` for cross-field validation.
+- **API Response Patterns:** Always return JSON-serializable data. Use Pydantic models for type safety.
 
 ---
 
-*Revision: 2026-02-15 | Target: Agentic Coding Assistants*
+*Revision: 2026-02-16 | Target: Agentic Coding Assistants*

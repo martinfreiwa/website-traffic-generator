@@ -251,16 +251,14 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
         setSettings(prev => prev ? ({ ...prev, ...updates }) : undefined);
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (isFreeTrial) return;
 
-        // Validation: Entry URLs are mandatory
         if (!settings.entryUrls || settings.entryUrls.trim() === '') {
             alert("Entry URLs are mandatory. Please provide at least one URL.");
             return;
         }
 
-        // Validation: Geo Targets
         const totalPercent = settings.geoTargets.reduce((sum, t) => sum + t.percent, 0);
         if (totalPercent !== 100 && settings.geoTargets.length > 0) {
             alert(`Total location percentage must equal 100%. Current total: ${totalPercent}%`);
@@ -270,7 +268,6 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
         setIsSaving(true);
         setSaveSuccess(false);
 
-        // Sync legacy fields
         const updatedSettings = {
             ...settings,
             countries: settings.geoTargets.map(t => t.country),
@@ -278,14 +275,19 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
         };
 
         const updatedProject: Project = { ...project, settings: updatedSettings };
-        setTimeout(() => {
-            db.updateProject(updatedProject);
+        
+        try {
+            await db.updateProject(updatedProject);
             setProject(updatedProject);
-            setIsSaving(false);
             setSaveSuccess(true);
             setTimeout(() => setSaveSuccess(false), 2000);
             if (onUpdate) onUpdate();
-        }, 600);
+        } catch (error) {
+            console.error("Failed to save project:", error);
+            alert("Failed to save project settings. Please try again.");
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     // --- TEMPLATE HANDLERS ---

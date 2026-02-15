@@ -66,6 +66,10 @@ app.add_middleware(
 
 # Ensure static directory exists
 os.makedirs("static/avatars", exist_ok=True)
+os.makedirs("static/assets", exist_ok=True)
+
+# Serve static files for assets only
+app.mount("/assets", StaticFiles(directory="static/assets"), name="assets")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # --- Security & Auth Config ---
@@ -206,6 +210,15 @@ class AdminProjectUpdate(BaseModel):
     notes: Optional[str] = None
     is_flagged: Optional[bool] = None
     status: Optional[str] = None
+
+
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = None
+    settings: Optional[Dict[str, Any]] = None
+    daily_limit: Optional[int] = None
+    total_target: Optional[int] = None
+    status: Optional[str] = None
+    tier: Optional[str] = None
 
 
 class ProjectResponse(BaseModel):
@@ -1137,6 +1150,45 @@ def get_project_details(
 
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+@app.put("/projects/{project_id}", response_model=ProjectResponse)
+def update_project(
+    project_id: str,
+    project_update: ProjectUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Update a project - users can only update their own projects"""
+    project = (
+        db.query(models.Project)
+        .filter(
+            models.Project.id == project_id, models.Project.user_id == current_user.id
+        )
+        .first()
+    )
+
+    if not project:
+        raise HTTPException(
+            status_code=404, detail="Project not found or access denied"
+        )
+
+    if project_update.name is not None:
+        project.name = project_update.name
+    if project_update.settings is not None:
+        project.settings = project_update.settings
+    if project_update.daily_limit is not None:
+        project.daily_limit = project_update.daily_limit
+    if project_update.total_target is not None:
+        project.total_target = project_update.total_target
+    if project_update.status is not None:
+        project.status = project_update.status
+    if project_update.tier is not None:
+        project.tier = project_update.tier
+
+    db.commit()
+    db.refresh(project)
     return project
 
 
@@ -3054,3 +3106,25 @@ async def create_payment_intent(
         return {"clientSecret": intent["client_secret"]}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# --- SPA Catch-All Route (must be last) ---
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    from fastapi.responses import FileResponse
+    import os
+
+    # Check if the requested file exists in static
+    static_path = f"static/{full_path}"
+    if os.path.exists(static_path) and os.path.isfile(static_path):
+        return FileResponse(static_path)
+
+    # Otherwise serve index.html for SPA routing
+    return FileResponse("static/index.html")
+
+
+@app.get("/")
+async def serve_index():
+    from fastapi.responses import FileResponse
+
+    return FileResponse("static/index.html")

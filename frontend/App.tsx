@@ -13,6 +13,8 @@ import Blog from './components/blog/Blog';
 import ChatWidget from './components/ChatWidget';
 import PricingPage from './components/PricingPage';
 import CookieConsent from './components/CookieConsent';
+import VerifyEmail from './components/VerifyEmail';
+import ResetPassword from './components/ResetPassword';
 import { db } from './services/db';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; adminOnly?: boolean }> = ({ children, adminOnly }) => {
@@ -92,6 +94,8 @@ const App: React.FC = () => {
                 <Route path="/login" element={<Auth view="login" onLogin={handleLogin} onNavigate={(v) => navigate(`/${v}`)} />} />
                 <Route path="/signup" element={<Auth view="signup" onLogin={handleLogin} onNavigate={(v) => navigate(`/${v}`)} />} />
                 <Route path="/forgot" element={<Auth view="forgot" onLogin={handleLogin} onNavigate={(v) => navigate(`/${v}`)} />} />
+                <Route path="/verify-email" element={<VerifyEmail />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
 
                 {/* Protected Routes */}
                 <Route path="/dashboard/*" element={

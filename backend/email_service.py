@@ -41,11 +41,11 @@ def send_verification_email(email: str, token: str) -> dict:
     verification_url = f"{frontend_url}/verify-email?token={token}"
 
     html = f"""<!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aktiviere deinen Account</title>
+    <title>Activate Your Account</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #FAFAFA; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #FAFAFA;">
@@ -66,27 +66,27 @@ def send_verification_email(email: str, token: str) -> dict:
                     </tr>
                     <tr>
                         <td style="padding: 50px 40px;">
-                            <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 900; color: #111827; letter-spacing: -0.5px;">Willkommen!</h1>
+                            <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 900; color: #111827; letter-spacing: -0.5px;">Welcome!</h1>
                             <p style="margin: 0 0 30px 0; font-size: 16px; font-weight: 500; color: #6B7280; line-height: 1.6;">
-                                Vielen Dank fuer deine Registrierung. Bitte bestätige deine E-Mail-Adresse, um deinen Account zu aktivieren.
+                                Thank you for signing up. Please confirm your email address to activate your account.
                             </p>
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                                 <tr>
                                     <td align="center">
-                                        <a href="{verification_url}" style="display: inline-block; background-color: #ff4d00; color: #FFFFFF; font-size: 14px; font-weight: 700; padding: 16px 32px; border-radius: 12px; text-decoration: none; text-transform: uppercase; letter-spacing: 0.5px;">E-Mail bestätigen</a>
+                                        <a href="{verification_url}" style="display: inline-block; background-color: #ff4d00; color: #FFFFFF; font-size: 14px; font-weight: 700; padding: 16px 32px; border-radius: 12px; text-decoration: none; text-transform: uppercase; letter-spacing: 0.5px;">Confirm Email</a>
                                     </td>
                                 </tr>
                             </table>
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top: 30px;">
                                 <tr>
                                     <td style="background-color: #F9FAFB; border-radius: 8px; padding: 20px;">
-                                        <p style="margin: 0 0 8px 0; font-size: 12px; font-weight: 700; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.5px;">Alternativer Link</p>
+                                        <p style="margin: 0 0 8px 0; font-size: 12px; font-weight: 700; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.5px;">Alternative Link</p>
                                         <p style="margin: 0; font-size: 13px; font-weight: 500; color: #6B7280; word-break: break-all; line-height: 1.5;">{verification_url}</p>
                                     </td>
                                 </tr>
                             </table>
                             <p style="margin: 20px 0 0 0; font-size: 13px; font-weight: 500; color: #9CA3AF;">
-                                Dieser Link läuft in 24 Stunden ab.
+                                This link expires in 24 hours.
                             </p>
                         </td>
                     </tr>
@@ -96,10 +96,10 @@ def send_verification_email(email: str, token: str) -> dict:
                                 <tr>
                                     <td>
                                         <p style="margin: 0 0 8px 0; font-size: 13px; font-weight: 500; color: #6B7280;">
-                                            Fragen? Kontaktiere uns unter <a href="mailto:support@traffic-creator.com" style="color: #ff4d00; text-decoration: none;">support@traffic-creator.com</a>
+                                            Questions? Contact us at <a href="mailto:support@traffic-creator.com" style="color: #ff4d00; text-decoration: none;">support@traffic-creator.com</a>
                                         </p>
                                         <p style="margin: 0; font-size: 12px; font-weight: 500; color: #9CA3AF;">
-                                            © 2026 TrafficGen Pro. Alle Rechte vorbehalten.
+                                            © 2026 TrafficGen Pro. All rights reserved.
                                         </p>
                                     </td>
                                 </tr>
@@ -113,18 +113,18 @@ def send_verification_email(email: str, token: str) -> dict:
 </body>
 </html>"""
 
-    text = f"""Willkommen bei TrafficGen Pro!
+    text = f"""Welcome to TrafficGen Pro!
 
-Bitte bestätige deine E-Mail-Adresse mit diesem Link:
+Please confirm your email address with this link:
 {verification_url}
 
-Dieser Link läuft in 24 Stunden ab.
+This link expires in 24 hours.
 
-Bei Fragen kontaktiere uns unter support@traffic-creator.com"""
+Questions? Contact us at support@traffic-creator.com"""
 
     return send_email(
         to=email,
-        subject="Aktiviere deinen TrafficGen Pro Account",
+        subject="Activate Your TrafficGen Pro Account",
         html=html,
         text=text,
     )
@@ -135,11 +135,11 @@ def send_password_reset_email(email: str, token: str) -> dict:
     reset_url = f"{frontend_url}/reset-password?token={token}"
 
     html = f"""<!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Passwort zurücksetzen</title>
+    <title>Reset Your Password</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #FAFAFA; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #FAFAFA;">
@@ -160,21 +160,21 @@ def send_password_reset_email(email: str, token: str) -> dict:
                     </tr>
                     <tr>
                         <td style="padding: 50px 40px;">
-                            <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 900; color: #111827; letter-spacing: -0.5px;">Passwort zurücksetzen</h1>
+                            <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 900; color: #111827; letter-spacing: -0.5px;">Reset Password</h1>
                             <p style="margin: 0 0 30px 0; font-size: 16px; font-weight: 500; color: #6B7280; line-height: 1.6;">
-                                Du hast eine Anfrage gestellt, dein Passwort zurückzusetzen. Klicke auf den Button unten, um ein neues Passwort zu erstellen.
+                                You requested to reset your password. Click the button below to create a new password.
                             </p>
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                                 <tr>
                                     <td align="center">
-                                        <a href="{reset_url}" style="display: inline-block; background-color: #ff4d00; color: #FFFFFF; font-size: 14px; font-weight: 700; padding: 16px 32px; border-radius: 12px; text-decoration: none; text-transform: uppercase; letter-spacing: 0.5px;">Passwort zurücksetzen</a>
+                                        <a href="{reset_url}" style="display: inline-block; background-color: #ff4d00; color: #FFFFFF; font-size: 14px; font-weight: 700; padding: 16px 32px; border-radius: 12px; text-decoration: none; text-transform: uppercase; letter-spacing: 0.5px;">Reset Password</a>
                                     </td>
                                 </tr>
                             </table>
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top: 30px;">
                                 <tr>
                                     <td style="background-color: #F9FAFB; border-radius: 8px; padding: 20px;">
-                                        <p style="margin: 0 0 8px 0; font-size: 12px; font-weight: 700; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.5px;">Alternativer Link</p>
+                                        <p style="margin: 0 0 8px 0; font-size: 12px; font-weight: 700; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.5px;">Alternative Link</p>
                                         <p style="margin: 0; font-size: 13px; font-weight: 500; color: #6B7280; word-break: break-all; line-height: 1.5;">{reset_url}</p>
                                     </td>
                                 </tr>
@@ -183,7 +183,7 @@ def send_password_reset_email(email: str, token: str) -> dict:
                                 <tr>
                                     <td style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; border-radius: 4px; padding: 16px;">
                                         <p style="margin: 0; font-size: 13px; font-weight: 600; color: #92400E; line-height: 1.5;">
-                                            Wichtig: Dieser Link ist nur 1 Stunde gültig. Wenn du diese Anfrage nicht gestellt hast, kannst du diese E-Mail ignorieren.
+                                            Important: This link is only valid for 1 hour. If you did not request this, you can ignore this email.
                                         </p>
                                     </td>
                                 </tr>
@@ -196,10 +196,10 @@ def send_password_reset_email(email: str, token: str) -> dict:
                                 <tr>
                                     <td>
                                         <p style="margin: 0 0 8px 0; font-size: 13px; font-weight: 500; color: #6B7280;">
-                                            Fragen? Kontaktiere uns unter <a href="mailto:support@traffic-creator.com" style="color: #ff4d00; text-decoration: none;">support@traffic-creator.com</a>
+                                            Questions? Contact us at <a href="mailto:support@traffic-creator.com" style="color: #ff4d00; text-decoration: none;">support@traffic-creator.com</a>
                                         </p>
                                         <p style="margin: 0; font-size: 12px; font-weight: 500; color: #9CA3AF;">
-                                            © 2026 TrafficGen Pro. Alle Rechte vorbehalten.
+                                            © 2026 TrafficGen Pro. All rights reserved.
                                         </p>
                                     </td>
                                 </tr>
@@ -213,19 +213,19 @@ def send_password_reset_email(email: str, token: str) -> dict:
 </body>
 </html>"""
 
-    text = f"""Passwort zurücksetzen
+    text = f"""Reset Your Password
 
-Du hast eine Anfrage gestellt, dein Passwort zurückzusetzen.
+You requested to reset your password.
 
 Link: {reset_url}
 
-Dieser Link ist nur 1 Stunde gültig. Wenn du diese Anfrage nicht gestellt hast, ignoriere diese E-Mail.
+This link is only valid for 1 hour. If you did not request this, you can ignore this email.
 
-Bei Fragen kontaktiere uns unter support@traffic-creator.com"""
+Questions? Contact us at support@traffic-creator.com"""
 
     return send_email(
         to=email,
-        subject="Passwort zurücksetzen - TrafficGen Pro",
+        subject="Reset Your Password - TrafficGen Pro",
         html=html,
         text=text,
     )
@@ -236,11 +236,11 @@ def send_welcome_email(email: str, name: str = "User") -> dict:
     display_name = name if name and name != "User" else email.split("@")[0]
 
     html = f"""<!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Willkommen bei TrafficGen Pro</title>
+    <title>Welcome to TrafficGen Pro</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #FAFAFA; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #FAFAFA;">
@@ -261,33 +261,33 @@ def send_welcome_email(email: str, name: str = "User") -> dict:
                     </tr>
                     <tr>
                         <td style="padding: 50px 40px;">
-                            <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 900; color: #111827; letter-spacing: -0.5px;">Willkommen, {display_name}!</h1>
+                            <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 900; color: #111827; letter-spacing: -0.5px;">Welcome, {display_name}!</h1>
                             <p style="margin: 0 0 30px 0; font-size: 16px; font-weight: 500; color: #6B7280; line-height: 1.6;">
-                                Dein Account ist jetzt aktiviert. Wir freuen uns, dich an Bord zu haben!
+                                Your account is now activated. We're glad to have you on board!
                             </p>
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 30px;">
                                 <tr>
                                     <td style="background-color: #F9FAFB; border-radius: 12px; padding: 24px;">
-                                        <p style="margin: 0 0 16px 0; font-size: 14px; font-weight: 700; color: #111827; text-transform: uppercase; letter-spacing: 0.5px;">Deine nächsten Schritte</p>
+                                        <p style="margin: 0 0 16px 0; font-size: 14px; font-weight: 700; color: #111827; text-transform: uppercase; letter-spacing: 0.5px;">Your Next Steps</p>
                                         <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                                             <tr>
                                                 <td style="padding: 10px 0; border-bottom: 1px solid #E5E7EB;">
-                                                    <p style="margin: 0; font-size: 14px; font-weight: 500; color: #374151;">Erstelle dein erstes Traffic-Projekt</p>
+                                                    <p style="margin: 0; font-size: 14px; font-weight: 500; color: #374151;">Create your first traffic project</p>
                                                 </td>
                                             </tr>
                                             <tr>
                                                 <td style="padding: 10px 0; border-bottom: 1px solid #E5E7EB;">
-                                                    <p style="margin: 0; font-size: 14px; font-weight: 500; color: #374151;">Konfiguriere Geo-Targeting für bestimmte Länder</p>
+                                                    <p style="margin: 0; font-size: 14px; font-weight: 500; color: #374151;">Configure geo-targeting for specific countries</p>
                                                 </td>
                                             </tr>
                                             <tr>
                                                 <td style="padding: 10px 0; border-bottom: 1px solid #E5E7EB;">
-                                                    <p style="margin: 0; font-size: 14px; font-weight: 500; color: #374151;">Wähle zwischen verschiedenen Traffic-Quellen</p>
+                                                    <p style="margin: 0; font-size: 14px; font-weight: 500; color: #374151;">Choose from various traffic sources</p>
                                                 </td>
                                             </tr>
                                             <tr>
                                                 <td style="padding: 10px 0;">
-                                                    <p style="margin: 0; font-size: 14px; font-weight: 500; color: #374151;">Analysiere deine Traffic-Statistiken in Echtzeit</p>
+                                                    <p style="margin: 0; font-size: 14px; font-weight: 500; color: #374151;">Analyze your traffic statistics in real-time</p>
                                                 </td>
                                             </tr>
                                         </table>
@@ -297,7 +297,7 @@ def send_welcome_email(email: str, name: str = "User") -> dict:
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                                 <tr>
                                     <td align="center">
-                                        <a href="{frontend_url}/dashboard" style="display: inline-block; background-color: #ff4d00; color: #FFFFFF; font-size: 14px; font-weight: 700; padding: 16px 32px; border-radius: 12px; text-decoration: none; text-transform: uppercase; letter-spacing: 0.5px;">Zum Dashboard</a>
+                                        <a href="{frontend_url}/dashboard" style="display: inline-block; background-color: #ff4d00; color: #FFFFFF; font-size: 14px; font-weight: 700; padding: 16px 32px; border-radius: 12px; text-decoration: none; text-transform: uppercase; letter-spacing: 0.5px;">Go to Dashboard</a>
                                     </td>
                                 </tr>
                             </table>
@@ -309,10 +309,10 @@ def send_welcome_email(email: str, name: str = "User") -> dict:
                                 <tr>
                                     <td>
                                         <p style="margin: 0 0 8px 0; font-size: 13px; font-weight: 500; color: #6B7280;">
-                                            Fragen? Kontaktiere uns unter <a href="mailto:support@traffic-creator.com" style="color: #ff4d00; text-decoration: none;">support@traffic-creator.com</a>
+                                            Questions? Contact us at <a href="mailto:support@traffic-creator.com" style="color: #ff4d00; text-decoration: none;">support@traffic-creator.com</a>
                                         </p>
                                         <p style="margin: 0; font-size: 12px; font-weight: 500; color: #9CA3AF;">
-                                            © 2026 TrafficGen Pro. Alle Rechte vorbehalten.
+                                            © 2026 TrafficGen Pro. All rights reserved.
                                         </p>
                                     </td>
                                 </tr>
@@ -326,23 +326,23 @@ def send_welcome_email(email: str, name: str = "User") -> dict:
 </body>
 </html>"""
 
-    text = f"""Willkommen bei TrafficGen Pro, {display_name}!
+    text = f"""Welcome to TrafficGen Pro, {display_name}!
 
-Dein Account ist jetzt aktiviert.
+Your account is now activated.
 
-Deine nächsten Schritte:
-- Erstelle dein erstes Traffic-Projekt
-- Konfiguriere Geo-Targeting für bestimmte Länder
-- Wähle zwischen verschiedenen Traffic-Quellen
-- Analysiere deine Traffic-Statistiken in Echtzeit
+Your Next Steps:
+- Create your first traffic project
+- Configure geo-targeting for specific countries
+- Choose from various traffic sources
+- Analyze your traffic statistics in real-time
 
-Zum Dashboard: {frontend_url}/dashboard
+Go to Dashboard: {frontend_url}/dashboard
 
-Bei Fragen kontaktiere uns unter support@traffic-creator.com"""
+Questions? Contact us at support@traffic-creator.com"""
 
     return send_email(
         to=email,
-        subject="Willkommen bei TrafficGen Pro - Account aktiviert!",
+        subject="Welcome to TrafficGen Pro - Account Activated!",
         html=html,
         text=text,
     )
@@ -354,11 +354,11 @@ def send_payment_receipt_email(
     frontend_url = get_frontend_url()
 
     html = f"""<!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zahlungsbestätigung</title>
+    <title>Payment Confirmation</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #FAFAFA; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #FAFAFA;">
@@ -366,12 +366,12 @@ def send_payment_receipt_email(
             <td align="center" style="padding: 40px 20px;">
                 <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="background-color: #FFFFFF; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
                     <tr>
-                        <td style="background-color: #10B981; padding: 40px 40px 30px 40px; text-align: center;">
+                        <td style="background: linear-gradient(135deg, #ff4d00 0%, #ff6b35 100%); padding: 40px 40px 30px 40px; text-align: center;">
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                                 <tr>
                                     <td align="center">
                                         <span style="font-size: 32px; font-weight: 900; color: #FFFFFF; letter-spacing: -0.5px;">TRAFFIC</span>
-                                        <span style="font-size: 10px; font-weight: 700; background-color: #FFFFFF; color: #10B981; padding: 4px 8px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; letter-spacing: 1px;">Creator</span>
+                                        <span style="font-size: 10px; font-weight: 700; background-color: #000000; color: #FFFFFF; padding: 4px 8px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; letter-spacing: 1px;">Creator</span>
                                     </td>
                                 </tr>
                             </table>
@@ -379,9 +379,9 @@ def send_payment_receipt_email(
                     </tr>
                     <tr>
                         <td style="padding: 50px 40px;">
-                            <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 900; color: #111827; letter-spacing: -0.5px;">Zahlung erfolgreich</h1>
+                            <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 900; color: #111827; letter-spacing: -0.5px;">Payment Successful!</h1>
                             <p style="margin: 0 0 30px 0; font-size: 16px; font-weight: 500; color: #6B7280; line-height: 1.6;">
-                                Vielen Dank für deinen Einkauf bei TrafficGen Pro.
+                                Thank you for your purchase at TrafficGen Pro.
                             </p>
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 30px;">
                                 <tr>
@@ -401,7 +401,7 @@ def send_payment_receipt_email(
                                                 <td style="padding: 12px 0; border-bottom: 1px solid #E5E7EB;">
                                                     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                                                         <tr>
-                                                            <td style="font-size: 14px; font-weight: 500; color: #6B7280;">Betrag</td>
+                                                            <td style="font-size: 14px; font-weight: 500; color: #6B7280;">Amount</td>
                                                             <td align="right" style="font-size: 14px; font-weight: 600; color: #111827;">EUR {amount:.2f}</td>
                                                         </tr>
                                                     </table>
@@ -411,7 +411,7 @@ def send_payment_receipt_email(
                                                 <td style="padding: 12px 0; border-bottom: 1px solid #E5E7EB;">
                                                     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                                                         <tr>
-                                                            <td style="font-size: 14px; font-weight: 500; color: #6B7280;">Transaktions-ID</td>
+                                                            <td style="font-size: 14px; font-weight: 500; color: #6B7280;">Transaction ID</td>
                                                             <td align="right" style="font-size: 14px; font-weight: 600; color: #111827; font-family: monospace;">{transaction_id}</td>
                                                         </tr>
                                                     </table>
@@ -421,7 +421,7 @@ def send_payment_receipt_email(
                                                 <td style="padding: 12px 0;">
                                                     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                                                         <tr>
-                                                            <td style="font-size: 14px; font-weight: 500; color: #6B7280;">Datum</td>
+                                                            <td style="font-size: 14px; font-weight: 500; color: #6B7280;">Date</td>
                                                             <td align="right" style="font-size: 14px; font-weight: 600; color: #111827;">{datetime.now().strftime("%d.%m.%Y")}</td>
                                                         </tr>
                                                     </table>
@@ -434,7 +434,7 @@ def send_payment_receipt_email(
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                                 <tr>
                                     <td align="center">
-                                        <a href="{frontend_url}/dashboard" style="display: inline-block; background-color: #ff4d00; color: #FFFFFF; font-size: 14px; font-weight: 700; padding: 16px 32px; border-radius: 12px; text-decoration: none; text-transform: uppercase; letter-spacing: 0.5px;">Zum Dashboard</a>
+                                        <a href="{frontend_url}/dashboard" style="display: inline-block; background-color: #ff4d00; color: #FFFFFF; font-size: 14px; font-weight: 700; padding: 16px 32px; border-radius: 12px; text-decoration: none; text-transform: uppercase; letter-spacing: 0.5px;">Go to Dashboard</a>
                                     </td>
                                 </tr>
                             </table>
@@ -446,10 +446,10 @@ def send_payment_receipt_email(
                                 <tr>
                                     <td>
                                         <p style="margin: 0 0 8px 0; font-size: 13px; font-weight: 500; color: #6B7280;">
-                                            Fragen? Kontaktiere uns unter <a href="mailto:support@traffic-creator.com" style="color: #ff4d00; text-decoration: none;">support@traffic-creator.com</a>
+                                            Questions? Contact us at <a href="mailto:support@traffic-creator.com" style="color: #ff4d00; text-decoration: none;">support@traffic-creator.com</a>
                                         </p>
                                         <p style="margin: 0; font-size: 12px; font-weight: 500; color: #9CA3AF;">
-                                            © 2026 TrafficGen Pro. Alle Rechte vorbehalten.
+                                            © 2026 TrafficGen Pro. All rights reserved.
                                         </p>
                                     </td>
                                 </tr>
@@ -463,22 +463,22 @@ def send_payment_receipt_email(
 </body>
 </html>"""
 
-    text = f"""Zahlungsbestätigung
+    text = f"""Payment Confirmation
 
-Vielen Dank für deinen Einkauf bei TrafficGen Pro.
+Thank you for your purchase at TrafficGen Pro.
 
 Plan: {plan}
-Betrag: EUR {amount:.2f}
-Transaktions-ID: {transaction_id}
-Datum: {datetime.now().strftime("%d.%m.%Y")}
+Amount: EUR {amount:.2f}
+Transaction ID: {transaction_id}
+Date: {datetime.now().strftime("%d.%m.%Y")}
 
-Zum Dashboard: {frontend_url}/dashboard
+Go to Dashboard: {frontend_url}/dashboard
 
-Bei Fragen kontaktiere uns unter support@traffic-creator.com"""
+Questions? Contact us at support@traffic-creator.com"""
 
     return send_email(
         to=email,
-        subject=f"Zahlungsbestätigung - {plan}",
+        subject=f"Payment Confirmation - {plan}",
         html=html,
         text=text,
     )

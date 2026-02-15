@@ -126,6 +126,11 @@ const AdminCreateProject: React.FC<AdminCreateProjectProps> = ({ onBack, onSucce
         setError(null);
 
         try {
+            const settingsWithUrl = {
+                ...settings,
+                entryUrls: entryUrls
+            };
+
             const newProject: Project = {
                 id: 'proj_' + Date.now(),
                 userId: selectedUserId || db.getCurrentUser()?.id || 'admin',
@@ -138,7 +143,7 @@ const AdminCreateProject: React.FC<AdminCreateProjectProps> = ({ onBack, onSucce
                 },
                 expires: 'Never',
                 status: 'active',
-                settings,
+                settings: settingsWithUrl,
                 stats: []
             };
 

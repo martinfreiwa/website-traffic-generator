@@ -1,7 +1,7 @@
 
 import { Project, PriceClass, ProjectSettings, Transaction, User, Ticket, SystemSettings, Notification, TrafficLog, SystemAlert, LiveVisitor, Broadcast, AdminStats, Coupon, MarketingCampaign, ConversionSettings, ActivityLog, UserSession, ImpersonationLog, BalanceAdjustmentLog, EmailLog, UserNotificationPrefs, UserReferral, AdminUserDetails } from '../types';
 
-const API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin;
 
 
 const getStorageItem = (key: string) => {
@@ -299,12 +299,24 @@ export const db = {
     },
 
     updateProject: async (project: Project) => {
-        // Backend needs a PUT /projects/{id} endpoint, but we can reuse POST if we update logic
-        // For now, let's assume we update status or settings
+        const payload = {
+            name: project.name,
+            settings: project.settings,
+            daily_limit: project.customTarget?.dailyLimit || 0,
+            total_target: project.customTarget?.totalVisitors || 0,
+            status: project.status,
+            tier: project.tier
+        };
+
         const response = await fetchWithAuth(`${API_BASE_URL}/projects/${project.id}`, {
-            method: 'POST', // or PUT if added
-            body: JSON.stringify(project)
+            method: 'PUT',
+            body: JSON.stringify(payload)
         });
+        
+        if (!response.ok) {
+            throw new Error("Failed to update project");
+        }
+        
         await db.syncProjects();
         return db.getProjects();
     },

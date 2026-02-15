@@ -4,6 +4,7 @@ import Sidebar from './Sidebar';
 import { Link, Routes, Route, useNavigate, useLocation, Navigate, useParams } from 'react-router-dom';
 import Header from './Header';
 import BroadcastBanner from './BroadcastBanner';
+import VerificationBanner from './VerificationBanner';
 import ProjectList from './ProjectList';
 import ProjectDetails from './ProjectDetails';
 import AddProject from './AddProject';
@@ -170,6 +171,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
 
       <main className="flex-1 md:ml-64 flex flex-col min-h-screen relative">
         <BroadcastBanner />
+        
+        {!db.getCurrentUser()?.isVerified && db.getCurrentUser()?.email && (
+          <VerificationBanner email={db.getCurrentUser()!.email} />
+        )}
 
         {/* Impersonation Banner */}
         {localStorage.getItem('tgp_admin_token') && (

@@ -6,9 +6,15 @@ python-dotenv
 aiohttp
 sqlalchemy
 psycopg2-binary
-passlib[bcrypt]
+passlib[bcrypt,argon2]
+argon2-cffi
+argon2-cffi-bindings
 python-jose[cryptography]
 python-multipart
 sse-starlette
 resend
 slowapi
+stripe
+itsdangerous
+bcrypt
+cryptography

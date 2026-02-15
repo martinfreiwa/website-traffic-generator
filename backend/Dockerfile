@@ -23,7 +23,8 @@ RUN pip install sse-starlette # Ensure this is present if missed in reqs
 # Copy application code
 COPY . .
 
-# Expose port
+# Expose port (Cloud Run uses PORT env var, default 8080)
+ENV PORT=8000
 EXPOSE 8000
 
 # Start application

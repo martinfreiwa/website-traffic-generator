@@ -1,9 +1,7 @@
-
 import React, { useState } from 'react';
-import { ArrowLeft, Mail, Lock, User, ArrowRight, AlertTriangle, ShieldAlert } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { ArrowLeft, Mail, Lock, User, ArrowRight, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { db } from '../services/db';
-import { User as UserType } from '../types';
 
 interface AuthProps {
     onLogin: (role: 'user' | 'admin') => void;
@@ -12,47 +10,70 @@ interface AuthProps {
 }
 
 const Auth: React.FC<AuthProps> = ({ onLogin, onNavigate, view }) => {
+    const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [name, setName] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
+    const [showResendOption, setShowResendOption] = useState(false);
+
+    const handleResendVerification = async () => {
+        if (!email) return;
+        setIsLoading(true);
+        try {
+            await db.resendVerificationEmail(email);
+            setSuccess('Verification email sent! Check your inbox.');
+            setShowResendOption(false);
+        } catch (err: any) {
+            setError(err.message || 'Failed to resend verification email');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+        setSuccess('');
         setIsLoading(true);
-
-        const settings = db.getSystemSettings();
+        setShowResendOption(false);
 
         try {
             if (view === 'signup') {
-                if (!settings.allowRegistrations) {
-                    throw new Error("New registrations are currently disabled by administrator.");
+                if (password.length < 6) {
+                    throw new Error('Password must be at least 6 characters long');
                 }
 
                 await db.register(name, email, password);
-                // After signup, we automatically login
-                const userData = await db.login(email, password);
-                onLogin(userData.role);
+                setSuccess('Account created! Please check your email to verify your account before logging in.');
+                setEmail('');
+                setPassword('');
+                setName('');
 
             } else if (view === 'login') {
                 const userData = await db.login(email, password);
-
-                if (settings.maintenanceMode && userData.role !== 'admin') {
-                    throw new Error('System is currently under maintenance. Please try again later.');
-                }
 
                 if (userData.status === 'suspended') {
                     throw new Error('Your account has been suspended. Please contact support.');
                 }
 
-                // Sync additional data
                 await db.syncAll();
                 onLogin(userData.role);
+
+            } else if (view === 'forgot') {
+                await db.forgotPassword(email);
+                setSuccess('Password reset link sent! Check your email.');
+                setEmail('');
             }
         } catch (err: any) {
-            setError(err.message || "Authentication failed.");
+            const errorMsg = err.message || 'An error occurred';
+            setError(errorMsg);
+
+            if (errorMsg.toLowerCase().includes('verify') || errorMsg.toLowerCase().includes('verification')) {
+                setShowResendOption(true);
+            }
         } finally {
             setIsLoading(false);
         }
@@ -62,12 +83,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigate, view }) => {
         <div className="min-h-screen bg-white flex items-center justify-center p-6">
             <div className="max-w-md w-full bg-white animate-in fade-in slide-in-from-bottom-4 duration-500">
 
-                {/* Back Button */}
                 <Link to="/" className="flex items-center gap-2 text-gray-400 hover:text-[#ff4d00] transition-colors mb-8 text-xs font-bold uppercase tracking-wider">
                     <ArrowLeft size={16} /> Back to Home
                 </Link>
 
-                {/* Logo */}
                 <div className="flex items-center gap-2 mb-8">
                     <span className="text-3xl font-black text-[#ff4d00] tracking-tight">TRAFFIC</span>
                     <span className="text-xs font-bold bg-black text-white px-2 py-1 rounded-sm uppercase tracking-wide">Creator</span>
@@ -76,7 +95,24 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigate, view }) => {
                 {error && (
                     <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 flex items-center gap-3">
                         <AlertTriangle className="text-red-500 shrink-0" size={20} />
-                        <span className="text-red-700 text-xs font-bold leading-relaxed">{error}</span>
+                        <div className="flex-1">
+                            <span className="text-red-700 text-xs font-bold leading-relaxed">{error}</span>
+                            {showResendOption && (
+                                <button
+                                    onClick={handleResendVerification}
+                                    className="block mt-2 text-[#ff4d00] text-xs font-bold underline hover:no-underline"
+                                >
+                                    Resend verification email
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {success && (
+                    <div className="mb-6 bg-green-50 border-l-4 border-green-500 p-4 flex items-center gap-3">
+                        <CheckCircle className="text-green-500 shrink-0" size={20} />
+                        <span className="text-green-700 text-xs font-bold leading-relaxed">{success}</span>
                     </div>
                 )}
 
@@ -84,7 +120,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigate, view }) => {
                     <div>
                         <h1 className="text-3xl font-black text-gray-900 mb-2">Reset Password</h1>
                         <p className="text-gray-500 mb-8">Enter your email address and we'll send you a link to reset your password.</p>
-                        <form onSubmit={(e) => { e.preventDefault(); alert('Reset link sent!'); onNavigate('login'); }} className="space-y-6">
+                        <form onSubmit={handleSubmit} className="space-y-6">
                             <div>
                                 <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-2">Email Address</label>
                                 <div className="relative">
@@ -92,13 +128,25 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigate, view }) => {
                                     <input
                                         type="email"
                                         required
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
                                         className="w-full bg-[#f9fafb] border border-gray-200 p-4 pl-12 text-sm font-medium text-gray-900 focus:border-[#ff4d00] outline-none transition-colors"
                                         placeholder="name@company.com"
                                     />
                                 </div>
                             </div>
-                            <button className="w-full bg-black text-white p-4 text-xs font-bold uppercase tracking-widest hover:bg-[#ff4d00] transition-colors">
-                                Send Reset Link
+                            <button
+                                type="submit"
+                                disabled={isLoading}
+                                className="w-full bg-black text-white p-4 text-xs font-bold uppercase tracking-widest hover:bg-[#ff4d00] transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <Loader2 className="animate-spin" size={16} /> Sending...
+                                    </>
+                                ) : (
+                                    'Send Reset Link'
+                                )}
                             </button>
                             <div className="text-center">
                                 <Link to="/login" className="text-xs font-bold text-gray-400 uppercase tracking-wider hover:text-black">
@@ -162,9 +210,12 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigate, view }) => {
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
                                         className="w-full bg-[#f9fafb] border border-gray-200 p-4 pl-12 text-sm font-medium text-gray-900 focus:border-[#ff4d00] outline-none transition-colors"
-                                        placeholder="••••••••"
+                                        placeholder={view === 'signup' ? 'Min. 6 characters' : '••••••••'}
                                     />
                                 </div>
+                                {view === 'signup' && password.length > 0 && password.length < 6 && (
+                                    <p className="text-red-500 text-xs mt-1 font-bold">Password must be at least 6 characters</p>
+                                )}
                             </div>
 
                             <button
@@ -172,7 +223,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigate, view }) => {
                                 disabled={isLoading}
                                 className="w-full bg-[#ff4d00] text-white p-4 text-xs font-bold uppercase tracking-widest hover:bg-black transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                             >
-                                {isLoading ? 'Processing...' : (
+                                {isLoading ? (
+                                    <>
+                                        <Loader2 className="animate-spin" size={16} /> Processing...
+                                    </>
+                                ) : (
                                     <>
                                         {view === 'login' ? 'Sign In' : 'Get Started'} <ArrowRight size={16} />
                                     </>
