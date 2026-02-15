@@ -7,29 +7,29 @@
 Provides a high-level overview of the user's account performance, active projects, and recent notifications.
 
 ## Features
-*   [ ] Traffic Summary Chart (Total hits, active now).
-*   [ ] Recent Projects List (Quick access).
-*   [ ] System Status / Notifications.
-*   [ ] "Quick Start" campaign button.
+*   [x] Traffic Summary Chart (Total hits, active now).
+*   [x] Recent Projects List (Quick access).
+*   [x] System Status / Notifications.
+*   [x] "Quick Start" campaign button.
 
 ## Planned Improvements
-*   [ ] **Daily SEO Tip**: Random tip card for improving website ranking.
+*   [x] **Daily SEO Tip**: Random tip card for improving website ranking.
 *   [ ] **Customizable Widgets**: Allow users to reorder or hide dashboard cards.
 *   [ ] **Dark Mode Sync**: Ensure dashboard theme matches system preference automatically.
 *   [ ] **Onboarding Tour**: Guided tooltip tour for new users.
-*   [ ] **Gamification Level**: "Level 1 User" progress bar based on traffic used.
+*   [x] **Gamification Level**: "Level 1 User" progress bar based on traffic used.
 *   [ ] **Announcement Modal**: Pop-up for critical system news on login.
 *   [ ] **Traffic Forecast**: "Weather widget" style visualization of expected traffic today.
-*   [ ] **Streak Counter**: "You've had active traffic for X days straight!"
+*   [x] **Streak Counter**: "You've had active traffic for X days straight!"
 *   [ ] **Regional Map**: Mini heatmap showing where your traffic is currently coming from.
 *   [ ] **Shortcut Keys**: "Press 'N' to create new project" hint.
 *   [ ] **Affiliate Widget**: "You have earned $X this month" mini card.
-*   [ ] **Quick Buy**: "Buy 500 Credits" button directly on the dashboard.
+*   [x] **Quick Buy**: "Buy 500 Credits" button directly on the dashboard.
 *   [ ] **Account Age**: "User for 342 days" badge.
 *   [ ] **Personal Goal**: Progress bar for "Reach 1 Million hits this month".
-*   [ ] **Time of Day Greeting**: "Good Morning/Reviewing" based on user time.
+*   [x] **Time of Day Greeting**: "Good Morning/Reviewing" based on user time.
 *   [ ] **Next Invoice**: "Next invoice due in 12 days" reminder.
-*   [ ] **Support Status**: "Support is currently online" green dot.
+*   [x] **Support Status**: "Support is currently online" green dot.
 *   [ ] **Quick Filter**: Buttons to filter 'Recent Projects' by status.
 *   [ ] **Referral Progress**: "You are 2 referrals away from Pro Status" bar.
 *   [ ] **Last Login**: "Last login: Yesterday from IP 1.2.3.4".
@@ -42,7 +42,7 @@ Provides a high-level overview of the user's account performance, active project
 *   [ ] **Focus Mode**: Button to hide all distractions/sidebar.
 *   [ ] **Quick Clone**: "Rerun yesterday's campaign" one-click action.
 *   [ ] **Usage Heatmap**: Calendar view showing days with most activity.
-*   [ ] **Did You Know**: Interesting fact about internet traffic.
+*   [x] **Did You Know**: Interesting fact about internet traffic.
 *   [ ] **Upgrade Nudge**: Subtle "Unlock 2x speed with Pro" card.
 *   [ ] **Maintenance Countdown**: "System update in 2 hours" (if scheduled).
 *   [ ] **Search Bar**: Global search (Projects, Settings, Help) in header.
@@ -56,13 +56,13 @@ Provides a high-level overview of the user's account performance, active project
 *   [ ] **Theme Picker**: "Ocean / Sunset / Forest" color presets.
 *   [ ] **Session Timer**: "Session expires in 30m" progress ring.
 *   [ ] **Quick Translate**: Google Translate widget for dashboard UI.
-*   [ ] **API Status**: "API is healthy" indicator.
-*   [ ] **Recent Alerts**: List of last 3 notifications (e.g. "Project X finished").
-*   [ ] **Referral Link Copy**: One-click copy button for affiliate link.
+*   [x] **API Status**: "API is healthy" indicator.
+*   [x] **Recent Alerts**: List of last 3 notifications (e.g. "Project X finished").
+*   [x] **Referral Link Copy**: One-click copy button for affiliate link.
 *   [ ] **Tutorial Video**: "Watch how to get started" embedded YouTube modal.
-*   [ ] **Server Time**: Display exact server time (UTC) for scheduling reference.
+*   [x] **Server Time**: Display exact server time (UTC) for scheduling reference.
 *   [ ] **Project Health**: "3/5 projects are running optimally".
-*   [ ] **Bonus Credits**: "Claim daily login bonus (10 credits)" button.
+*   [x] **Bonus Credits**: "Claim daily login bonus (10 credits)" button.
 
 ## Dependencies
 *   `recharts` for charts.

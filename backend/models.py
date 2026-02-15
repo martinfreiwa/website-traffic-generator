@@ -90,6 +90,10 @@ class User(Base):
     plan = Column(String, default="free")  # 'free', 'pro', 'agency'
     shadow_banned = Column(Boolean, default=False)
     is_verified = Column(Boolean, default=False)
+    verification_token = Column(String, nullable=True)
+    verification_token_expires = Column(DateTime, nullable=True)
+    password_reset_token = Column(String, nullable=True)
+    password_reset_token_expires = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)  # Admin private notes
     tags = Column(JSON, default=list)  # List of strings e.g. ["VIP", "High Risk"]
     ban_reason = Column(String, nullable=True)
@@ -99,6 +103,15 @@ class User(Base):
     # Additional security fields
     api_key_last_used = Column(DateTime, nullable=True)
     password_changed_at = Column(DateTime, nullable=True)
+
+    # Subscription fields
+    stripe_customer_id = Column(String, nullable=True)
+    stripe_subscription_id = Column(String, nullable=True)
+    subscription_status = Column(
+        String, default="inactive"
+    )  # active, inactive, past_due, canceled
+    subscription_plan = Column(String, nullable=True)  # starter, professional, agency
+    subscription_current_period_end = Column(DateTime, nullable=True)
 
     projects = relationship("Project", back_populates="user")
     transactions = relationship("Transaction", back_populates="user")

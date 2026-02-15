@@ -19,3 +19,13 @@ build/
 backups/
 *.tar.gz
 *.zip
+
+# Secrets and Configs
+traffic-creator-key.json
+.gcloudignore
+*.json
+!package.json
+!tsconfig.json
+!firebase.json
+!metadata.json
+*.db

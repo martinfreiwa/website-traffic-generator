@@ -12,6 +12,7 @@ import HelpDesk from './components/helpdesk/HelpDesk';
 import Blog from './components/blog/Blog';
 import ChatWidget from './components/ChatWidget';
 import PricingPage from './components/PricingPage';
+import CookieConsent from './components/CookieConsent';
 import { db } from './services/db';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; adminOnly?: boolean }> = ({ children, adminOnly }) => {
@@ -126,6 +127,7 @@ const App: React.FC = () => {
                 <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
             <ChatWidget />
+            <CookieConsent />
         </>
     );
 };

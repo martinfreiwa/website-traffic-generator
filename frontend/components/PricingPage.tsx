@@ -1,10 +1,23 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronRight, Check, Zap, Rocket, Shield, Globe, Terminal, Users, Search, ShoppingCart, ArrowLeft, ArrowRight } from 'lucide-react';
+import { db } from '../services/db';
 
 const PricingPage: React.FC = () => {
     const [step, setStep] = useState(1);
     const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+    const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+
+    // Stripe Price IDs - From Stripe Dashboard
+    const PRICE_IDS = {
+        starter_monthly: 'price_1T19GZJLE5bW6f8EPNVSoaGp',  // Starter Monthly
+        starter_yearly: 'price_starter_yearly',
+        professional_monthly: 'price_professional_monthly', 
+        professional_yearly: 'price_professional_yearly',
+        agency_monthly: 'price_agency_monthly',
+        agency_yearly: 'price_agency_yearly',
+    };
 
     const plans = [
         {
@@ -12,6 +25,7 @@ const PricingPage: React.FC = () => {
             name: 'Starter',
             subtitle: 'Perfect for niche blogs',
             price: billingCycle === 'monthly' ? 29 : 24,
+            priceId: billingCycle === 'monthly' ? PRICE_IDS.starter_monthly : PRICE_IDS.starter_yearly,
             icon: <Zap className="text-gray-400" size={24} />,
             features: ['5,000 Monthly Visitors', '5 Keywords Tracking', 'Geo-Targeting (Standard)', 'Desktop Traffic Only', 'Standard Proxy Pool'],
             color: 'border-gray-200'
@@ -21,6 +35,7 @@ const PricingPage: React.FC = () => {
             name: 'Professional',
             subtitle: 'Best for growth-stage sites',
             price: billingCycle === 'monthly' ? 79 : 64,
+            priceId: billingCycle === 'monthly' ? PRICE_IDS.professional_monthly : PRICE_IDS.professional_yearly,
             icon: <Rocket className="text-[#ff4d00]" size={24} />,
             features: ['25,000 Monthly Visitors', '20 Keywords Tracking', 'Geo-Targeting (Advanced)', 'Mobile + Desktop Traffic', 'Social & Referral Traffic', 'High-Retention Visits'],
             popular: true,
@@ -31,6 +46,7 @@ const PricingPage: React.FC = () => {
             name: 'Agency',
             subtitle: 'Enterprise-grade throughput',
             price: billingCycle === 'monthly' ? 249 : 199,
+            priceId: billingCycle === 'monthly' ? PRICE_IDS.agency_monthly : PRICE_IDS.agency_yearly,
             icon: <Terminal className="text-purple-600" size={24} />,
             features: ['100,000 Monthly Visitors', 'Unlimited Keywords', 'Global Proxy Network', 'Residential Proxy Access', 'API Management', 'Dedicated Support Manager'],
             color: 'border-purple-600'
@@ -146,7 +162,10 @@ const PricingPage: React.FC = () => {
                         </ul>
 
                         <button
-                            onClick={() => setStep(3)}
+                            onClick={() => {
+                                setSelectedPlan(plan.id);
+                                setStep(3);
+                            }}
                             className={`w-full py-4 text-[10px] font-black uppercase tracking-widest transition-all ${plan.popular ? 'bg-[#ff4d00] text-white hover:bg-black' : 'bg-black text-white hover:bg-[#ff4d00]'}`}
                         >
                             Get Started Now
@@ -166,7 +185,30 @@ const PricingPage: React.FC = () => {
         </div>
     );
 
-    const renderStep3 = () => (
+    const handleCheckout = async () => {
+        if (!selectedPlan) return;
+        
+        const plan = plans.find(p => p.id === selectedPlan);
+        if (!plan) return;
+        
+        setLoading(true);
+        try {
+            const result = await db.createCheckoutSession(plan.priceId);
+            if (result.url) {
+                window.location.href = result.url;
+            }
+        } catch (error) {
+            console.error('Checkout error:', error);
+            alert('Failed to start checkout. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const renderStep3 = () => {
+        const currentPlan = plans.find(p => p.id === selectedPlan) || plans[1];
+        
+        return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-500 flex flex-col lg:flex-row gap-12 max-w-7xl mx-auto">
             {/* Left Side: Customizer */}
             <div className="flex-1 space-y-8">
@@ -195,7 +237,6 @@ const PricingPage: React.FC = () => {
                             <div className="flex items-center gap-6">
                                 <span className="text-sm font-black text-gray-900">+€{addon.price}/mo</span>
                                 <div className="w-5 h-5 border-2 border-gray-200 rounded-sm flex items-center justify-center">
-                                    {/* Checkbox placeholder */}
                                 </div>
                             </div>
                         </div>
@@ -214,20 +255,24 @@ const PricingPage: React.FC = () => {
                     <div className="space-y-6 mb-12 relative">
                         <div className="flex justify-between items-center">
                             <span className="text-gray-400 text-[10px] font-black uppercase tracking-widest">Selected Plan</span>
-                            <span className="font-bold text-sm">Professional</span>
+                            <span className="font-bold text-sm">{currentPlan.name}</span>
                         </div>
                         <div className="flex justify-between items-center">
                             <span className="text-gray-400 text-[10px] font-black uppercase tracking-widest">Billing Cycle</span>
-                            <span className="font-bold text-sm">Yearly (-20%)</span>
+                            <span className="font-bold text-sm">{billingCycle === 'yearly' ? 'Yearly (-20%)' : 'Monthly'}</span>
                         </div>
                         <div className="pt-6 border-t border-gray-800 flex justify-between items-center text-xl">
                             <span className="font-black uppercase tracking-tighter">Total Due</span>
-                            <span className="text-[#ff4d00] font-black">€64.00</span>
+                            <span className="text-[#ff4d00] font-black">€{currentPlan.price}.00</span>
                         </div>
                     </div>
 
-                    <button className="w-full bg-[#ff4d00] py-5 text-xs font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all shadow-[0_20px_40px_rgba(255,77,0,0.3)]">
-                        Complete Purchase
+                    <button 
+                        onClick={handleCheckout}
+                        disabled={loading}
+                        className="w-full bg-[#ff4d00] py-5 text-xs font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all shadow-[0_20px_40px_rgba(255,77,0,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {loading ? 'Processing...' : 'Complete Purchase'}
                     </button>
 
                     <p className="text-[9px] text-gray-500 font-bold text-center mt-6 uppercase tracking-widest">
@@ -243,7 +288,8 @@ const PricingPage: React.FC = () => {
                 </button>
             </div>
         </div>
-    );
+        );
+    };
 
     return (
         <div className="min-h-screen bg-[#f3f4f6] py-20 px-6 font-sans">

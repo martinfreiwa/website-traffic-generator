@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timedelta
@@ -11,6 +12,9 @@ from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import models
 from database import SessionLocal, engine, get_db
 from scheduler import scheduler
@@ -26,6 +30,7 @@ import shutil
 import os
 import secrets
 import stripe
+import email_service
 
 # --- Stripe Configuration ---
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "sk_test_placeholder_if_not_set")
@@ -35,6 +40,20 @@ stripe.api_key = STRIPE_SECRET_KEY
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="TrafficGen Pro SaaS API")
+
+# Rate Limiter Configuration
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
+
+# Exception handler for rate limits
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Rate limit exceeded. Please try again later."},
+    )
+
 
 # CORS
 app.add_middleware(
@@ -606,7 +625,8 @@ async def get_current_user_optional(
 
 
 @app.post("/auth/register", response_model=UserResponse)
-def register(user: UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def register(request: Request, user: UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -637,6 +657,7 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
 
 
 @app.post("/auth/token", response_model=Token)
+@limiter.limit("10/minute")
 async def login_for_access_token(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -800,6 +821,42 @@ def revoke_api_key(
     current_user.api_key = None
     db.commit()
     return {"status": "revoked"}
+
+
+class ResendVerificationRequest(BaseModel):
+    email: str
+
+
+@app.post("/auth/resend-verification")
+def resend_verification(data: ResendVerificationRequest, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.email == data.email).first()
+
+    if not user:
+        return {
+            "status": "sent",
+            "message": "If an account exists, a verification email has been sent",
+        }
+
+    if user.is_verified:
+        return {
+            "status": "already_verified",
+            "message": "This account is already verified",
+        }
+
+    verification_token = secrets.token_urlsafe(32)
+    user.verification_token = verification_token
+    user.verification_token_expires = datetime.utcnow() + timedelta(hours=24)
+    db.commit()
+
+    try:
+        email_service.send_verification_email(user.email, verification_token)
+    except Exception as e:
+        print(f"Error sending verification email: {e}")
+
+    return {
+        "status": "sent",
+        "message": "If an account exists, a verification email has been sent",
+    }
 
 
 @app.post("/users/me/avatar")
@@ -1036,6 +1093,12 @@ def create_project(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    if not current_user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email verification required to create projects. Please verify your email first.",
+        )
+
     db_project = models.Project(
         user_id=current_user.id,
         name=project.name,
@@ -1788,7 +1851,7 @@ def update_user_admin(
         raise HTTPException(status_code=404, detail="User not found")
 
     update_data = user_update.dict(exclude_unset=True)
-    
+
     # Handle password separately
     if "password" in update_data:
         password = update_data.pop("password")

@@ -1,7 +1,7 @@
 
 import { Project, PriceClass, ProjectSettings, Transaction, User, Ticket, SystemSettings, Notification, TrafficLog, SystemAlert, LiveVisitor, Broadcast, AdminStats, Coupon, MarketingCampaign, ConversionSettings, ActivityLog, UserSession, ImpersonationLog, BalanceAdjustmentLog, EmailLog, UserNotificationPrefs, UserReferral, AdminUserDetails } from '../types';
 
-const API_BASE_URL = "http://127.0.0.1:8001";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 
 const getStorageItem = (key: string) => {
@@ -101,8 +101,8 @@ export const db = {
             joinedDate: userData.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
             projectsCount: 0,
             apiKey: userData.api_key,
+            isVerified: userData.is_verified ?? false,
 
-            // Profile fields
             phone: userData.phone,
             company: userData.company,
             vatId: userData.vat_id,
@@ -151,6 +151,58 @@ export const db = {
         if (!response.ok) {
             const err = await response.json();
             throw new Error(err.detail || 'Registration failed');
+        }
+        return await response.json();
+    },
+
+    verifyEmail: async (token: string) => {
+        const response = await fetch(`${API_BASE_URL}/auth/verify-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token })
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || 'Email verification failed');
+        }
+        return await response.json();
+    },
+
+    resendVerificationEmail: async (email: string) => {
+        const response = await fetch(`${API_BASE_URL}/auth/resend-verification`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || 'Failed to resend verification email');
+        }
+        return await response.json();
+    },
+
+    forgotPassword: async (email: string) => {
+        const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || 'Failed to send reset email');
+        }
+        return await response.json();
+    },
+
+    resetPassword: async (token: string, newPassword: string) => {
+        const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token, new_password: newPassword })
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || 'Password reset failed');
         }
         return await response.json();
     },
@@ -437,6 +489,72 @@ export const db = {
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.detail || 'Failed to create payment intent');
+        }
+        return await response.json();
+    },
+
+    // Stripe Subscriptions
+    createCheckoutSession: async (priceId: string) => {
+        const token = localStorage.getItem('tgp_token');
+        if (!token) throw new Error("Not authenticated");
+
+        const currentOrigin = window.location.origin;
+        const response = await fetch(`${API_BASE_URL}/subscriptions/create-checkout`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                price_id: priceId,
+                success_url: `${currentOrigin}/dashboard?subscription=success`,
+                cancel_url: `${currentOrigin}/pricing?subscription=cancelled`
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to create checkout session');
+        }
+        return await response.json();
+    },
+
+    createPortalSession: async () => {
+        const token = localStorage.getItem('tgp_token');
+        if (!token) throw new Error("Not authenticated");
+
+        const currentOrigin = window.location.origin;
+        const response = await fetch(`${API_BASE_URL}/subscriptions/portal`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                return_url: `${currentOrigin}/dashboard`
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to create portal session');
+        }
+        return await response.json();
+    },
+
+    getCurrentSubscription: async () => {
+        const token = localStorage.getItem('tgp_token');
+        if (!token) throw new Error("Not authenticated");
+
+        const response = await fetch(`${API_BASE_URL}/subscriptions/current`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to get subscription');
         }
         return await response.json();
     },
