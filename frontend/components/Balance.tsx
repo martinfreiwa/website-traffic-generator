@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Download, TrendingUp, TrendingDown, Clock, CreditCard, X, Printer, Share2, Layers, Award, Zap } from 'lucide-react';
+import { Download, TrendingUp, TrendingDown, Clock, CreditCard, X, Printer, Share2, Layers, Award, Zap, Filter } from 'lucide-react';
 import { db } from '../services/db';
 import { Transaction, User } from '../types';
 
@@ -7,19 +7,17 @@ const Balance: React.FC = () => {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [selectedInvoice, setSelectedInvoice] = useState<Transaction | null>(null);
     const [user, setUser] = useState<User | undefined>(undefined);
+    const [dateFilter, setDateFilter] = useState<'all' | '7d' | '30d' | '90d'>('all');
+    const [tierFilter, setTierFilter] = useState<string>('all');
 
     useEffect(() => {
-        // Force refresh user data to ensure balances are up to date
         const refreshData = async () => {
-            // We can't easily call backend here directly without duplicating logic/constants
-            // But db.purchaseCredits updates the local user object.
-            // For now, let's trust db.getCurrentUser() but ideally we'd have a db.refreshUser()
             setUser(db.getCurrentUser());
+            await db.syncTransactions();
             setTransactions(db.getTransactions());
         };
         refreshData();
 
-        // Set interval to check for changes (e.g. if updated elsewhere)
         const interval = setInterval(() => {
             setUser(db.getCurrentUser());
         }, 2000);
@@ -27,20 +25,54 @@ const Balance: React.FC = () => {
         return () => clearInterval(interval);
     }, []);
 
+    const getTierLabel = (tier?: string): string => {
+        if (!tier) return 'General';
+        const tierMap: Record<string, string> = {
+            'economy': 'Economy',
+            'professional': 'Professional',
+            'expert': 'Expert'
+        };
+        return tierMap[tier] || tier;
+    };
+
+    const getTierColor = (tier?: string): string => {
+        if (!tier) return 'bg-gray-100 text-gray-600';
+        const colorMap: Record<string, string> = {
+            'economy': 'bg-gray-100 text-gray-600',
+            'professional': 'bg-orange-100 text-orange-600',
+            'expert': 'bg-[#ff4d00]/10 text-[#ff4d00]'
+        };
+        return colorMap[tier] || 'bg-gray-100 text-gray-600';
+    };
+
+    const filteredTransactions = transactions.filter(t => {
+        if (tierFilter !== 'all' && t.tier !== tierFilter) return false;
+        
+        if (dateFilter !== 'all') {
+            const txDate = new Date(t.date);
+            const now = new Date();
+            const days = dateFilter === '7d' ? 7 : dateFilter === '30d' ? 30 : 90;
+            const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+            if (txDate < cutoff) return false;
+        }
+        return true;
+    });
+
     const handleDownloadStatement = () => {
-        if (transactions.length === 0) {
+        if (filteredTransactions.length === 0) {
             alert('No transactions to download.');
             return;
         }
 
-        const headers = ['ID', 'Date', 'Description', 'Type', 'Amount', 'Status'];
-        const rows = transactions.map(t => [
+        const headers = ['ID', 'Date', 'Description', 'Type', 'Amount', 'Status', 'Balance Tier'];
+        const rows = filteredTransactions.map(t => [
             t.id,
             t.date,
-            `"${t.desc.replace(/"/g, '""')}"`, // Escape quotes
+            `"${t.desc.replace(/"/g, '""')}"`,
             t.type,
             t.amount.toFixed(2),
-            t.status
+            t.status,
+            getTierLabel(t.tier)
         ]);
 
         const csvContent = "data:text/csv;charset=utf-8,"
@@ -92,6 +124,10 @@ const Balance: React.FC = () => {
                         <div>
                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-1">Type</label>
                             <div className="text-sm font-bold text-gray-900 capitalize">{trx.type === 'credit' ? 'Deposit' : 'Purchase'}</div>
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-1">Balance Tier</label>
+                            <div className="text-sm font-bold text-gray-900">{getTierLabel(trx.tier)}</div>
                         </div>
                         <div>
                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-1">User</label>
@@ -178,10 +214,32 @@ const Balance: React.FC = () => {
 
             {/* Transaction Table */}
             <div className="bg-white border border-gray-200 shadow-sm">
-                <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <h3 className="text-xs font-bold uppercase tracking-widest text-gray-900 flex items-center gap-2">
                         <Clock size={14} className="text-[#ff4d00]" /> Transaction History
                     </h3>
+                    <div className="flex flex-wrap gap-2">
+                        <select 
+                            value={dateFilter}
+                            onChange={(e) => setDateFilter(e.target.value as any)}
+                            className="text-xs border border-gray-200 px-3 py-1.5 bg-white font-bold uppercase tracking-wide"
+                        >
+                            <option value="all">All Time</option>
+                            <option value="7d">Last 7 Days</option>
+                            <option value="30d">Last 30 Days</option>
+                            <option value="90d">Last 90 Days</option>
+                        </select>
+                        <select
+                            value={tierFilter}
+                            onChange={(e) => setTierFilter(e.target.value)}
+                            className="text-xs border border-gray-200 px-3 py-1.5 bg-white font-bold uppercase tracking-wide"
+                        >
+                            <option value="all">All Balances</option>
+                            <option value="economy">Economy</option>
+                            <option value="professional">Professional</option>
+                            <option value="expert">Expert</option>
+                        </select>
+                    </div>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
@@ -189,19 +247,25 @@ const Balance: React.FC = () => {
                             <tr className="bg-[#f9fafb] border-b border-gray-100">
                                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Date</th>
                                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Description</th>
+                                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Balance</th>
                                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
                                 <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Amount</th>
                                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Action</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {transactions.length === 0 ? (
-                                <tr><td colSpan={5} className="text-center p-8 text-sm text-gray-400">No transactions found.</td></tr>
+                            {filteredTransactions.length === 0 ? (
+                                <tr><td colSpan={6} className="text-center p-8 text-sm text-gray-400">No transactions found.</td></tr>
                             ) : (
-                                transactions.map((trx) => (
+                                filteredTransactions.map((trx) => (
                                     <tr key={trx.id} className="hover:bg-gray-50 transition-colors">
                                         <td className="px-6 py-4 text-xs font-bold text-gray-500">{trx.date}</td>
                                         <td className="px-6 py-4 text-xs font-bold text-gray-900">{trx.desc}</td>
+                                        <td className="px-6 py-4">
+                                            <span className={`px-2 py-1 text-[9px] font-black uppercase tracking-wider rounded-sm ${getTierColor(trx.tier)}`}>
+                                                {getTierLabel(trx.tier)}
+                                            </span>
+                                        </td>
                                         <td className="px-6 py-4">
                                             <span className="px-2 py-1 bg-green-100 text-green-700 text-[9px] font-black uppercase tracking-wider rounded-sm">
                                                 {trx.status}

@@ -17,17 +17,20 @@ The backend is located in the `backend/` directory.
 - **Run All Tests:** `pytest backend/`
 - **Run Specific Test File:** `pytest backend/tests/test_saas_flow.py`
 - **Run Single Test Case:** `pytest backend/tests/test_saas_flow.py::test_health_check`
-- **Database Migrations:** Tables are automatically created via `models.Base.metadata.create_all(bind=engine)` in `main.py`.
-- **Database Path:** Defaults to `backend/traffic_nexus.db` (SQLite) for local development unless `DATABASE_URL` is set.
+- **Run with Verbose Output:** `pytest backend/tests/test_saas_flow.py -v`
+- **Database Migrations:** Tables are auto-created via `models.Base.metadata.create_all(bind=engine)` in `main.py`.
+- **Database Path:** Defaults to `backend/traffic_nexus.db` (SQLite) unless `DATABASE_URL` is set.
 
 ### Frontend (React/TypeScript/Vite)
 The frontend is located in the `frontend/` directory.
 
 - **Setup:** `npm install` (run from `frontend/`)
-- **Development Server:** `npm run dev` (starts on port 3000 as per `vite.config.ts`)
+- **Development Server:** `npm run dev` (starts on port 3000 per `vite.config.ts`)
 - **Build:** `npm run build`
-- **Type Checking:** `npx tsc`
-- **Linting:** Standard TypeScript rules apply. Follow the patterns in `frontend/services/db.ts`.
+- **Type Checking:** `npx tsc --noEmit`
+- **Run Tests:** `npx vitest run`
+- **Run Single Test File:** `npx vitest run frontend/projects.test.ts`
+- **Run Tests with Watch:** `npx vitest`
 
 ### Docker
 - **Up:** `docker-compose up --build`
@@ -41,81 +44,121 @@ The frontend is located in the `frontend/` directory.
 - **Consistency:** Rigorously adhere to existing naming and structural patterns.
 - **Explicitness:** Prefer explicit types (`string`, `number`, `User`) over `any`.
 - **Modularity:** Keep components and functions focused on a single responsibility.
+- **Comments:** Avoid comments unless explaining complex logic; prefer self-documenting code.
 
 ### Backend (Python)
 - **Framework:** FastAPI with Pydantic v2 for request/response validation.
 - **ORM:** SQLAlchemy (Declarative Base).
 - **Imports Order:**
     1. Standard library (`os`, `json`, `datetime`, `uuid`)
-    2. Third-party packages (`fastapi`, `sqlalchemy`, `pydantic`)
+    2. Third-party packages (`fastapi`, `sqlalchemy`, `pydantic`, `httpx`)
     3. Local modules (`import models`, `from database import get_db`)
 - **Naming:**
-    - Functions/Variables: `snake_case` (e.g., `get_current_user`)
+    - Functions/Variables: `snake_case` (e.g., `get_current_user`, `user_balance`)
     - Classes/Models/Schemas: `PascalCase` (e.g., `UserCreate`, `ProjectResponse`)
-    - SQL Tables/Columns: `snake_case`
-- **Error Handling:** Use `fastapi.HTTPException` with clear detail messages. 
-    - `400`: Validation/Logic errors.
-    - `401`: Authentication failures.
-    - `403`: Permission/Role issues.
-    - `404`: Resource not found.
-- **Authentication:** Hybrid system supporting JWT (Bearer) and `X-API-KEY` headers. Use the `get_current_user` dependency.
+    - SQL Tables/Columns: `snake_case` (e.g., `balance_economy`, `api_key`)
+    - Constants: `UPPER_SNAKE_CASE` (e.g., `SECRET_KEY`, `ALGORITHM`)
+- **Error Handling:** Use `fastapi.HTTPException` with clear detail messages.
+    - `400`: Validation/Logic errors (e.g., `"Email already registered"`)
+    - `401`: Authentication failures (e.g., `"Invalid credentials"`)
+    - `403`: Permission/Role issues (e.g., `"Admin access required"`)
+    - `404`: Resource not found (e.g., `"Project not found"`)
+- **Database Sessions:** Always use `get_db` dependency with context management:
+    ```python
+    def some_endpoint(db: Session = Depends(get_db)):
+        # use db here
+    ```
+- **UUIDs:** Primary keys are string UUIDs via `str(uuid.uuid4())`.
 
 ### Frontend (React/TypeScript)
 - **Framework:** React 19 with Vite and React Router DOM v7.
-- **Components:** Functional components with Arrow Functions. Use `React.FC` when appropriate.
+- **Components:** Functional components with arrow functions.
+    ```tsx
+    const MyComponent: React.FC<Props> = ({ prop }) => { ... }
+    ```
 - **Naming:**
     - Component Files: `PascalCase.tsx` (e.g., `Dashboard.tsx`)
-    - Styles: Tailwind CSS or plain CSS modules.
-    - Local Variables/Functions: `camelCase` (e.g., `handleLogin`)
+    - Service Files: `camelCase.ts` (e.g., `db.ts`, `firebase.ts`)
+    - Local Variables/Functions: `camelCase` (e.g., `handleLogin`, `currentUser`)
+    - Interface Types: `PascalCase` (e.g., `ProjectSettings`, `GeoTarget`)
+- **Types:** Centralized in `frontend/types.ts`. Reuse interfaces like `User`, `Project`, `Transaction`.
 - **Data Fetching:**
     - Centralized in `frontend/services/db.ts`.
     - Always use `fetchWithAuth` for protected resources.
     - Handle 401 responses by dispatching the `auth-expired` event.
-- **State Management:** 
+- **State Management:**
     - Local state: `useState`, `useEffect`.
-    - Persistence: `localStorage` for tokens and user profiles.
+    - Persistence: `localStorage` for tokens (`tgp_token`) and user profiles (`modus_current_user`).
     - Caching: Use `modus_projects_cache` style keys for offline-first behavior.
-- **Types:** Centralized in `frontend/types.ts`. Reuse interfaces like `User`, `Project`, and `Transaction`.
+- **Backend Field Mapping:** Backend uses `snake_case` (e.g., `balance_economy`), frontend uses `camelCase` (e.g., `balanceEconomy`). Map in `db.ts`:
+    ```typescript
+    balanceEconomy: userData.balance_economy,
+    ```
 
 ---
 
 ## 3. Directory Structure
 
-- `backend/`: Core FastAPI app.
-    - `main.py`: Entry point, middleware, and all API endpoints.
-    - `models.py`: SQLAlchemy models.
-    - `database.py`: Session and engine configuration.
-    - `enhanced_scheduler.py`: Background task orchestration.
-    - `enhanced_hit_emulator.py`: Traffic simulation logic.
-    - `tests/`: Pytest suite.
-- `frontend/`: React source code.
-    - `components/`: UI organized by domain (`admin/`, `landing/`, `blog/`).
-    - `services/`: API wrappers (`db.ts`, `firebase.ts`).
-    - `types.ts`: TypeScript definitions.
-- `docker-compose.yml`: Local Postgres + Backend stack.
+```
+backend/
+├── main.py              # Entry point, middleware, all API endpoints
+├── models.py            # SQLAlchemy models (User, Project, Transaction, etc.)
+├── database.py          # Session and engine configuration
+├── scheduler.py         # Background task orchestration
+├── enhanced_hit_emulator.py  # Traffic simulation logic
+├── web_utils.py         # GA4 TID extraction utilities
+├── sitemap_crawler.py   # Sitemap parsing
+└── tests/               # Pytest suite
+    ├── test_saas_flow.py
+    └── test_api_internal.py
+
+frontend/
+├── App.tsx              # Root component with routing
+├── index.tsx            # Entry point
+├── types.ts             # TypeScript definitions
+├── vite.config.ts       # Vite configuration (port 3000)
+├── components/
+│   ├── admin/           # Admin panel components
+│   ├── landing/         # Public landing pages
+│   ├── blog/            # Blog components
+│   └── helpdesk/        # Support/ticket system
+├── services/
+│   ├── db.ts            # API wrapper with auth handling
+│   └── firebase.ts      # Firebase integration
+└── projects.test.ts     # Vitest test suite
+```
 
 ---
 
 ## 4. Key Patterns & "Gotchas"
 
-- **Hybrid Auth:** Endpoints often allow either a JWT token or an API key. Check `get_current_user` in `main.py`.
-- **JSON Settings:** The `Project` model has a `settings` field (JSON/JSONB). It must strictly map to the `ProjectSettings` interface in `types.ts`.
+- **Hybrid Auth:** Endpoints support both JWT (Bearer) and `X-API-KEY` header. See `get_current_user` in `main.py`.
+- **JSON Settings:** The `Project.settings` field is JSON/JSONB. Must map to `ProjectSettings` interface in `types.ts`.
 - **SSE Analytics:** Real-time pulse data uses Server-Sent Events via `/admin/live-pulse`.
 - **UUIDs:** Most primary keys are strings containing UUIDs, generated via `uuid.uuid4`.
-- **Environment Variables:**
-    - `JWT_SECRET_KEY`: Required for security.
-    - `ALLOWED_ORIGINS`: Used for CORS config.
-    - `DATABASE_URL`: Set this to use Postgres; otherwise, SQLite is used.
+- **Password Hashing:** Uses `argon2` via `passlib.CryptContext`.
+- **Field Mapping:** Backend `snake_case` fields must be mapped to frontend `camelCase` in `db.ts`.
+- **Protected Routes:** Use `ProtectedRoute` component with `adminOnly` prop for role-based access.
+- **Balance Tiers:** Users have multiple balances: `balance`, `balance_economy`, `balance_professional`, `balance_expert`.
+
+### Environment Variables
+| Variable | Purpose |
+|----------|---------|
+| `JWT_SECRET_KEY` | Required for JWT signing |
+| `DATABASE_URL` | Postgres URL; defaults to SQLite if unset |
+| `ALLOWED_ORIGINS` | CORS origins (comma-separated) |
+| `STRIPE_SECRET_KEY` | Stripe API key for payments |
 
 ---
 
 ## 5. Guidelines for AI Agents
 
-- **Incremental Changes:** When adding a field to a model, ensure you update the corresponding Pydantic schema AND the frontend TypeScript interface.
-- **Database Safety:** Always use `get_db` with context management (Depends) in FastAPI.
-- **Frontend Sync:** The `db.ts` service often caches data in `localStorage`. If you modify a backend response, ensure `syncProjects` or similar functions in `db.ts` handle the new data.
-- **Cursor/Copilot Rules:** No explicit `.cursorrules` or `.github/copilot-instructions.md` were detected. Follow the established patterns in `main.py` and `db.ts`.
+- **Incremental Changes:** When adding a field to a model, update the SQLAlchemy model, Pydantic schema, AND the frontend TypeScript interface.
+- **Database Safety:** Always use `get_db` with `Depends()` in FastAPI endpoints.
+- **Frontend Sync:** `db.ts` caches data in `localStorage`. If modifying backend responses, ensure `syncProjects` or similar functions handle new fields.
+- **Test Verification:** After changes, run `pytest backend/tests/` and `npx tsc --noEmit` to verify.
+- **No Cursor/Copilot Rules:** No `.cursorrules` or `.github/copilot-instructions.md` detected. Follow patterns in `main.py` and `db.ts`.
 
 ---
 
-*Revision: 2026-01-29 | Target: Agentic Coding Assistants*
+*Revision: 2026-02-15 | Target: Agentic Coding Assistants*

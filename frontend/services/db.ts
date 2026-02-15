@@ -384,7 +384,8 @@ export const db = {
             amount: t.amount,
             status: t.status || 'completed',
             type: t.type,
-            userId: t.user_id || t.userId
+            userId: t.user_id || t.userId,
+            tier: t.tier
         }));
         localStorage.setItem('modus_transactions_cache', JSON.stringify(mapped));
         return mapped;
@@ -406,7 +407,8 @@ export const db = {
             amount: t.amount,
             status: t.status || 'completed',
             type: t.type,
-            userId: t.user_id || t.userId
+            userId: t.user_id || t.userId,
+            tier: t.tier
         }));
         localStorage.setItem('modus_admin_transactions_cache', JSON.stringify(mapped));
         return mapped;

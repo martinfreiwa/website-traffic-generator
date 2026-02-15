@@ -167,6 +167,7 @@ export interface Transaction {
   status: 'completed' | 'pending' | 'failed';
   type: 'credit' | 'debit';
   userId?: string;
+  tier?: string;
 }
 
 export interface TicketMessage {

@@ -99,7 +99,7 @@ class UserResponse(BaseModel):
     created_at: Optional[datetime] = None
     last_ip: Optional[str] = None
     last_active: Optional[datetime] = None
-    
+
     # Extended Fields
     phone: Optional[str] = None
     company: Optional[str] = None
@@ -199,7 +199,7 @@ class ProjectResponse(BaseModel):
     hits_today: int
     total_hits: int
     created_at: datetime
-    
+
     # Admin Fields (Optional in response, but populated if user is owner or admin)
     priority: int = 0
     force_stop_reason: Optional[str] = None
@@ -218,6 +218,7 @@ class TransactionResponse(BaseModel):
     amount: float
     description: Optional[str]
     status: str
+    tier: Optional[str]
     created_at: datetime
 
     class Config:
@@ -314,6 +315,7 @@ class AdminUserUpdate(BaseModel):
     tags: Optional[List[str]] = None
     ban_reason: Optional[str] = None
 
+
 class UserUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
@@ -348,6 +350,7 @@ class UserUpdate(BaseModel):
     number_format: Optional[str] = None
     require_password_reset: Optional[bool] = None
     avatar_url: Optional[str] = None
+
 
 class SystemSettingsUpdate(BaseModel):
     settings: Dict[str, Any]
@@ -406,7 +409,10 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-def create_user_access_token(user: models.User, expires_delta: Optional[timedelta] = None):
+
+def create_user_access_token(
+    user: models.User, expires_delta: Optional[timedelta] = None
+):
     """Creates a token bound to the user's specific token version for invalidation support"""
     data = {"sub": user.email, "ver": user.token_version or 1}
     return create_access_token(data, expires_delta)
@@ -433,13 +439,17 @@ async def get_current_user(
     user = db.query(models.User).filter(models.User.email == email).first()
     if user is None:
         raise credentials_exception
-        
+
     # Validation of token version (for server-side logout)
     token_ver = payload.get("ver")
-    if token_ver is not None and user.token_version is not None and token_ver != user.token_version:
+    if (
+        token_ver is not None
+        and user.token_version is not None
+        and token_ver != user.token_version
+    ):
         # Token is old/invalidated
         raise credentials_exception
-        
+
     return user
 
 
@@ -463,14 +473,18 @@ async def get_current_user_optional(
                 if user:
                     # Validate token version
                     token_ver = payload.get("ver")
-                    if token_ver is not None and user.token_version is not None and token_ver != user.token_version:
+                    if (
+                        token_ver is not None
+                        and user.token_version is not None
+                        and token_ver != user.token_version
+                    ):
                         # Token invalid, fall through to raise generic error if strictly required or just return None?
-                        # Since this is 'optional', usually it implies 'soft' auth. 
+                        # Since this is 'optional', usually it implies 'soft' auth.
                         # But if a token is PRESENT but INVALID, it should probably be rejected or ignored.
-                        # However, for 'users/me', usually we want strict auth. 
-                        # 'read_users_me' uses optional? Why? 
+                        # However, for 'users/me', usually we want strict auth.
+                        # 'read_users_me' uses optional? Why?
                         # Ah, likely for mixed access. But if the token is revoked, we should treat it as unauth.
-                        pass # Don't return the user if version mismatch
+                        pass  # Don't return the user if version mismatch
                     else:
                         return user
         except JWTError:
@@ -519,8 +533,8 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
 @app.post("/auth/token", response_model=Token)
 async def login_for_access_token(
     request: Request,
-    form_data: OAuth2PasswordRequestForm = Depends(), 
-    db: Session = Depends(get_db)
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
 ):
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
     if not user or not verify_password(form_data.password, user.password_hash):
@@ -529,18 +543,18 @@ async def login_for_access_token(
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     # Update Login History
     try:
         current_history = user.login_history or []
         # Keep only last 10 entries
         if len(current_history) >= 10:
-            current_history.pop() # Remove oldest (last item usually, but we prepend)
-            
+            current_history.pop()  # Remove oldest (last item usually, but we prepend)
+
         new_entry = {
             "date": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
             "ip": request.client.host,
-            "device": request.headers.get("user-agent", "Unknown Device")
+            "device": request.headers.get("user-agent", "Unknown Device"),
         }
         # Prepend new entry
         current_history.insert(0, new_entry)
@@ -558,48 +572,56 @@ async def login_for_access_token(
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
+
 class PasswordChange(BaseModel):
     current_password: str
     new_password: str
     confirm_password: str
 
+
 @app.put("/auth/password")
 def change_password(
     data: PasswordChange,
     current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     if not verify_password(data.current_password, current_user.password_hash):
         raise HTTPException(status_code=400, detail="Current password incorrect")
-    
+
     if data.new_password != data.confirm_password:
         raise HTTPException(status_code=400, detail="New passwords do not match")
 
     current_user.password_hash = get_password_hash(data.new_password)
     # Optional: Log out other sessions by incrementing version
-    # current_user.token_version += 1 
+    # current_user.token_version += 1
     db.commit()
     return {"status": "password updated"}
 
+
 @app.post("/auth/logout-all")
 def logout_all_sessions(
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     # Increment token version to invalidate all existing JWTs
     current_user.token_version = (current_user.token_version or 1) + 1
     db.commit()
     return {"status": "all sessions invalidated", "message": "Please log in again."}
 
+
 @app.get("/users/me/export")
 def export_user_data(
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """GDPR Data Download"""
-    projects = db.query(models.Project).filter(models.Project.user_id == current_user.id).all()
-    transactions = db.query(models.Transaction).filter(models.Transaction.user_id == current_user.id).all()
-    
+    projects = (
+        db.query(models.Project).filter(models.Project.user_id == current_user.id).all()
+    )
+    transactions = (
+        db.query(models.Transaction)
+        .filter(models.Transaction.user_id == current_user.id)
+        .all()
+    )
+
     export_data = {
         "user_profile": {
             "id": current_user.id,
@@ -608,16 +630,17 @@ def export_user_data(
             "created_at": str(current_user.created_at),
             "balance": current_user.balance,
             "role": current_user.role,
-            "login_history": current_user.login_history
+            "login_history": current_user.login_history,
         },
         "projects": [
             {
-                "id": p.id, 
-                "name": p.name, 
-                "status": p.status, 
+                "id": p.id,
+                "name": p.name,
+                "status": p.status,
                 "created_at": str(p.created_at),
-                "settings": p.settings
-            } for p in projects
+                "settings": p.settings,
+            }
+            for p in projects
         ],
         "transactions": [
             {
@@ -625,11 +648,12 @@ def export_user_data(
                 "amount": t.amount,
                 "type": t.type,
                 "date": str(t.created_at),
-                "description": t.description
-            } for t in transactions
-        ]
+                "description": t.description,
+            }
+            for t in transactions
+        ],
     }
-    
+
     return export_data
 
 
@@ -676,35 +700,38 @@ def revoke_api_key(
 async def upload_avatar(
     file: UploadFile = File(...),
     current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     try:
         file_extension = os.path.splitext(file.filename)[1]
         if file_extension not in [".jpg", ".jpeg", ".png", ".webp"]:
-            raise HTTPException(status_code=400, detail="Invalid file type. Only jpg, png, webp allowed.")
-        
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid file type. Only jpg, png, webp allowed.",
+            )
+
         filename = f"avatars/{current_user.id}_{secrets.token_hex(4)}{file_extension}"
         file_path = os.path.join("static", filename)
-        
+
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-            
+
         # Update user avatar URL
         # Assuming backend is served at BACKEND_URL (e.g. localhost:8001)
         # Frontend should prepend URL if relative, or we serve absolute.
         # Let's serve relative path from /static
         current_user.avatar_url = f"/static/{filename}"
         db.commit()
-        
+
         return {"avatar_url": current_user.avatar_url}
     except Exception as e:
         print(f"Error uploading avatar: {e}")
         raise HTTPException(status_code=500, detail="Failed to upload avatar")
 
+
 @app.delete("/users/me")
 def delete_user_account(
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """Irreversible account deletion"""
     try:
@@ -929,8 +956,6 @@ def get_projects(
     )
 
 
-
-
 @app.get("/projects/{project_id}", response_model=ProjectResponse)
 def get_project_details(
     project_id: str,
@@ -940,15 +965,16 @@ def get_project_details(
     query = db.query(models.Project).filter(models.Project.id == project_id)
     if current_user.role != "admin":
         query = query.filter(models.Project.user_id == current_user.id)
-        
+
     project = query.first()
-    
+
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return project
 
 
 # --- Admin Project Management ---
+
 
 @app.get("/admin/projects", response_model=List[ProjectResponse])
 def get_all_projects_admin(
@@ -959,6 +985,7 @@ def get_all_projects_admin(
         raise HTTPException(status_code=403, detail="Admin access required")
     return db.query(models.Project).all()
 
+
 @app.post("/admin/projects", response_model=ProjectResponse)
 def create_project_admin(
     project: AdminProjectCreate,
@@ -968,9 +995,13 @@ def create_project_admin(
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
 
-    target_user = db.query(models.User).filter(models.User.email == project.user_email).first()
+    target_user = (
+        db.query(models.User).filter(models.User.email == project.user_email).first()
+    )
     if not target_user:
-        raise HTTPException(status_code=404, detail=f"User {project.user_email} not found")
+        raise HTTPException(
+            status_code=404, detail=f"User {project.user_email} not found"
+        )
 
     db_project = models.Project(
         user_id=target_user.id,
@@ -984,7 +1015,7 @@ def create_project_admin(
         is_hidden=project.is_hidden,
         internal_tags=project.internal_tags,
         notes=project.notes,
-        status="active"
+        status="active",
     )
     db.add(db_project)
     db.commit()
@@ -1173,20 +1204,28 @@ def simulate_deposit(data: DepositRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
 
     # 2. Add Balance
-    if data.tier == 'economy':
+    if data.tier == "economy":
         user.balance_economy = (user.balance_economy or 0.0) + data.amount
-    elif data.tier == 'professional':
+    elif data.tier == "professional":
         user.balance_professional = (user.balance_professional or 0.0) + data.amount
-    elif data.tier == 'expert':
+    elif data.tier == "expert":
         user.balance_expert = (user.balance_expert or 0.0) + data.amount
     else:
         # Fallback or General Balance (if we still use it)
         user.balance += data.amount
 
     # 3. Create Transaction
-    trx_desc = f"{data.description} ({data.tier.capitalize()})" if data.tier else data.description
+    trx_desc = (
+        f"{data.description} ({data.tier.capitalize()})"
+        if data.tier
+        else data.description
+    )
     trx = models.Transaction(
-        user_id=user.id, type="credit", amount=data.amount, description=trx_desc
+        user_id=user.id,
+        type="credit",
+        amount=data.amount,
+        description=trx_desc,
+        tier=data.tier,
     )
     db.add(trx)
     db.commit()
@@ -1359,44 +1398,64 @@ def get_admin_stats(
     now = datetime.utcnow()
     today_start = datetime(now.year, now.month, now.day)
     thirty_days_ago = now - timedelta(days=30)
-    
+
     # Revenue (Credits Only)
     # We use a subquery or separate queries for clarity
-    total_rev = db.query(func.sum(models.Transaction.amount)).filter(models.Transaction.type == "credit").scalar() or 0.0
-    rev_today = db.query(func.sum(models.Transaction.amount)).filter(models.Transaction.type == "credit", models.Transaction.created_at >= today_start).scalar() or 0.0
-    rev_30d = db.query(func.sum(models.Transaction.amount)).filter(models.Transaction.type == "credit", models.Transaction.created_at >= thirty_days_ago).scalar() or 0.0
+    total_rev = (
+        db.query(func.sum(models.Transaction.amount))
+        .filter(models.Transaction.type == "credit")
+        .scalar()
+        or 0.0
+    )
+    rev_today = (
+        db.query(func.sum(models.Transaction.amount))
+        .filter(
+            models.Transaction.type == "credit",
+            models.Transaction.created_at >= today_start,
+        )
+        .scalar()
+        or 0.0
+    )
+    rev_30d = (
+        db.query(func.sum(models.Transaction.amount))
+        .filter(
+            models.Transaction.type == "credit",
+            models.Transaction.created_at >= thirty_days_ago,
+        )
+        .scalar()
+        or 0.0
+    )
 
     # Users
     total_users = db.query(models.User).count()
-    new_users_today = db.query(models.User).filter(models.User.created_at >= today_start).count()
-    
+    new_users_today = (
+        db.query(models.User).filter(models.User.created_at >= today_start).count()
+    )
+
     # Projects
     total_projects = db.query(models.Project).count()
-    active_projects = db.query(models.Project).filter(models.Project.status == "active").count()
-    new_projects_today = db.query(models.Project).filter(models.Project.created_at >= today_start).count()
-    
+    active_projects = (
+        db.query(models.Project).filter(models.Project.status == "active").count()
+    )
+    new_projects_today = (
+        db.query(models.Project)
+        .filter(models.Project.created_at >= today_start)
+        .count()
+    )
+
     # Hits
     total_hits = db.query(func.sum(models.Project.total_hits)).scalar() or 0
 
     return {
-        "revenue": {
-            "total": total_rev,
-            "today": rev_today,
-            "last_30d": rev_30d
-        },
-        "users": {
-            "total": total_users,
-            "new_today": new_users_today
-        },
+        "revenue": {"total": total_rev, "today": rev_today, "last_30d": rev_30d},
+        "users": {"total": total_users, "new_today": new_users_today},
         "projects": {
             "total": total_projects,
             "active": active_projects,
-            "new_today": new_projects_today
+            "new_today": new_projects_today,
         },
-        "traffic": {
-            "total_hits": total_hits
-        },
-        "system_status": "operational"
+        "traffic": {"total_hits": total_hits},
+        "system_status": "operational",
     }
 
 
@@ -1408,24 +1467,25 @@ def get_all_users(
         raise HTTPException(status_code=403, detail="Admin access required")
     return db.query(models.User).all()
 
+
 @app.put("/admin/users/{user_id}")
 def update_user_admin(
     user_id: str,
     user_update: AdminUserUpdate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_user),
 ):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
-    
+
     db_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     update_data = user_update.dict(exclude_unset=True)
     for key, value in update_data.items():
         setattr(db_user, key, value)
-    
+
     db.commit()
     db.refresh(db_user)
     return {"status": "success"}
@@ -1530,74 +1590,87 @@ def update_settings(
     db.commit()
     return {"status": "updated"}
 
+
 # --- Broadcasts ---
+
 
 @app.get("/broadcasts/active", response_model=List[BroadcastResponse])
 def get_active_broadcasts(db: Session = Depends(get_db)):
     now = datetime.utcnow()
-    return db.query(models.Broadcast).filter(
-        models.Broadcast.is_active == True,
-        (models.Broadcast.expires_at == None) | (models.Broadcast.expires_at > now)
-    ).all()
+    return (
+        db.query(models.Broadcast)
+        .filter(
+            models.Broadcast.is_active == True,
+            (models.Broadcast.expires_at == None) | (models.Broadcast.expires_at > now),
+        )
+        .all()
+    )
+
 
 @app.get("/admin/broadcasts", response_model=List[BroadcastResponse])
 def get_all_broadcasts(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
 ):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return db.query(models.Broadcast).order_by(models.Broadcast.created_at.desc()).all()
 
+
 @app.post("/admin/broadcasts", response_model=BroadcastResponse)
 def create_broadcast(
     broadcast: BroadcastCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_user),
 ):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
-    
+
     db_broadcast = models.Broadcast(**broadcast.dict())
     db.add(db_broadcast)
     db.commit()
     db.refresh(db_broadcast)
     return db_broadcast
 
+
 @app.put("/admin/broadcasts/{broadcast_id}", response_model=BroadcastResponse)
 def update_broadcast(
     broadcast_id: str,
     broadcast_update: BroadcastCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_user),
 ):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
-    
-    db_broadcast = db.query(models.Broadcast).filter(models.Broadcast.id == broadcast_id).first()
+
+    db_broadcast = (
+        db.query(models.Broadcast).filter(models.Broadcast.id == broadcast_id).first()
+    )
     if not db_broadcast:
         raise HTTPException(status_code=404, detail="Broadcast not found")
-    
+
     for key, value in broadcast_update.dict().items():
         setattr(db_broadcast, key, value)
-    
+
     db.commit()
     db.refresh(db_broadcast)
     return db_broadcast
+
 
 @app.delete("/admin/broadcasts/{broadcast_id}")
 def delete_broadcast(
     broadcast_id: str,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_user),
 ):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
-    
-    db_broadcast = db.query(models.Broadcast).filter(models.Broadcast.id == broadcast_id).first()
+
+    db_broadcast = (
+        db.query(models.Broadcast).filter(models.Broadcast.id == broadcast_id).first()
+    )
     if not db_broadcast:
         raise HTTPException(status_code=404, detail="Broadcast not found")
-    
+
     db.delete(db_broadcast)
     db.commit()
     return {"status": "success"}
@@ -1605,14 +1678,15 @@ def delete_broadcast(
 
 # --- Stripe Integration ---
 
+
 class PaymentIntentRequest(BaseModel):
     amount: int  # In cents
     currency: str = "eur"
 
+
 @app.post("/create-payment-intent")
 async def create_payment_intent(
-    request: PaymentIntentRequest,
-    current_user: models.User = Depends(get_current_user)
+    request: PaymentIntentRequest, current_user: models.User = Depends(get_current_user)
 ):
     try:
         # Create a PaymentIntent with the order amount and currency
@@ -1620,13 +1694,10 @@ async def create_payment_intent(
             amount=request.amount,
             currency=request.currency,
             automatic_payment_methods={
-                'enabled': True,
+                "enabled": True,
             },
-            metadata={
-                "user_id": current_user.id,
-                "email": current_user.email
-            }
+            metadata={"user_id": current_user.id, "email": current_user.email},
         )
-        return {"clientSecret": intent['client_secret']}
+        return {"clientSecret": intent["client_secret"]}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
