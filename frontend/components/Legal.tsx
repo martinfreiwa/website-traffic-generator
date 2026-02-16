@@ -159,9 +159,9 @@ const Legal: React.FC<LegalProps> = ({ type, onBack }) => {
     return (
         <div className="min-h-screen bg-white">
             <SEO
-                title={`${getTitle()} - Traffic Creator`}
-                description={`Official ${getTitle()} for Traffic Creator. Please read carefully and contact support if needed.`}
-                keywords={`traffic creator ${type}, ${type} policy, legal ${type}, traffic generator legal`}
+                title={`${getTitle()} (Updated 2026) - Traffic Creator`}
+                description={`Official ${getTitle()} for Traffic Creator, updated for 2026. Please read carefully to understand our policies.`}
+                keywords={`traffic creator ${type} 2026, ${type} policy, legal ${type}, traffic generator legal`}
                 type="article"
             />
             {/* Header */}

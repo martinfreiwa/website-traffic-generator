@@ -49,16 +49,13 @@ def send_email(
         return {"success": False, "error": str(e)}
 
 
-def send_verification_email(email: str, token: str) -> dict:
-    frontend_url = get_frontend_url()
-    verification_url = f"{frontend_url}/verify-email?token={token}"
-
+def send_verification_email(email: str, code: str) -> dict:
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Activate Your Account</title>
+    <title>Verify Your Email</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #FAFAFA; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #FAFAFA;">
@@ -79,27 +76,21 @@ def send_verification_email(email: str, token: str) -> dict:
                     </tr>
                     <tr>
                         <td style="padding: 50px 40px;">
-                            <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 900; color: #111827; letter-spacing: -0.5px;">Welcome!</h1>
+                            <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 900; color: #111827; letter-spacing: -0.5px;">Verify Your Email</h1>
                             <p style="margin: 0 0 30px 0; font-size: 16px; font-weight: 500; color: #6B7280; line-height: 1.6;">
-                                Thank you for signing up. Please confirm your email address to activate your account.
+                                Enter this verification code in your dashboard to activate your account:
                             </p>
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                                 <tr>
                                     <td align="center">
-                                        <a href="{verification_url}" style="display: inline-block; background-color: #ff4d00; color: #FFFFFF; font-size: 14px; font-weight: 700; padding: 16px 32px; border-radius: 12px; text-decoration: none; text-transform: uppercase; letter-spacing: 0.5px;">Confirm Email</a>
+                                        <div style="display: inline-block; background-color: #F9FAFB; border: 2px solid #E5E7EB; border-radius: 12px; padding: 20px 40px;">
+                                            <span style="font-size: 48px; font-weight: 900; color: #111827; letter-spacing: 12px; font-family: 'SF Mono', 'Consolas', monospace;">{code}</span>
+                                        </div>
                                     </td>
                                 </tr>
                             </table>
-                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top: 30px;">
-                                <tr>
-                                    <td style="background-color: #F9FAFB; border-radius: 8px; padding: 20px;">
-                                        <p style="margin: 0 0 8px 0; font-size: 12px; font-weight: 700; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.5px;">Alternative Link</p>
-                                        <p style="margin: 0; font-size: 13px; font-weight: 500; color: #6B7280; word-break: break-all; line-height: 1.5;">{verification_url}</p>
-                                    </td>
-                                </tr>
-                            </table>
-                            <p style="margin: 20px 0 0 0; font-size: 13px; font-weight: 500; color: #9CA3AF;">
-                                This link expires in 24 hours.
+                            <p style="margin: 30px 0 0 0; font-size: 13px; font-weight: 500; color: #9CA3AF;">
+                                This code expires in 24 hours.
                             </p>
                         </td>
                     </tr>
@@ -126,18 +117,18 @@ def send_verification_email(email: str, token: str) -> dict:
 </body>
 </html>"""
 
-    text = f"""Welcome to TrafficGen Pro!
+    text = f"""Verify Your Email
 
-Please confirm your email address with this link:
-{verification_url}
+Your verification code is: {code}
 
-This link expires in 24 hours.
+Enter this code in your dashboard to activate your account.
+This code expires in 24 hours.
 
 Questions? Contact us at support@traffic-creator.com"""
 
     return send_email(
         to=email,
-        subject="Activate Your TrafficGen Pro Account",
+        subject="Your Verification Code - TrafficGen Pro",
         html=html,
         text=text,
     )

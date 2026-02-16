@@ -150,9 +150,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
   return (
     <div className="min-h-screen bg-white text-gray-900 font-sans overflow-hidden">
       <SEO
-        title="Traffic Creator - #1 Website Traffic Generator for SEO & Rankings"
-        description="Boost your SEO rankings with real residential website traffic. Traffic Creator helps you manipulate CTR, increase dwell time, and improve domain authority naturally."
-        keywords="website traffic, boost traffic, SEO traffic, organic traffic, traffic generator, buy website traffic, traffic creator, website visitors, GA4 traffic"
+        title="Traffic Creator - #1 Website Traffic Generator for SEO & Rankings (2026)"
+        description="Boost your SEO rankings in 2026 with real residential website traffic. Traffic Creator helps you manipulate CTR, increase dwell time, and improve domain authority naturally using advanced AI-driven behavioral simulation."
+        keywords="website traffic 2026, boost traffic, SEO traffic, organic traffic, traffic generator, buy website traffic, traffic creator, website visitors, GA4 traffic, CTR manipulation"
         schema={[organizationSchema, websiteSchema]}
       />
       {/* Navigation */}

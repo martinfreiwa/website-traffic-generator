@@ -155,11 +155,11 @@ export const db = {
         return await response.json();
     },
 
-    verifyEmail: async (token: string) => {
+    verifyEmail: async (code: string) => {
         const response = await fetch(`${API_BASE_URL}/auth/verify-email`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token })
+            body: JSON.stringify({ code })
         });
         if (!response.ok) {
             const err = await response.json();
@@ -224,6 +224,17 @@ export const db = {
             if (!response.ok) return;
             const data = await response.json();
 
+            // Fetch stats for all projects
+            let statsData: Record<string, any[]> = {};
+            try {
+                const statsResponse = await fetchWithAuth(`${API_BASE_URL}/projects/stats?days=30`);
+                if (statsResponse.ok) {
+                    statsData = await statsResponse.json();
+                }
+            } catch (e) {
+                console.error("Failed to fetch project stats:", e);
+            }
+
             const mapped: Project[] = data.map((p: any) => ({
                 id: p.id,
                 userId: p.user_id,
@@ -234,12 +245,34 @@ export const db = {
                 expires: p.expires_at || 'Never',
                 createdAt: p.created_at,
                 settings: p.settings,
-                stats: []
+                stats: statsData[p.id] || []
             }));
 
             localStorage.setItem('modus_projects_cache', JSON.stringify(mapped));
         } catch (e) {
             console.error("Failed to sync projects:", e);
+        }
+    },
+
+    syncProjectStats: async (projectId: string, days: number = 30): Promise<{ date: string; visitors: number; pageviews: number }[]> => {
+        try {
+            const response = await fetchWithAuth(`${API_BASE_URL}/projects/${projectId}/stats?days=${days}`);
+            if (!response.ok) return [];
+            return await response.json();
+        } catch (e) {
+            console.error("Failed to fetch project stats:", e);
+            return [];
+        }
+    },
+
+    getActiveNow: async (): Promise<{ activeNow: number; projects: Record<string, { active: number; lastHit?: string }> }> => {
+        try {
+            const response = await fetchWithAuth(`${API_BASE_URL}/projects/active-now`);
+            if (!response.ok) return { activeNow: 0, projects: {} };
+            return await response.json();
+        } catch (e) {
+            console.error("Failed to fetch active now:", e);
+            return { activeNow: 0, projects: {} };
         }
     },
 
@@ -249,6 +282,17 @@ export const db = {
             if (!response.ok) return;
             const data = await response.json();
 
+            // Fetch stats for all projects
+            let statsData: Record<string, any[]> = {};
+            try {
+                const statsResponse = await fetchWithAuth(`${API_BASE_URL}/projects/stats?days=30`);
+                if (statsResponse.ok) {
+                    statsData = await statsResponse.json();
+                }
+            } catch (e) {
+                console.error("Failed to fetch project stats:", e);
+            }
+
             const mapped: Project[] = data.map((p: any) => ({
                 id: p.id,
                 userId: p.user_id,
@@ -259,7 +303,7 @@ export const db = {
                 expires: p.expires_at || 'Never',
                 createdAt: p.created_at,
                 settings: p.settings,
-                stats: []
+                stats: statsData[p.id] || []
             }));
 
             localStorage.setItem('modus_admin_projects_cache', JSON.stringify(mapped));
@@ -596,7 +640,7 @@ export const db = {
         const data = await response.json();
         const mapped: Ticket[] = data.map((t: any) => ({
             id: t.id,
-            type: 'ticket',
+            type: t.type || 'ticket',
             userId: t.user_id,
             userName: t.user_email?.split('@')[0] || 'User',
             subject: t.subject,

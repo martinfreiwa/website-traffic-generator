@@ -64,6 +64,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
     const [settings, setSettings] = useState<ProjectSettings | undefined>(undefined);
     const [isSaving, setIsSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
+    const [projectStats, setProjectStats] = useState<{ date: string; visitors: number; pageviews: number }[]>([]);
 
     // Template State
     const [showSaveTemplate, setShowSaveTemplate] = useState(false);
@@ -140,6 +141,15 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
         setSystemTemplates(sysSettings.payloadTemplates || []);
 
         setLoading(false);
+    }, [projectId]);
+
+    // Fetch project stats
+    useEffect(() => {
+        const fetchStats = async () => {
+            const stats = await db.syncProjectStats(projectId, 30);
+            setProjectStats(stats);
+        };
+        fetchStats();
     }, [projectId]);
 
     // Click Outside Handler for Dropdowns
@@ -324,7 +334,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
     const exitCount = countUrls(settings.exitUrls);
     const totalUrlCount = entryCount + innerCount + exitCount;
 
-    const stats = project.stats || [];
+    const stats = projectStats.length > 0 ? projectStats : (project.stats || []);
     const currentMax = stats.length > 0 ? Math.max(...stats.map(s => chartMode === 'visitors' ? s.visitors : (s.pageviews || s.visitors))) : 100;
 
     const filteredLanguages = ALL_LANGUAGES.filter(l => l.toLowerCase().includes(languageSearch.toLowerCase()));

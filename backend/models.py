@@ -219,6 +219,7 @@ class Ticket(Base):
     subject = Column(String)
     status = Column(String, default="open")  # 'open', 'in-progress', 'closed'
     priority = Column(String, default="low")  # 'low', 'medium', 'high'
+    type = Column(String, default="ticket")  # 'ticket' or 'chat'
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     messages = Column(
         JSON, default=[]

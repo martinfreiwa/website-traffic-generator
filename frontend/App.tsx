@@ -113,6 +113,7 @@ const App: React.FC = () => {
                 {/* Other Pages */}
                 <Route path="/helpdesk" element={<HelpDesk onBack={handleBack} />} />
                 <Route path="/blog" element={<Blog onBack={handleBack} />} />
+                <Route path="/blog/:slug" element={<Blog onBack={handleBack} />} />
                 <Route path="/pricing" element={<PricingPage />} />
 
                 {/* Legal Routes */}

@@ -26,9 +26,9 @@ const ModernLandingPage: React.FC<ModernLandingPageProps> = ({ onLogin, onNaviga
     return (
         <div className="min-h-screen bg-[#FAFAFA] text-gray-900 font-sans selection:bg-[#ff4d00] selection:text-white">
             <SEO
-                title="Next-Gen Traffic Generation - AI-Driven SEO Visits"
-                description="Experience the future of traffic generation. AI-powered user behavior simulation for the most natural-looking analytics patterns."
-                keywords="ai traffic generator, modern seo traffic, behavioral traffic bot"
+                title="Next-Gen Traffic Generation 2026 - AI-Driven SEO Visits"
+                description="Experience the future of traffic generation. AI-powered user behavior simulation for the most natural-looking analytics patterns in 2026."
+                keywords="ai traffic generator 2026, modern seo traffic, behavioral traffic bot, next-gen seo tools"
             />
 
             {/* Floating Navbar */}

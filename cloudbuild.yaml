@@ -4,7 +4,7 @@ steps:
     args: [
       'build',
       '-t',
-      'europe-west1-docker.pkg.dev/$PROJECT_ID/trafficgen/trafficgen:$SHORT_SHA',
+      'europe-west1-docker.pkg.dev/$PROJECT_ID/trafficgen/trafficgen:${_SHORT_SHA}',
       '.'
     ]
 
@@ -12,7 +12,7 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args: [
       'push',
-      'europe-west1-docker.pkg.dev/$PROJECT_ID/trafficgen/trafficgen:$SHORT_SHA'
+      'europe-west1-docker.pkg.dev/$PROJECT_ID/trafficgen/trafficgen:${_SHORT_SHA}'
     ]
 
   # Deploy to Cloud Run
@@ -23,20 +23,22 @@ steps:
       'deploy',
       'trafficgen',
       '--image',
-      'europe-west1-docker.pkg.dev/$PROJECT_ID/trafficgen/trafficgen:$SHORT_SHA',
+      'europe-west1-docker.pkg.dev/$PROJECT_ID/trafficgen/trafficgen:${_SHORT_SHA}',
       '--region',
       'europe-west1',
       '--platform',
       'managed',
       '--allow-unauthenticated',
+      '--add-cloudsql-instances',
+      '$PROJECT_ID:europe-west1:trafficgen-db',
       '--set-env-vars',
-      'DB_HOST=34.52.134.77,DB_USER=trafficgen_user,DB_NAME=trafficgen,ALLOWED_ORIGINS=https://trafficgen.$REGION.r.appspot.com',
+      'DB_USER=trafficgen_user,DB_NAME=trafficgen,ALLOWED_ORIGINS=https://traffic-creator.com,CLOUD_SQL_CONNECTION_NAME=$PROJECT_ID:europe-west1:trafficgen-db',
       '--set-secrets',
       'DB_PASSWORD=db-password:latest,JWT_SECRET_KEY=jwt-secret-key:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,RESEND_API_KEY=resend-api-key:latest'
     ]
 
 images:
-  - 'europe-west1-docker.pkg.dev/$PROJECT_ID/trafficgen/trafficgen:$SHORT_SHA'
+  - 'europe-west1-docker.pkg.dev/$PROJECT_ID/trafficgen/trafficgen:${_SHORT_SHA}'
 
 options:
   logging: CLOUD_LOGGING_ONLY

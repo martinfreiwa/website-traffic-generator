@@ -155,24 +155,66 @@ Gets you into the "People also ask" section.
 
 ---
 
-## 4. Implementation Checklist
+### 3.4 "BlogPosting" Schema (Individual Articles)
+Implemented to ensure blog content appears in news feeds and search galleries.
 
-### Phase 1: Helmet & Metadata (Immediate)
-- [ ] Install `react-helmet-async` and wrap `App.tsx`.
-- [ ] Create global `<SEO>` component.
-- [ ] populate `<title>` and `<meta description>` for **ALL** pages defined in section 2.1.
-- [ ] Add `og:image` tags for social sharing (create a generic `og-image.png` 1200x630px).
+```json
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "[Article Title]",
+  "author": { "@type": "Person", "name": "Martin Freiwald" },
+  "datePublished": "[ISO Date]",
+  "publisher": { "@type": "Organization", "name": "Traffic Creator" }
+}
+```
 
-### Phase 2: Technical (Build Process)
-- [ ] Create `public/robots.txt`.
-- [ ] Write a script to generate `public/sitemap.xml` automatically based on routes.
-- [ ] Add `<link rel="canonical">` logic.
+---
 
-### Phase 3: Content & Structure
-- [ ] Audit H1 tags on all pages.
-- [ ] Add JSON-LD Schema to `LandingPage.tsx`, `PricingPage.tsx`, and `OrganicWebsiteTraffic.tsx`.
+## 4. Content Strategy: The "Review & Comparison" Pillar
 
-## 5. Security Headers (Trust Signals)
+We have implemented a massive content injection strategy (31+ articles) designed to capture "High Intent" search traffic.
+
+### 4.1 Keyword-to-Article Mapping (Strategic Selection)
+
+| Category | Targeted High-Value Keyword | Article Slug | Intent |
+| :--- | :--- | :--- | :--- |
+| **Crypto** | "CoinMarketCap Ranking Algorithm" | `traffic-creator-coinmarketcap-rankings` | **Transactional/Niche** |
+| **Crypto** | "CoinGecko Traffic Influence" | `paid-traffic-coingecko-rankings` | **Transactional/Niche** |
+| **Reviews** | "SparkTraffic Alternatives" | `sparktraffic-alternatives` | **Commercial** (Comparison) |
+| **Reviews** | "UseViral Safe for SEO Review" | `useviral-review` | **Commercial** (Consideration) |
+| **Guides** | "What is Bot Traffic Guide 2025" | `bot-traffic` | **Informational** (Awareness) |
+| **Reviews** | "Best Traffic Bot 2026" | `best-traffic-bot-2026` | **Commercial** (Decision) |
+| **Guides** | "SEO Traffic Generation Guide" | `seo-traffic` | **Informational** (Awareness) |
+| **Reviews** | "Top 3 Proxy Providers 2025" | `top-3-proxy-providers-2025` | **Commercial** (Decision) |
+
+### 4.2 Traffic Funnel Strategy
+1.  **Top of Funnel (TOFU)**: Articles like *"What is Bot Traffic"* attract broad informational searches.
+2.  **Middle of Funnel (MOFU)**: Articles like *"SparkTraffic Review"* or *"SerpClix vs Others"* capture users comparing tools.
+3.  **Bottom of Funnel (BOFU)**: Articles like *"Traffic-Creator.com CoinMarketCap Analysis"* drive users directly to sign up for specific ranking-boosting campaigns.
+
+---
+
+## 5. Implementation Checklist
+
+### Phase 1: Helmet & Metadata (COMPLETED ✅)
+- [x] Install `react-helmet-async` and wrap `App.tsx`.
+- [x] Create global `<SEO>` component.
+- [x] Populate `<title>` and `<meta description>` for **ALL** pages.
+- [x] Add dynamic SEO support for Blog articles (Slug-based).
+
+### Phase 2: Technical (Build Process) (COMPLETED ✅)
+- [x] Create `public/robots.txt`.
+- [x] Create `public/sitemap.xml`.
+- [x] Add `<link rel="canonical">` logic.
+
+### Phase 3: Content & Structure (IN PROGRESS 🏗️)
+- [x] Audit H1 tags on all pages.
+- [x] Add JSON-LD Schema to main pages.
+- [x] **New**: Inject 30+ high-value blog articles to target competitor keywords.
+- [ ] Implement internal linking between blog articles and service pages (e.g., Guide -> Pricing).
+
+## 6. Security Headers (Trust Signals)
 While minor for SEO directly, these are crucial for trust and preventing redirects:
 *   **HSTS**: Strict-Transport-Security (Force HTTPS).
 *   **X-Frame-Options**: DENY (Prevent clickjacking).

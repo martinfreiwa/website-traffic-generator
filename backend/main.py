@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from dotenv import load_dotenv
 
@@ -31,6 +32,8 @@ import os
 import secrets
 import stripe
 import email_service
+import random
+import string
 
 # --- Stripe Configuration ---
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "sk_test_placeholder_if_not_set")
@@ -71,6 +74,17 @@ os.makedirs("static/assets", exist_ok=True)
 # Serve static files for assets only
 app.mount("/assets", StaticFiles(directory="static/assets"), name="assets")
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.get("/favicon.ico")
+async def favicon():
+    return FileResponse("static/favicon.ico")
+
+
+@app.get("/favicon.svg")
+async def favicon_svg():
+    return FileResponse("static/favicon.svg")
+
 
 # --- Security & Auth Config ---
 SECRET_KEY = "your-secret-key-change-this-in-prod"
@@ -288,6 +302,7 @@ class DepositRequest(BaseModel):
 class TicketCreate(BaseModel):
     subject: str
     priority: str = "low"
+    type: str = "ticket"
     messages: List[Dict[str, Any]] = []
 
 
@@ -300,6 +315,7 @@ class TicketReply(BaseModel):
 class TicketUpdate(BaseModel):
     status: Optional[str] = None
     priority: Optional[str] = None
+    type: Optional[str] = None
 
 
 class TicketResponse(BaseModel):
@@ -307,6 +323,7 @@ class TicketResponse(BaseModel):
     subject: str
     status: str
     priority: str
+    type: str
     messages: List[Dict[str, Any]]
     created_at: datetime
 
@@ -548,6 +565,10 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 
+def generate_verification_code():
+    return "".join(random.choices(string.digits, k=4))
+
+
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     if expires_delta:
@@ -667,27 +688,25 @@ def register(request: Request, user: UserCreate, db: Session = Depends(get_db)):
             referred_by_id = referrer.id
 
     hashed_password = get_password_hash(user.password)
-    verification_token = secrets.token_urlsafe(32)
+    verification_code = generate_verification_code()
     verification_token_expires = datetime.utcnow() + timedelta(hours=24)
 
     new_user = models.User(
         email=user.email,
         password_hash=hashed_password,
         referred_by=referred_by_id,
-        verification_token=verification_token,
+        verification_token=verification_code,
         verification_token_expires=verification_token_expires,
         is_verified=False,
-        # Generate basic affiliate code
         affiliate_code=f"REF-{user.email[:3].upper()}-{secrets.token_hex(3).upper()}",
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
 
-    # Send verification email
     print(f"📧 Sending verification email to: {user.email}")
     try:
-        result = email_service.send_verification_email(user.email, verification_token)
+        result = email_service.send_verification_email(user.email, verification_code)
         if result.get("success"):
             print(f"✅ Verification email sent to {user.email}")
         else:
@@ -887,13 +906,15 @@ def resend_verification(data: ResendVerificationRequest, db: Session = Depends(g
             "message": "This account is already verified",
         }
 
-    verification_token = secrets.token_urlsafe(32)
-    user.verification_token = verification_token
+    verification_code = generate_verification_code()
+    user.verification_token = verification_code
     user.verification_token_expires = datetime.utcnow() + timedelta(hours=24)
     db.commit()
 
+    print(f"🔐 Generated verification code for {user.email}: {verification_code}")
+
     try:
-        result = email_service.send_verification_email(user.email, verification_token)
+        result = email_service.send_verification_email(user.email, verification_code)
         if result.get("success"):
             print(f"✅ Verification email sent to {user.email}")
         else:
@@ -907,6 +928,38 @@ def resend_verification(data: ResendVerificationRequest, db: Session = Depends(g
         "status": "sent",
         "message": "If an account exists, a verification email has been sent",
     }
+
+
+class VerifyEmailRequest(BaseModel):
+    code: str
+
+
+@app.post("/auth/verify-email")
+@limiter.limit("5/minute")
+def verify_email(
+    request: Request, data: VerifyEmailRequest, db: Session = Depends(get_db)
+):
+    user = (
+        db.query(models.User)
+        .filter(models.User.verification_token == data.code)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid verification code")
+
+    if (
+        user.verification_token_expires
+        and user.verification_token_expires < datetime.utcnow()
+    ):
+        raise HTTPException(status_code=400, detail="Verification code has expired")
+
+    user.is_verified = True
+    user.verification_token = None
+    user.verification_token_expires = None
+    db.commit()
+
+    return {"status": "success", "message": "Email verified successfully"}
 
 
 @app.post("/users/me/avatar")
@@ -1709,7 +1762,9 @@ def get_all_project_stats(
             models.TrafficLog.project_id,
             func.date(models.TrafficLog.timestamp).label("date"),
             func.count().label("pageviews"),
-            func.count(func.distinct(models.TrafficLog.ip)).label("visitors"),
+            func.count(
+                func.distinct(func.coalesce(models.TrafficLog.ip, models.TrafficLog.id))
+            ).label("visitors"),
         )
         .filter(
             and_(
@@ -1768,7 +1823,9 @@ def get_project_stats(
         db.query(
             func.date(models.TrafficLog.timestamp).label("date"),
             func.count().label("pageviews"),
-            func.count(func.distinct(models.TrafficLog.ip)).label("visitors"),
+            func.count(
+                func.distinct(func.coalesce(models.TrafficLog.ip, models.TrafficLog.id))
+            ).label("visitors"),
         )
         .filter(
             and_(
@@ -2936,6 +2993,7 @@ def create_ticket(
         user_id=current_user.id,
         subject=ticket.subject,
         priority=ticket.priority,
+        type=ticket.type,
         messages=ticket.messages,
     )
     db.add(new_ticket)
@@ -2996,9 +3054,27 @@ def update_ticket(
         ticket.status = update.status
     if update.priority:
         ticket.priority = update.priority
+    if update.type:
+        ticket.type = update.type
 
     db.commit()
     db.refresh(ticket)
+    return ticket
+
+
+@app.get("/tickets/{ticket_id}", response_model=TicketResponse)
+def get_ticket(
+    ticket_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    ticket = db.query(models.Ticket).filter(models.Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    if current_user.role != "admin" and ticket.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
     return ticket
 
 

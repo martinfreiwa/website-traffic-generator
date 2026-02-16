@@ -296,9 +296,9 @@ const PricingPage: React.FC = () => {
         <div className="min-h-screen bg-[#f3f4f6] py-20 px-6 font-sans">
             <div className="max-w-7xl mx-auto">
                 <SEO
-                    title="Pricing Plans - Scalable Organic Traffic Packages | Traffic Creator"
-                    description="Transparent pricing for every need. Start with our flexible credit packs or choose a monthly agency plan. Plans start at just €29."
-                    keywords="traffic bot pricing, buy website hits cost, cheap seo traffic, agency traffic plan"
+                    title="Pricing Plans 2026 - Scalable Organic Traffic Packages | Traffic Creator"
+                    description="Transparent pricing for 2026. Start with our flexible credit packs or choose a monthly agency plan. Plans start at just €29. High-quality residential traffic for modern SEO."
+                    keywords="traffic bot pricing 2026, buy website hits cost, cheap seo traffic, agency traffic plan, organic traffic packages"
                     type="product"
                     schema={{
                         "@context": "https://schema.org",

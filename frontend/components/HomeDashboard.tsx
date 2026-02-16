@@ -82,6 +82,7 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ projects, balance, onNavi
     const [didYouKnow, setDidYouKnow] = useState<string>('');
     const [copiedRef, setCopiedRef] = useState(false);
     const [bonusClaimed, setBonusClaimed] = useState(false);
+    const [activeNow, setActiveNow] = useState(0);
 
     useEffect(() => {
         const currentUser = db.getCurrentUser();
@@ -117,15 +118,30 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ projects, balance, onNavi
             setServerTime(new Date().toUTCString().split(' ')[4] + ' UTC');
         }, 1000);
 
-        return () => clearInterval(timeInterval);
+        // Active Now Polling
+        const fetchActiveNow = async () => {
+            try {
+                const data = await db.getActiveNow();
+                setActiveNow(data.activeNow);
+            } catch (e) {
+                // Keep last known value on error
+            }
+        };
+        fetchActiveNow();
+        const activeInterval = setInterval(fetchActiveNow, 5000);
+
+        return () => {
+            clearInterval(timeInterval);
+            clearInterval(activeInterval);
+        };
     }, [balance]);
 
     const activeProjects = projects.filter(p => p.status === 'active');
 
-    // Calculate aggregate stats for the last 7 days
+    // Calculate aggregate stats for the last 30 days
     const aggregateStats = React.useMemo(() => {
-        const last7Days: { date: string, visitors: number }[] = [];
-        for (let i = 6; i >= 0; i--) {
+        const last30Days: { date: string, visitors: number }[] = [];
+        for (let i = 29; i >= 0; i--) {
             const d = new Date();
             d.setDate(d.getDate() - i);
             const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -136,9 +152,9 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ projects, balance, onNavi
                 if (dayStat) dailyTotal += dayStat.visitors;
             });
 
-            last7Days.push({ date: dateStr, visitors: dailyTotal || Math.floor(Math.random() * 500) }); // Mock random data for visual if empty
+            last30Days.push({ date: dateStr, visitors: dailyTotal });
         }
-        return last7Days;
+        return last30Days;
     }, [projects]);
 
     // Calculate Real Traffic Stats from Project Data
@@ -237,7 +253,7 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ projects, balance, onNavi
                     <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Hits Sent</div>
                     <div className="text-4xl font-black text-gray-900 mb-2">{formatNumber(totalTraffic)}</div>
                     <div className="text-[10px] font-black text-[#ff4d00] flex items-center gap-1 uppercase tracking-wider">
-                        <Activity size={12} /> Active Now: {Math.floor(Math.random() * 45) + 12}
+                        <Activity size={12} /> Active Now: {activeNow}
                     </div>
                 </div>
 
@@ -293,7 +309,7 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ projects, balance, onNavi
                                 <h3 className="text-xs font-black uppercase tracking-widest text-gray-900 flex items-center gap-2">
                                     <BarChart size={14} className="text-[#ff4d00]" /> Network Throughput
                                 </h3>
-                                <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">Last 7 days volume</p>
+                                <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">Last 30 days volume</p>
                             </div>
                             <div className="flex gap-2">
                                 <span className="flex items-center gap-1 text-[9px] font-black text-gray-500 uppercase"><div className="w-1.5 h-1.5 bg-[#ff4d00] rounded-full"></div> Hits</span>

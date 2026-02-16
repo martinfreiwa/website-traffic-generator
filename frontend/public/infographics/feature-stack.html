@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="alternate icon" href="/favicon.ico">
+    <link rel="apple-touch-icon" href="/favicon.svg">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            dark: '#0f172a',
+                            light: '#f8fafc', /* Light bg */
+                            primary: '#ff4d00',
+                            primaryAlpha: 'rgba(255, 77, 0, 0.2)',
+                            success: '#10B981',
+                            text: '#1e293b', /* Dark text */
+                            muted: '#64748b'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #ffffff; color: #1e293b; }
+        .chart-container { position: relative; width: 100%; height: 350px; margin: 0 auto; }
+    </style>
+</head>
+<body class="antialiased flex items-center justify-center min-h-screen">
+    <div class="w-full max-w-2xl p-4">
+<h3 class="text-center font-bold mb-4">Technologie Stack</h3><div class="chart-container"><canvas id="chart"></canvas></div>
+    </div>
+    <script>
+        const BRAND_PRIMARY = '#ff4d00';
+        const BRAND_PRIMARY_ALPHA = 'rgba(255, 77, 0, 0.2)';
+        
+        // Light Theme Chart Defaults
+        Chart.defaults.color = '#64748b';
+        Chart.defaults.borderColor = '#e2e8f0';
+        
+        function wrapLabel(label) {
+            const maxLen = 20;
+            if (Array.isArray(label)) return label;
+            if (label.length <= maxLen) return label;
+            return label.split(' ');
+        }
+        
+        const commonTooltipConfig = {
+            backgroundColor: '#fff',
+            titleColor: '#1e293b',
+            bodyColor: '#64748b',
+            borderColor: '#e2e8f0',
+            borderWidth: 1,
+            padding: 10,
+            displayColors: true,
+            callbacks: {
+                title: function(items) {
+                    const label = items[0].chart.data.labels[items[0].dataIndex];
+                    return Array.isArray(label) ? label.join(' ') : label;
+                }
+            }
+        };
+
+        
+        new Chart(document.getElementById('chart').getContext('2d'), {
+            type: 'bar',
+            indexAxis: 'y',
+            data: {
+                labels: ['Browser Fingerprinting', 'Residential IPs', 'Maus-Bewegung', 'Scroll-Simulation', 'AdSense Safety'],
+                datasets: [{
+                    label: 'Traffic Creator',
+                    data: [98, 100, 95, 92, 100],
+                    backgroundColor: BRAND_PRIMARY,
+                    barPercentage: 0.6
+                }, {
+                    label: 'SparkTraffic',
+                    data: [40, 50, 10, 15, 30],
+                    backgroundColor: '#94a3b8',
+                    barPercentage: 0.6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { max: 100, grid: { color: '#f1f5f9' } },
+                    y: { grid: { display: false } }
+                },
+                plugins: { legend: { position: 'bottom' }, tooltip: commonTooltipConfig }
+            }
+        });
+
+    </script>
+</body>
+</html>

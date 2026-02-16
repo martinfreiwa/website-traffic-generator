@@ -60,9 +60,9 @@ const HelpDesk: React.FC<HelpDeskProps> = ({ onBack }) => {
     return (
         <div className="min-h-screen bg-white text-gray-900 font-sans">
             <SEO
-                title="Help Center & Documentation - Traffic Creator"
-                description="Find answers to common questions, setup guides, and API documentation for Traffic Creator."
-                keywords="traffic creator support, help center, documentation, faq"
+                title="Help Center & Documentation 2026 - Traffic Creator Support"
+                description="Find answers to common questions, setup guides, and API documentation for Traffic Creator in 2026."
+                keywords="traffic creator support 2026, help center, documentation, faq, seo tool support"
                 type="article"
                 schema={{
                     "@context": "https://schema.org",
