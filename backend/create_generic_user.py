@@ -19,7 +19,7 @@ engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} i
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 def create_generic_user():
     db = SessionLocal()
@@ -42,6 +42,7 @@ def create_generic_user():
             print(f"User {email} already exists!")
             # Update password to be sure
             existing_user.password_hash = pwd_context.hash(password)
+            existing_user.token_version = 1 # fixes 401 bug
             db.commit()
             print(f"Password reset to: {password}")
             return
@@ -53,7 +54,8 @@ def create_generic_user():
             password_hash=pwd_context.hash(password),
             role="user",
             balance=100.0,
-            status="active"
+            status="active",
+            token_version=1
         )
         
         db.add(new_user)

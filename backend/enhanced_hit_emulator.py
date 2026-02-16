@@ -181,6 +181,13 @@ SEARCH_QUERIES = [
     "pricing",
     "features",
     "documentation",
+    "tin tức",
+    "công nghệ",
+    "mới nhất",
+    "hướng dẫn",
+    "đánh giá",
+    "mẹo",
+    "thủ thuật",
 ]
 
 
@@ -340,6 +347,7 @@ class GAEmuEngine:
             "KR": "ko-KR,ko;q=0.9",
             "CN": "zh-CN,zh;q=0.9",
             "RU": "ru-RU,ru;q=0.9",
+            "VN": "vi-VN,vi;q=0.9",
         }
         return country_lang_map.get(country_code, random.choice(LANGUAGES))
 

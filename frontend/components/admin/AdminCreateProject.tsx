@@ -12,7 +12,6 @@ interface AdminCreateProjectProps {
 }
 
 const DEFAULT_SETTINGS: ProjectSettings = {
-    trafficSpeed: 100,
     bounceRate: 0,
     returnRate: 0,
     deviceSplit: 70,

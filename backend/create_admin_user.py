@@ -28,21 +28,22 @@ def create_admin_user():
         from models import User
         
         # Check if user already exists
-        existing_user = db.query(User).filter(User.email == "admin@trafficcreator.com").first()
+        existing_user = db.query(User).filter(User.email == "admin@traffic.com").first()
         if existing_user:
-            print("User admin@trafficcreator.com already exists!")
+            print("User admin@traffic.com already exists!")
             print(f"Role: {existing_user.role}")
             return
         
         # Create new admin user
         admin_user = User(
             id=str(uuid.uuid4()),
-            email="admin@trafficcreator.com",
+            email="admin@traffic.com",
             password_hash=pwd_context.hash("admin123"),
             role="admin",
             balance=1000.0,
             api_key=None,
-            affiliate_code=None
+            affiliate_code=None,
+            token_version=1
         )
         
         db.add(admin_user)
@@ -52,7 +53,7 @@ def create_admin_user():
         print("=" * 60)
         print("ADMIN USER CREATED SUCCESSFULLY!")
         print("=" * 60)
-        print(f"Email: admin@trafficcreator.com")
+        print(f"Email: admin@traffic.com")
         print(f"Password: admin123")
         print(f"Role: {admin_user.role}")
         print(f"ID: {admin_user.id}")

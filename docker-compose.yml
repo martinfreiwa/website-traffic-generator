@@ -16,7 +16,7 @@ services:
   db:
     image: postgres:15-alpine
     environment:
-      - POSTGRES_USER=user
+      - POSTGRES_USER=userbut
       - POSTGRES_PASSWORD=pass
       - POSTGRES_DB=trafficnexus
     ports:

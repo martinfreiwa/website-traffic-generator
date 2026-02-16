@@ -65,6 +65,11 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
     const [isSaving, setIsSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
     const [projectStats, setProjectStats] = useState<{ date: string; visitors: number; pageviews: number }[]>([]);
+    const [hourlyStats, setHourlyStats] = useState<{ hour: string; visitors: number; pageviews: number }[]>([]);
+
+    // Real-time traffic state
+    const [activeVisitors, setActiveVisitors] = useState(0);
+    const [lastHitTime, setLastHitTime] = useState<string | null>(null);
 
     // Template State
     const [showSaveTemplate, setShowSaveTemplate] = useState(false);
@@ -74,6 +79,8 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
 
     // Chart State
     const [chartMode, setChartMode] = useState<'visitors' | 'pageviews'>('visitors');
+    const [chartView, setChartView] = useState<'daily' | 'hourly'>('daily');
+    const [statsLoading, setStatsLoading] = useState(false);
 
     // GA Scanner State
     const [isScanningGA, setIsScanningGA] = useState(false);
@@ -91,14 +98,14 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
         // Initialize settings from DB or defaults if missing
         if (p) {
             let currentSettings = p.settings || {
-                trafficSpeed: 100, bounceRate: 0, returnRate: 0,
+                bounceRate: 0, returnRate: 0,
 
                 deviceSplit: 70, tabletSplit: 0, deviceSpecific: "All", browser: "Random",
                 timeOnPage: '3 minutes', timezone: 'UTC', language: 'en-US', languages: ['en-US'], gaId: '',
                 entryUrls: '', innerUrls: '', exitUrls: '',
                 autoCrawlEntry: false, autoCrawlInner: false, autoCrawlExit: false,
                 innerUrlCount: 0,
-                geoTargets: [], countries: ['US'], // Default ISO 'US'
+                geoTargets: [], countries: ['US'],
                 trafficSource: 'Direct', keywords: '', referralUrls: '',
                 utmSource: '', utmMedium: '', utmCampaign: '', utmTerm: '', utmContent: '',
                 proxyMode: 'auto', customProxies: '',
@@ -146,11 +153,59 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
     // Fetch project stats
     useEffect(() => {
         const fetchStats = async () => {
+            setStatsLoading(true);
             const stats = await db.syncProjectStats(projectId, 30);
             setProjectStats(stats);
+            setStatsLoading(false);
         };
         fetchStats();
     }, [projectId]);
+
+    // Fetch hourly stats when chartView changes
+    useEffect(() => {
+        const fetchHourlyStats = async () => {
+            if (chartView === 'hourly') {
+                setStatsLoading(true);
+                const stats = await db.syncProjectStatsHourly(projectId, 24);
+                setHourlyStats(stats);
+                setStatsLoading(false);
+            }
+        };
+        fetchHourlyStats();
+    }, [projectId, chartView]);
+
+    // Real-time traffic polling
+    useEffect(() => {
+        const fetchActiveNow = async () => {
+            try {
+                const data = await db.getActiveNow();
+                const projectData = data.projects[projectId];
+                if (projectData) {
+                    setActiveVisitors(projectData.active);
+                    setLastHitTime(projectData.lastHit || null);
+                } else {
+                    setActiveVisitors(0);
+                }
+            } catch (e) {
+                console.error('Failed to fetch active visitors:', e);
+            }
+        };
+
+        fetchActiveNow();
+        const interval = setInterval(fetchActiveNow, 5000);
+        return () => clearInterval(interval);
+    }, [projectId]);
+
+    // Format time ago
+    const formatTimeAgo = (isoString: string | null) => {
+        if (!isoString) return null;
+        const date = new Date(isoString);
+        const now = new Date();
+        const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+        if (seconds < 60) return `${seconds}s ago`;
+        if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+        return `${Math.floor(seconds / 3600)}h ago`;
+    };
 
     // Click Outside Handler for Dropdowns
     useEffect(() => {
@@ -194,8 +249,8 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
             return;
         }
 
-        const totalPercent = settings.geoTargets.reduce((sum, t) => sum + t.percent, 0);
-        if (totalPercent !== 100 && settings.geoTargets.length > 0) {
+        const totalPercent = (settings.geoTargets || []).reduce((sum, t) => sum + t.percent, 0);
+        if (totalPercent !== 100 && (settings.geoTargets || []).length > 0) {
             alert(`Total location percentage must equal 100%. Current total: ${totalPercent}%`);
             return;
         }
@@ -205,8 +260,8 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
 
         const updatedSettings = {
             ...settings,
-            countries: settings.geoTargets.map(t => t.country),
-            language: settings.languages[0] || 'en-US'
+            countries: (settings.geoTargets || []).map(t => t.country),
+            language: (settings.languages || [])[0] || 'en-US'
         };
 
         const updatedProject: Project = { ...project, settings: updatedSettings };
@@ -261,7 +316,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
 
     // --- GA SCANNER ---
     const handleScanGA = async () => {
-        const entryUrl = settings.entryUrls.split('\n')[0]?.trim();
+        const entryUrl = (settings.entryUrls || '').split('\n')[0]?.trim();
         if (!entryUrl) {
             alert('Please enter an Entry URL first.');
             return;
@@ -282,13 +337,13 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
     // --- GEO HANDLERS (With ISO mapping) ---
     const handleAddCountry = (isoCode: string) => {
         if (isFreeTrial) return;
-        if (settings.geoTargets.find(t => t.country === isoCode)) return;
+        if ((settings.geoTargets || []).find(t => t.country === isoCode)) return;
 
-        const currentCount = settings.geoTargets.length;
+        const currentCount = (settings.geoTargets || []).length;
         const newCount = currentCount + 1;
         const newPercent = Math.floor(100 / newCount);
 
-        const updatedTargets = settings.geoTargets.map(t => ({ ...t, percent: newPercent }));
+        const updatedTargets = (settings.geoTargets || []).map(t => ({ ...t, percent: newPercent }));
         const remainder = 100 - (newPercent * (newCount - 1));
 
         const newTarget: GeoTarget = {
@@ -303,35 +358,35 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
 
     const handleRemoveCountry = (id: string) => {
         if (isFreeTrial) return;
-        handleChange('geoTargets', settings.geoTargets.filter(t => t.id !== id));
+        handleChange('geoTargets', (settings.geoTargets || []).filter(t => t.id !== id));
     };
 
     const handleGeoPercentChange = (id: string, newPercent: number) => {
         if (isFreeTrial) return;
-        const updated = settings.geoTargets.map(t => t.id === id ? { ...t, percent: newPercent } : t);
+        const updated = (settings.geoTargets || []).map(t => t.id === id ? { ...t, percent: newPercent } : t);
         handleChange('geoTargets', updated);
     };
 
     // --- LANGUAGE HANDLERS ---
     const handleAddLanguage = (lang: string) => {
         if (isFreeTrial) return;
-        if (!settings.languages.includes(lang)) {
-            handleChange('languages', [...settings.languages, lang]);
+        if (!(settings.languages || []).includes(lang)) {
+            handleChange('languages', [...(settings.languages || []), lang]);
         }
         setLanguageSearch('');
     }
 
     const handleRemoveLanguage = (lang: string) => {
         if (isFreeTrial) return;
-        handleChange('languages', settings.languages.filter(l => l !== lang));
+        handleChange('languages', (settings.languages || []).filter(l => l !== lang));
     }
 
     // --- URL COUNTING LOGIC ---
-    const countUrls = (text: string) => text.split('\n').filter(line => line.trim().length > 0).length;
+    const countUrls = (text: string | undefined) => (text || '').split('\n').filter(line => line.trim().length > 0).length;
 
-    const entryCount = countUrls(settings.entryUrls);
-    const innerCount = countUrls(settings.innerUrls);
-    const exitCount = countUrls(settings.exitUrls);
+    const entryCount = countUrls(settings?.entryUrls);
+    const innerCount = countUrls(settings?.innerUrls);
+    const exitCount = countUrls(settings?.exitUrls);
     const totalUrlCount = entryCount + innerCount + exitCount;
 
     const stats = projectStats.length > 0 ? projectStats : (project.stats || []);
@@ -472,6 +527,27 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
 
             {/* --- TRAFFIC CHART --- */}
             <div className="bg-white border border-gray-200 shadow-sm p-6">
+                {/* Real-time Traffic Widget */}
+                <div className="mb-6 p-4 rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="relative">
+                                <div className="w-4 h-4 bg-green-500 rounded-full animate-pulse"></div>
+                                <div className="absolute inset-0 w-4 h-4 bg-green-400 rounded-full animate-ping"></div>
+                            </div>
+                            <div>
+                                <div className="text-xs font-bold uppercase tracking-wider text-green-700">Live Traffic</div>
+                                <div className="text-2xl font-black text-green-800">{activeVisitors} <span className="text-sm font-medium text-green-600">active now</span></div>
+                            </div>
+                        </div>
+                        {lastHitTime && (
+                            <div className="text-xs text-green-600">
+                                Last hit: {formatTimeAgo(lastHitTime)}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                     <div className="flex items-center gap-4">
                         <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00]">Traffic Statistics</h3>
@@ -479,23 +555,41 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                             <button onClick={() => setChartMode('visitors')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm transition-all ${chartMode === 'visitors' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-700'}`}>Visitors</button>
                             <button onClick={() => setChartMode('pageviews')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm transition-all ${chartMode === 'pageviews' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-700'}`}>Pageviews</button>
                         </div>
+                        <div className="flex bg-gray-100 rounded-sm p-1">
+                            <button onClick={() => setChartView('daily')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm transition-all ${chartView === 'daily' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-700'}`}>30 Days</button>
+                            <button onClick={() => setChartView('hourly')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm transition-all ${chartView === 'hourly' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-700'}`}>24 Hours</button>
+                        </div>
                     </div>
-                    <div className="text-xs text-gray-500 font-bold">Total {chartMode === 'visitors' ? 'Visits' : 'Views'}: <span className="text-gray-900">{stats.reduce((a, b) => a + (chartMode === 'visitors' ? b.visitors : (b.pageviews || b.visitors)), 0).toLocaleString()}</span></div>
+                    <div className="text-xs text-gray-500 font-bold">
+                        Total {chartMode === 'visitors' ? 'Visits' : 'Views'}: 
+                        <span className="text-gray-900 ml-1">
+                            {(chartView === 'daily' ? stats : hourlyStats).reduce((a, b) => a + (chartMode === 'visitors' ? b.visitors : (b.pageviews || b.visitors)), 0).toLocaleString()}
+                        </span>
+                    </div>
                 </div>
 
                 <div className="h-64 flex items-end justify-between gap-1 w-full px-4 border-b border-gray-100 pb-2">
-                    {stats.length === 0 ? <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">No traffic data available.</div> :
-                        stats.map((stat, i) => {
+                    {statsLoading ? (
+                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm animate-pulse">Loading statistics...</div>
+                    ) : (chartView === 'daily' ? stats : hourlyStats).length === 0 ? (
+                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">No traffic data available.</div>
+                    ) : (
+                        (chartView === 'daily' ? stats : hourlyStats).map((stat, i) => {
                             const val = chartMode === 'visitors' ? stat.visitors : (stat.pageviews || stat.visitors);
-                            const heightPercent = currentMax > 0 ? (val / currentMax) * 100 : 0;
+                            const dataStats = chartView === 'daily' ? stats : hourlyStats;
+                            const localMax = Math.max(...dataStats.map(s => chartMode === 'visitors' ? s.visitors : (s.pageviews || s.visitors)), 1);
+                            const heightPercent = localMax > 0 ? (val / localMax) * 100 : 0;
+                            const label = chartView === 'daily' ? (stat as any).date : (stat as any).hour;
                             return (
                                 <div key={i} className="flex-1 flex flex-col justify-end group relative h-full">
-                                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-black text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 whitespace-nowrap">{stat.date}: {val.toLocaleString()}</div>
+                                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-black text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 whitespace-nowrap">
+                                        {label}: {val.toLocaleString()}
+                                    </div>
                                     <div className="w-full bg-[#ff4d00] opacity-80 hover:opacity-100 transition-opacity rounded-t-sm min-w-[4px]" style={{ height: `${heightPercent}%`, minHeight: '4px' }}></div>
                                 </div>
                             )
                         })
-                    }
+                    )}
                 </div>
             </div>
 
@@ -518,7 +612,6 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                             />
                         </div>
 
-                        <RangeControl label="Traffic Speed" value={settings.trafficSpeed} onChange={(v) => handleChange('trafficSpeed', v)} />
                         <RangeControl label="Bounce Rate" value={settings.bounceRate} onChange={(v) => handleChange('bounceRate', v)} suffix="%" />
                         <RangeControl label="Visitor Returning Rate" value={settings.returnRate} onChange={(v) => handleChange('returnRate', v)} suffix="%" />
 
@@ -641,7 +734,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                         <div className="relative" onClick={(e) => e.stopPropagation()}>
                             <Label>Browser Languages</Label>
                             <div className="bg-[#f9fafb] border border-gray-200 p-2 min-h-[48px] flex flex-wrap gap-2">
-                                {settings.languages.map(lang => (
+                                {(settings.languages || []).map(lang => (
                                     <span key={lang} className="bg-white border border-gray-200 text-xs font-bold uppercase px-2 py-1 flex items-center gap-1 rounded-sm">
                                         {lang} <button onClick={() => handleRemoveLanguage(lang)} className="hover:text-red-500"><X size={10} /></button>
                                     </span>
@@ -654,7 +747,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                                     }}
                                     onFocus={() => setShowLangDropdown(true)}
                                     className="flex-1 bg-transparent text-sm outline-none min-w-[80px]"
-                                    placeholder={settings.languages.length === 0 ? "Select Language..." : ""}
+                                    placeholder={(settings.languages || []).length === 0 ? "Select Language..." : ""}
                                     disabled={isFreeTrial}
                                 />
                             </div>
@@ -821,7 +914,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                                 disabled={isFreeTrial}
                             />
                         </div>
-                        {settings.scheduleMode === 'burst' && (
+                        {(settings.scheduleMode || '') === 'burst' && (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-top-2">
                                 <div>
                                     <Label>Start Time</Label>
@@ -848,7 +941,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                                 disabled={isFreeTrial}
                             />
                         </div>
-                        {settings.proxyMode === 'custom' && (
+                        {(settings.proxyMode || '') === 'custom' && (
                             <div className="animate-in fade-in slide-in-from-top-2">
                                 <Label>Custom Proxies (ip:port:user:pass)</Label>
                                 <textarea
@@ -905,7 +998,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                         </div>
 
                         <div className="space-y-4">
-                            {settings.geoTargets.map(target => (
+                            {(settings.geoTargets || []).map(target => (
                                 <div key={target.id} className="flex flex-col md:flex-row items-start md:items-center gap-3 bg-[#f9fafb] p-3 border border-gray-100">
                                     <div className="flex-1 font-bold text-sm text-gray-800 flex items-center gap-2">
                                         <span className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-[8px]">{target.country}</span>
@@ -918,7 +1011,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                                             placeholder="State (Opt)"
                                             value={target.state || ''}
                                             onChange={(e) => {
-                                                const updated = settings.geoTargets.map(t => t.id === target.id ? { ...t, state: e.target.value } : t);
+                                                const updated = (settings.geoTargets || []).map(t => t.id === target.id ? { ...t, state: e.target.value } : t);
                                                 handleChange('geoTargets', updated);
                                             }}
                                             className="w-24 bg-white border border-gray-200 p-1 text-xs outline-none focus:border-[#ff4d00]"
@@ -927,7 +1020,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                                             placeholder="City (Opt)"
                                             value={target.city || ''}
                                             onChange={(e) => {
-                                                const updated = settings.geoTargets.map(t => t.id === target.id ? { ...t, city: e.target.value } : t);
+                                                const updated = (settings.geoTargets || []).map(t => t.id === target.id ? { ...t, city: e.target.value } : t);
                                                 handleChange('geoTargets', updated);
                                             }}
                                             className="w-24 bg-white border border-gray-200 p-1 text-xs outline-none focus:border-[#ff4d00]"
@@ -949,14 +1042,14 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                                     </button>
                                 </div>
                             ))}
-                            {settings.geoTargets.length === 0 && (
+                            {(settings.geoTargets || []).length === 0 && (
                                 <div className="text-center p-4 text-xs text-gray-400 bg-gray-50 border border-dashed border-gray-200">
                                     No countries selected. Traffic will be global.
                                 </div>
                             )}
                             <div className="text-right text-[10px] font-black uppercase tracking-wide">
-                                Total: <span className={`${settings.geoTargets.reduce((a, b) => a + b.percent, 0) === 100 ? 'text-green-600' : 'text-red-500'}`}>
-                                    {settings.geoTargets.reduce((a, b) => a + b.percent, 0)}%
+                                Total: <span className={`${(settings.geoTargets || []).reduce((a, b) => a + b.percent, 0) === 100 ? 'text-green-600' : 'text-red-500'}`}>
+                                    {(settings.geoTargets || []).reduce((a, b) => a + b.percent, 0)}%
                                 </span>
                             </div>
                         </div>
@@ -978,11 +1071,11 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                                 />
                             </div>
 
-                            {settings.trafficSource.includes('Organic') && (
+                            {((settings.trafficSource || '')).includes('Organic') && (
                                 <div className="animate-in fade-in slide-in-from-top-2">
                                     <Label>Keywords (One per line)</Label>
                                     <textarea
-                                        value={settings.keywords}
+                                        value={settings.keywords || ''}
                                         onChange={(e) => handleChange('keywords', e.target.value)}
                                         className="w-full bg-[#f9fafb] border-b-2 border-transparent focus:border-[#ff4d00] p-3 outline-none text-sm font-medium h-32 resize-none"
                                         placeholder="keyword 1&#10;keyword 2"
@@ -991,11 +1084,11 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                                 </div>
                             )}
 
-                            {(settings.trafficSource.includes('Social') || settings.trafficSource.includes('Referral')) && (
+                            {((settings.trafficSource || '').includes('Social') || (settings.trafficSource || '').includes('Referral')) && (
                                 <div className="animate-in fade-in slide-in-from-top-2">
                                     <Label>Referrer URLs (One per line)</Label>
                                     <textarea
-                                        value={settings.referralUrls}
+                                        value={settings.referralUrls || ''}
                                         onChange={(e) => handleChange('referralUrls', e.target.value)}
                                         className="w-full bg-[#f9fafb] border-b-2 border-transparent focus:border-[#ff4d00] p-3 outline-none text-sm font-medium h-32 resize-none"
                                         placeholder="https://referrer-site.com/post&#10;https://social-media.com/share"

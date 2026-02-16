@@ -207,6 +207,7 @@ const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, onNavigat
                 <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Name</th>
                 <th className="w-28 px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Plan</th>
                 <th className="w-32 px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Expires</th>
+                <th className="w-24 px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Hits</th>
                 <th className="w-32 px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
                 <th className="w-24 px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Actions</th>
               </tr>
@@ -214,7 +215,7 @@ const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, onNavigat
             <tbody className="divide-y divide-gray-100">
               {filteredProjects.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-gray-400 text-sm">
+                  <td colSpan={8} className="px-6 py-12 text-center text-gray-400 text-sm">
                     No campaigns found matching your filters.
                   </td>
                 </tr>
@@ -245,6 +246,16 @@ const ProjectList: React.FC<ProjectListProps> = ({ projects, onUpdate, onNavigat
                     </td>
                     <td className="px-6 py-5 text-sm font-medium text-gray-600">{project.plan}</td>
                     <td className="px-6 py-5 text-sm font-medium text-gray-500">{project.expires}</td>
+                    <td className="px-6 py-5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-gray-900">
+                          {(project.totalHits || 0).toLocaleString()}
+                        </span>
+                        {project.status === 'active' && (
+                          <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-6 py-5">
                       <span className={`inline-flex items-center px-2.5 py-1 text-[10px] font-black uppercase tracking-wider rounded-sm ${getStatusColor(project.status)}`}>
                         {project.status === 'stopped' && <span className="w-1.5 h-1.5 rounded-full bg-gray-400 mr-2"></span>}

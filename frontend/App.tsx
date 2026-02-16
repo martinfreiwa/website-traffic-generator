@@ -5,6 +5,7 @@ import Dashboard from './components/Dashboard';
 import LandingPage from './components/landing/LandingPage';
 import OrganicWebsiteTraffic from './components/landing/OrganicWebsiteTraffic';
 import ModernLandingPage from './components/landing/ModernLandingPage';
+import ConversionLandingPage from './components/landing/ConversionLandingPage';
 import Auth from './components/Auth';
 import AdminPanel from './components/admin/AdminPanel';
 import Legal from './components/Legal';
@@ -129,6 +130,8 @@ const App: React.FC = () => {
                 {/* Catch-all */}
                 <Route path="/organic-website-traffic" element={<OrganicWebsiteTraffic onLogin={() => navigate('/login')} onNavigate={(page) => navigate(`/${page}`)} />} />
                 <Route path="/modern-traffic" element={<ModernLandingPage onLogin={() => navigate('/login')} onNavigate={(page) => navigate(`/${page}`)} />} />
+                <Route path="/free-website-traffic" element={<ConversionLandingPage onLogin={() => navigate('/login')} onNavigate={(page) => navigate(`/${page}`)} />} />
+                <Route path="/landing2" element={<ConversionLandingPage onLogin={() => navigate('/login')} onNavigate={(page) => navigate(`/${page}`)} />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
             <ChatWidget />

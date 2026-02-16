@@ -18,7 +18,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import models
 from database import SessionLocal, engine, get_db
-from scheduler import scheduler
+from enhanced_scheduler import scheduler
 from sse_starlette.sse import EventSourceResponse
 from web_utils import find_ga4_tid
 import json
@@ -126,12 +126,12 @@ class UserResponse(BaseModel):
     balance_expert: float = 0.0
     api_key: Optional[str] = None
     affiliate_code: Optional[str] = None
-    status: str = "active"
-    plan: str = "free"
+    status: Optional[str] = "active"
+    plan: Optional[str] = "free"
     shadow_banned: bool = False
     is_verified: bool = False
     notes: Optional[str] = None
-    tags: List[str] = []
+    tags: Optional[List[str]] = []
     ban_reason: Optional[str] = None
     created_at: Optional[datetime] = None
     last_ip: Optional[str] = None
@@ -164,8 +164,8 @@ class UserResponse(BaseModel):
     recovery_email: Optional[str] = None
     timezone: str = "UTC"
     language: str = "English"
-    theme_accent_color: str = "#ff4d00"
-    skills_badges: List[str] = []
+    theme_accent_color: Optional[str] = "#ff4d00"
+    skills_badges: Optional[List[str]] = []
     referral_code: Optional[str] = None
     support_pin: Optional[str] = None
     date_format: str = "YYYY-MM-DD"
@@ -203,9 +203,10 @@ class ProjectCreate(BaseModel):
     name: str
     plan_type: str = "Custom"
     tier: Optional[str] = None
-    settings: Dict[str, Any]  # THE JSONB PAYLOAD
+    settings: Dict[str, Any]
     daily_limit: int = 0
     total_target: int = 0
+    start_at: Optional[datetime] = None
 
 
 class AdminProjectCreate(ProjectCreate):
@@ -240,15 +241,16 @@ class ProjectResponse(BaseModel):
     user_id: str
     name: str
     status: str
+    plan_type: Optional[str] = "Custom"
     tier: Optional[str] = None
     settings: Dict[str, Any]
-    daily_limit: int
-    total_target: int
-    hits_today: int
-    total_hits: int
-    created_at: datetime
+    daily_limit: int = 0
+    total_target: int = 0
+    hits_today: Optional[int] = 0
+    total_hits: Optional[int] = 0
+    start_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
 
-    # Admin Fields (Optional in response, but populated if user is owner or admin)
     priority: int = 0
     force_stop_reason: Optional[str] = None
     is_hidden: bool = False
@@ -858,12 +860,18 @@ def update_user_me(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    update_data = user_update.dict(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(current_user, key, value)
-    db.commit()
-    db.refresh(current_user)
-    return current_user
+    try:
+        update_data = user_update.dict(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(current_user, key, value)
+        db.commit()
+        db.refresh(current_user)
+        return current_user
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Update failed: {str(e)}")
 
 
 @app.post("/auth/api-key")
@@ -1044,7 +1052,6 @@ def create_quick_campaign(campaign: QuickCampaignCreate, db: Session = Depends(g
     db.refresh(new_user)
 
     default_settings = {
-        "trafficSpeed": 70,
         "bounceRate": campaign.settings.get("bounce_rate", 40),
         "returnRate": 0,
         "device_distribution": {
@@ -1384,6 +1391,32 @@ def update_project_admin(
     return project
 
 
+@app.delete("/projects/{project_id}")
+def delete_project(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    project = (
+        db.query(models.Project)
+        .filter(
+            models.Project.id == project_id, models.Project.user_id == current_user.id
+        )
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Delete associated traffic logs first
+    db.query(models.TrafficLog).filter(
+        models.TrafficLog.project_id == project_id
+    ).delete()
+
+    db.delete(project)
+    db.commit()
+    return {"status": "success", "message": "Project deleted"}
+
+
 @app.delete("/admin/projects/{project_id}")
 def delete_project_admin(
     project_id: str,
@@ -1703,9 +1736,7 @@ async def stop_traffic_adhoc(
 @app.get("/stats")
 def get_global_stats():
     from hit_emulator import ga_emu_engine
-    from scheduler import scheduler
 
-    # Aggregate stats across all projects for the dashboard overview
     total_success = sum(s.get("success", 0) for s in ga_emu_engine.stats.values())
     total_failure = sum(s.get("failure", 0) for s in ga_emu_engine.stats.values())
 
@@ -1916,6 +1947,59 @@ def get_active_now(
                     total_active += min(mem_count, 5)
 
     return {"activeNow": total_active, "projects": projects_data}
+
+
+@app.get("/projects/{project_id}/stats/hourly")
+def get_project_stats_hourly(
+    project_id: str,
+    hours: int = 24,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Hourly stats for single project.
+    Returns: [{ hour, visitors, pageviews }, ...]
+    """
+    from datetime import datetime, timedelta
+    from sqlalchemy import func, and_
+
+    project = (
+        db.query(models.Project)
+        .filter(
+            models.Project.id == project_id, models.Project.user_id == current_user.id
+        )
+        .first()
+    )
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    start_time = datetime.utcnow() - timedelta(hours=hours)
+
+    stats = (
+        db.query(
+            func.strftime("%Y-%m-%d %H:00", models.TrafficLog.timestamp).label("hour"),
+            func.count().label("pageviews"),
+            func.count(
+                func.distinct(func.coalesce(models.TrafficLog.ip, models.TrafficLog.id))
+            ).label("visitors"),
+        )
+        .filter(
+            and_(
+                models.TrafficLog.project_id == project_id,
+                models.TrafficLog.timestamp >= start_time,
+                models.TrafficLog.status == "success",
+            )
+        )
+        .group_by(func.strftime("%Y-%m-%d %H:00", models.TrafficLog.timestamp))
+        .order_by(func.strftime("%Y-%m-%d %H:00", models.TrafficLog.timestamp).desc())
+        .all()
+    )
+
+    return [
+        {"hour": s.hour, "visitors": s.visitors, "pageviews": s.pageviews}
+        for s in stats
+    ]
 
 
 @app.get("/admin/live-pulse")

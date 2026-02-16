@@ -8,7 +8,6 @@ Global health check for the platform. See key metrics at a glance.
 
 ## Features
 *   [x] **Platform Stats**: Total Users, Total Active Projects, Daily Revenue.
-*   [ ] **Resource Usage**: Server CPU/Ram load (if tracked), DB size.
 *   [x] **Recent Activity**: Latest signups, latest payments.
 
 ## Planned Improvements

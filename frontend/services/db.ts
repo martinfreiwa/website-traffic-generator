@@ -245,7 +245,13 @@ export const db = {
                 expires: p.expires_at || 'Never',
                 createdAt: p.created_at,
                 settings: p.settings,
-                stats: statsData[p.id] || []
+                stats: statsData[p.id] || [],
+                totalHits: p.total_hits || 0,
+                hitsToday: p.hits_today || 0,
+                customTarget: {
+                    totalVisitors: p.total_target || 0,
+                    dailyLimit: p.daily_limit || 0
+                }
             }));
 
             localStorage.setItem('modus_projects_cache', JSON.stringify(mapped));
@@ -261,6 +267,17 @@ export const db = {
             return await response.json();
         } catch (e) {
             console.error("Failed to fetch project stats:", e);
+            return [];
+        }
+    },
+
+    syncProjectStatsHourly: async (projectId: string, hours: number = 24): Promise<{ hour: string; visitors: number; pageviews: number }[]> => {
+        try {
+            const response = await fetchWithAuth(`${API_BASE_URL}/projects/${projectId}/stats/hourly?hours=${hours}`);
+            if (!response.ok) return [];
+            return await response.json();
+        } catch (e) {
+            console.error("Failed to fetch hourly project stats:", e);
             return [];
         }
     },
@@ -412,7 +429,9 @@ export const db = {
             db.syncUsers(),
             db.syncAllTransactions(),
             db.syncTickets(),
-            db.syncNotifications()
+            db.syncTickets(),
+            db.syncNotifications(),
+            db.syncAlerts()
         ]);
     },
 
@@ -930,8 +949,32 @@ export const db = {
     },
 
     getAlerts: (): SystemAlert[] => {
+        // This is synchronous in current design but backend is async.
+        // We rely on syncAlerts (below) to populate cache or we make this async?
+        // The component calls it synchronously: setAlerts(db.getAlerts())
+        // So we must use cache.
         const data = localStorage.getItem('modus_alerts_cache');
         return data ? JSON.parse(data) : [];
+    },
+
+    syncAlerts: async () => {
+        try {
+            const response = await fetchWithAuth(`${API_BASE_URL}/admin/broadcasts`);
+            if (!response.ok) return;
+            const data = await response.json();
+            const mapped: SystemAlert[] = data.map((b: any) => ({
+                id: b.id,
+                message: b.message,
+                type: b.type,
+                active: b.is_active,
+                date: b.created_at,
+                targetType: 'all', // Backend doesn't support this yet
+                title: b.title // Extended SystemAlert to include title? It works if interface ignores it or we extend it.
+            }));
+            localStorage.setItem('modus_alerts_cache', JSON.stringify(mapped));
+        } catch (e) {
+            console.error("Failed to sync alerts:", e);
+        }
     },
 
     checkBroadcastTarget: (alert: SystemAlert, user?: User): boolean => {
@@ -1694,31 +1737,55 @@ export const db = {
         });
     },
 
-    createAlert: (message: string, type: 'info' | 'warning' | 'error') => {
-        const alerts = db.getAlerts();
-        const newAlert: SystemAlert = {
-            id: Date.now().toString(),
-            message,
-            type,
-            active: true,
-            date: new Date().toISOString(),
-            targetType: 'all'
+    createAlert: async (message: string, type: 'info' | 'warning' | 'error', title: string = 'System Alert') => {
+        const payload = {
+            title: title,
+            message: message,
+            type: type,
+            is_active: true
         };
-        alerts.push(newAlert);
-        localStorage.setItem('modus_alerts_cache', JSON.stringify(alerts));
+        await fetchWithAuth(`${API_BASE_URL}/admin/broadcasts`, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        await db.syncAlerts();
     },
 
-    toggleAlert: (id: string, active: boolean) => {
+    toggleAlert: async (id: string, active: boolean) => {
+        // Backend endpoint for update is /admin/broadcasts/{id}
+        // Need to fetch existing first or just patch?
+        // Main.py has PUT /admin/broadcasts/{id} taking BroadcastCreate.
+        // We need extended endpoint for PATCH or full update.
+        // Assuming we can just update status?
+        // Let's implement full update if needed, but for now we might fail if we don't send all fields.
+        // Use a specialized endpoint if available, or fetch-then-update.
+        // Logic:
         const alerts = db.getAlerts();
         const alert = alerts.find(a => a.id === id);
-        if (alert) {
-            alert.active = active;
-            localStorage.setItem('modus_alerts_cache', JSON.stringify(alerts));
-        }
+        if (!alert) return;
+
+        const payload = {
+            title: (alert as any).title || 'System Alert',
+            message: alert.message,
+            type: alert.type,
+            is_active: active
+        };
+
+        await fetchWithAuth(`${API_BASE_URL}/admin/broadcasts/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+        });
+        await db.syncAlerts();
     },
 
-    deleteAlert: (id: string) => {
-        const alerts = db.getAlerts().filter(a => a.id !== id);
-        localStorage.setItem('modus_alerts_cache', JSON.stringify(alerts));
+    deleteAlert: async (id: string) => {
+        // Backend API doesn't seem to have DELETE for broadcasts in main.py snippet I saw?
+        // I saw GET, POST, PUT.
+        // If missing, I need to add DELETE endpoint to main.py.
+        // Assuming it exists or I will add it.
+        await fetchWithAuth(`${API_BASE_URL}/admin/broadcasts/${id}`, {
+            method: 'DELETE'
+        });
+        await db.syncAlerts();
     }
 };

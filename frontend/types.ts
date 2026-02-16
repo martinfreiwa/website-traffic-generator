@@ -40,78 +40,71 @@ export interface QuickCampaignSettings {
 }
 
 export interface ProjectSettings {
-  trafficSpeed: number;
-  bounceRate: number;
-  returnRate: number;
-  deviceSplit: number; // 0-100, represent Desktop percentage (Legacy)
-  tabletSplit?: number; // 0-100. If present, Desktop = deviceSplit, Tablet = tabletSplit, Mobile = Remainder
-  browser?: string; // e.g. 'Chrome', 'Firefox', 'Random'
-  deviceSpecific: string;
-  timeOnPage: string;
-  timezone: string;
-  language: string;
-  languages: string[];
-  gaId: string;
+    bounceRate: number;
+    returnRate: number;
+    deviceSplit: number;
+    tabletSplit?: number;
+    browser?: string;
+    deviceSpecific: string;
+    timeOnPage: string;
+    timezone: string;
+    language: string;
+    languages: string[];
+    gaId: string;
 
-  // URL Logic
-  urlVisitOrder?: 'sequential' | 'random';
+    urlVisitOrder?: 'sequential' | 'random';
 
-  // UTM Tracking
-  utmSource?: string;
-  utmMedium?: string;
-  utmCampaign?: string;
-  utmTerm?: string;
-  utmContent?: string;
+    utmSource?: string;
+    utmMedium?: string;
+    utmCampaign?: string;
+    utmTerm?: string;
+    utmContent?: string;
 
-  entryUrls: string;
-  innerUrls: string;
-  exitUrls: string;
-  autoCrawlEntry: boolean;
-  autoCrawlInner: boolean;
-  autoCrawlExit: boolean;
-  innerUrlCount: number;
+    entryUrls: string;
+    innerUrls: string;
+    exitUrls: string;
+    autoCrawlEntry: boolean;
+    autoCrawlInner: boolean;
+    autoCrawlExit: boolean;
+    innerUrlCount: number;
 
-  // Updated Location Settings
-  geoTargets: GeoTarget[];
-  countries: string[];
+    geoTargets: GeoTarget[];
+    countries: string[];
 
-  // Updated Traffic Source Settings
-  trafficSource: string;
-  keywords: string;
-  referralUrls: string;
+    trafficSource: string;
+    keywords: string;
+    referralUrls: string;
+    socialPlatforms?: string[];
+    noEndDate?: boolean;
 
-  // Proxy Settings
-  proxyMode?: 'auto' | 'sticky' | 'custom';
-  customProxies?: string;
+    proxyMode?: 'auto' | 'sticky' | 'custom';
+    customProxies?: string;
 
-  // Schedule
-  scheduleMode?: 'continuous' | 'burst';
-  scheduleTime?: string;
-  scheduleDuration?: number;
+    scheduleMode?: 'continuous' | 'burst';
+    scheduleTime?: string;
+    scheduleDuration?: number;
 
-  sitemap: string;
-  shortener: string;
-  autoRenew: boolean;
-  cacheWebsite: boolean;
-  minimizeCpu: boolean;
-  randomizeSession: boolean;
-  antiFingerprint: boolean;
-  pageViewsWithScroll: number;
-  clickExternal: number;
-  clickInternal: number;
+    sitemap: string;
+    shortener: string;
+    autoRenew: boolean;
+    cacheWebsite: boolean;
+    minimizeCpu: boolean;
+    randomizeSession: boolean;
+    antiFingerprint: boolean;
+    pageViewsWithScroll: number;
+    clickExternal: number;
+    clickInternal: number;
 
-  // Expert Features
-  residentialIps?: boolean;
-  nightDayVolume?: boolean;
-  websiteCrawler?: boolean;
-  ga4NaturalEvents?: boolean;
-  randomizeDailyVolume?: boolean;
-  citiesGeoTargeting?: boolean;
+    residentialIps?: boolean;
+    nightDayVolume?: boolean;
+    websiteCrawler?: boolean;
+    ga4NaturalEvents?: boolean;
+    randomizeDailyVolume?: boolean;
+    citiesGeoTargeting?: boolean;
 
-  // Admin Hidden Params
-  adminPriority?: number;
-  adminWeight?: number;
-  forceStopReason?: string;
+    adminPriority?: number;
+    adminWeight?: number;
+    forceStopReason?: string;
 }
 
 export interface ProjectStats {
@@ -138,19 +131,21 @@ export interface CustomTarget {
 
 export interface Project {
   id: string;
-  userId: string; // Added for Admin aggregation
-  externalId?: string; // ID from SparkTraffic API
+  userId: string;
+  externalId?: string;
   name: string;
-  domain?: string; // New: Extracted from entryUrls for filtering
-  plan: string; // "Custom" or legacy plan name
-  tier?: string; // 'economy', 'professional', 'expert'
-  customTarget?: CustomTarget; // New field for volume/duration
+  domain?: string;
+  plan: string;
+  tier?: string;
+  customTarget?: CustomTarget;
+  startAt?: string;
   expires: string;
   status: 'active' | 'stopped' | 'completed';
   settings?: ProjectSettings;
   stats?: ProjectStats[];
+  totalHits?: number;
+  hitsToday?: number;
 
-  // Admin Fields
   priority?: number;
   forceStopReason?: string;
   isHidden?: boolean;

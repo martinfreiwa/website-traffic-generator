@@ -443,12 +443,13 @@ class GAEmuEngine:
         proxy_dicts = [{"url": p.url, "country": p.country} for p in proxies]
         db.close()
 
-        # Calculate concurrency based on trafficSpeed (0-100)
-        speed = project.settings.get("trafficSpeed", 50)
-        concurrency = max(1, int((speed / 10) * intensity_multiplier))
+        # Calculate concurrency based on daily_limit
+        daily_limit = project.daily_limit or 1000
+        hits_per_minute = (daily_limit / 24) / 60
+        concurrency = max(1, int(hits_per_minute * intensity_multiplier * 2))
 
         logger.info(
-            f"Engine starting burst for Project {project.name} (Speed: {speed}, Concurrency: {concurrency})"
+            f"Engine starting burst for Project {project.name} (Daily: {daily_limit}, Concurrency: {concurrency})"
         )
 
         async with aiohttp.ClientSession() as session:

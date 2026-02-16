@@ -13,6 +13,7 @@ type ProfileTab = 'account' | 'security' | 'billing' | 'notifications' | 'develo
 const Profile: React.FC = () => {
     const [activeTab, setActiveTab] = useState<ProfileTab>('account');
     const [isLoading, setIsLoading] = useState(false);
+    const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [showApiKey, setShowApiKey] = useState(false);
     const [user, setUser] = useState<UserType | undefined>(undefined);
 
@@ -67,14 +68,19 @@ const Profile: React.FC = () => {
     const handleSave = async () => {
         if (!user) return;
         setIsLoading(true);
+        setSaveStatus('idle');
         try {
             await db.updateUserProfile(user);
             // Re-fetch to ensure sync
             const freshUser = await db.login(user.email, ''); // Hacky refresh or use a fetchUser
             if (freshUser) setUser(freshUser);
-            alert('Profile settings saved successfully.');
+
+            setSaveStatus('success');
+            setTimeout(() => setSaveStatus('idle'), 3000);
         } catch (e: any) {
-            alert('Failed to save settings: ' + e.message);
+            console.error(e);
+            setSaveStatus('error');
+            setTimeout(() => setSaveStatus('idle'), 3000);
         } finally {
             setIsLoading(false);
         }
@@ -185,10 +191,27 @@ const Profile: React.FC = () => {
                 </div>
                 <button
                     onClick={handleSave}
-                    disabled={isLoading}
-                    className="bg-black text-white px-6 py-3 text-xs font-bold uppercase tracking-wider hover:bg-[#ff4d00] transition-colors disabled:opacity-70 flex items-center gap-2"
+                    disabled={isLoading || saveStatus === 'success'}
+                    className={`px-6 py-3 text-xs font-bold uppercase tracking-wider transition-all duration-300 flex items-center gap-2 ${saveStatus === 'success'
+                        ? 'bg-green-500 text-white hover:bg-green-600'
+                        : saveStatus === 'error'
+                            ? 'bg-red-500 text-white hover:bg-red-600'
+                            : 'bg-black text-white hover:bg-[#ff4d00]'
+                        } disabled:opacity-70`}
                 >
-                    <Save size={14} /> {isLoading ? 'Saving...' : 'Save Changes'}
+                    {saveStatus === 'success' ? (
+                        <>
+                            <CheckCircle2 size={14} className="animate-in zoom-in spin-in-90 duration-300" /> Saved!
+                        </>
+                    ) : saveStatus === 'error' ? (
+                        <>
+                            <AlertTriangle size={14} /> Failed
+                        </>
+                    ) : (
+                        <>
+                            <Save size={14} /> {isLoading ? 'Saving...' : 'Save Changes'}
+                        </>
+                    )}
                 </button>
             </div>
 

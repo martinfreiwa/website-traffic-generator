@@ -29,7 +29,7 @@ const AdminEditProject: React.FC<AdminEditProjectProps> = ({ projectId, onBack, 
             // Ensure settings object exists with defaults if missing
             if (!projectCopy.settings) {
                 projectCopy.settings = {
-                    trafficSpeed: 100, bounceRate: 0, returnRate: 0, deviceSplit: 70,
+                    bounceRate: 0, returnRate: 0, deviceSplit: 70,
                     deviceSpecific: "All",
                     timeOnPage: '3 minutes', timezone: 'UTC', language: 'en-US', languages: ['en-US'], gaId: '',
                     entryUrls: '', innerUrls: '', exitUrls: '',
@@ -43,7 +43,6 @@ const AdminEditProject: React.FC<AdminEditProjectProps> = ({ projectId, onBack, 
                     autoRenew: false, cacheWebsite: false, minimizeCpu: false,
                     randomizeSession: true, antiFingerprint: true,
                     pageViewsWithScroll: 0, clickExternal: 0, clickInternal: 0,
-                    // Hidden Params (Admin Only)
                     adminPriority: 0,
                     adminWeight: 1,
                     forceStopReason: ''
@@ -280,19 +279,6 @@ const AdminEditProject: React.FC<AdminEditProjectProps> = ({ projectId, onBack, 
                                     { value: "5 minutes", label: "5 minutes" }
                                 ]}
                             />
-                        </div>
-
-                        <div>
-                            <Label>Traffic Speed (Priority)</Label>
-                            <div className="flex items-center gap-4">
-                                <input
-                                    type="range" min="0" max="100"
-                                    value={s.trafficSpeed}
-                                    onChange={(e) => updateSetting('trafficSpeed', parseInt(e.target.value))}
-                                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#ff4d00]"
-                                />
-                                <span className="text-sm font-bold w-12">{s.trafficSpeed}%</span>
-                            </div>
                         </div>
 
                         <div>

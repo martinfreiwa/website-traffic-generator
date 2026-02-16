@@ -6,6 +6,11 @@
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>http://localhost:3000/free-website-traffic</loc>
+    <lastmod>2026-02-16</lastmod>
+    <priority>0.95</priority>
+  </url>
+  <url>
     <loc>http://localhost:3000/blog</loc>
     <lastmod>2026-01-28</lastmod>
     <priority>0.8</priority>

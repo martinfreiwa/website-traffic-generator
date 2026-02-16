@@ -46,7 +46,7 @@ describe('Project Management Logic', () => {
                 userId: 'user1',
                 name: 'Test Project',
                 plan: 'Custom',
-                settings: { trafficSpeed: 100 } as any,
+                settings: { bounceRate: 0 } as any,
                 status: 'active',
                 createdAt: new Date().toISOString(),
                 expires: '2024-12-31'
@@ -65,7 +65,7 @@ describe('Project Management Logic', () => {
                         status: 'active',
                         created_at: new Date().toISOString(),
                         expires_at: '2024-12-31',
-                        settings: { trafficSpeed: 100 }
+                        settings: { bounceRate: 0 }
                     }])
                 });
 

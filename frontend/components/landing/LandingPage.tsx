@@ -160,7 +160,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-2 group cursor-pointer" onClick={() => window.scrollTo(0, 0)}>
             <span className="text-2xl font-black text-[#ff4d00] tracking-tight group-hover:scale-105 transition-transform">TRAFFIC</span>
-            <span className="hidden sm:inline-block text-xs font-bold bg-black text-white px-2 py-1 rounded-sm uppercase tracking-wide">Creator</span>
+            <span className="hidden sm:inline-block text-xs font-bold bg-[#ff4d00] text-white px-2 py-1 rounded-sm uppercase tracking-wide">Creator</span>
           </div>
           <div className="flex items-center gap-8">
             <div className="hidden md:flex gap-8 text-sm font-bold uppercase tracking-wide text-gray-500">
@@ -170,7 +170,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
             </div>
             <Link
               to="/login"
-              className="bg-black text-white px-6 py-2.5 text-xs font-bold uppercase tracking-wider hover:bg-[#ff4d00] transition-colors shadow-md hover:shadow-lg flex items-center"
+              className="bg-[#ff4d00] text-white px-6 py-2.5 text-xs font-bold uppercase tracking-wider hover:bg-black transition-colors shadow-md hover:shadow-lg flex items-center"
             >
               Dashboard Login
             </Link>
@@ -268,7 +268,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
       </section>
 
       {/* Social Proof Ticker */}
-      <section className="bg-black py-10 overflow-hidden border-y border-gray-800">
+      <section className="bg-[#ff4d00] py-10 overflow-hidden border-y border-orange-600">
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center gap-8">
           <div className="text-white text-xs font-bold uppercase tracking-widest whitespace-nowrap opacity-50">Powering Leading Brands:</div>
           <div className="flex-1 flex justify-between items-center gap-8 opacity-40 grayscale hover:grayscale-0 transition-all duration-500">
@@ -288,20 +288,19 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
       </section>
 
       {/* THE PROBLEM SECTION - DARK THEME */}
-      <section id="problem" className="bg-[#0a0a0a] py-32 px-6 border-y border-gray-900 relative overflow-hidden">
+      <section id="problem" className="bg-[#ff4d00] py-32 px-6 border-y border-orange-600 relative overflow-hidden">
         {/* Background Gradients */}
-        <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-gray-900 via-black to-[#1a1a1a] opacity-80"></div>
-        <div className="absolute top-0 left-1/2 w-[1000px] h-[1000px] bg-[#ff4d00] rounded-full blur-[120px] opacity-[0.03] -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
+        <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-orange-600 via-orange-700 to-orange-800 opacity-90"></div>
 
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-20 items-center relative z-10">
           <div>
-            <div className="text-[#ff4d00] font-bold text-xs uppercase tracking-widest mb-4 flex items-center gap-2">
+            <div className="text-white font-bold text-xs uppercase tracking-widest mb-4 flex items-center gap-2">
               <AlertTriangle size={14} /> Critical SEO Warning
             </div>
             <h2 className="text-4xl md:text-5xl font-black uppercase tracking-tight mb-8 text-white leading-tight">
-              Is Your Website <br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-gray-500 to-gray-700">Invisible?</span>
+              Is Your Website <br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-200 to-white">Invisible?</span>
             </h2>
-            <p className="text-xl text-gray-400 leading-relaxed mb-10 font-light">
+            <p className="text-xl text-orange-100 leading-relaxed mb-10 font-light">
               91% of content gets <span className="text-white font-bold">zero traffic</span> from Google. Without active visitor signals, search algorithms deem your site irrelevant and bury it deep in the index.
             </p>
 
@@ -313,42 +312,42 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
                 { title: "Stagnant Growth", desc: "Great content is useless if nobody sees it." }
               ].map((item, i) => (
                 <div key={i} className="flex items-start gap-4">
-                  <div className="w-1.5 h-1.5 bg-[#ff4d00] rounded-full mt-2.5 shadow-[0_0_10px_#ff4d00]"></div>
+                  <div className="w-1.5 h-1.5 bg-white rounded-full mt-2.5 shadow-[0_0_10px_rgba(255,255,255,0.5)]"></div>
                   <div>
                     <div className="text-white font-bold text-sm uppercase tracking-wide mb-1">{item.title}</div>
-                    <div className="text-gray-500 text-xs font-medium">{item.desc}</div>
+                    <div className="text-orange-200 text-xs font-medium">{item.desc}</div>
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Radar / Void Animation - Dark Theme */}
-          <div className="flex flex-col items-center justify-center p-12 border border-white/5 rounded-2xl bg-white/5 backdrop-blur-sm shadow-2xl relative">
-            <div className="absolute inset-0 bg-gradient-to-b from-[#ff4d00]/5 to-transparent rounded-2xl"></div>
+          {/* Radar / Void Animation - Orange Theme */}
+          <div className="flex flex-col items-center justify-center p-12 border border-white/20 rounded-2xl bg-white/10 backdrop-blur-sm shadow-2xl relative">
+            <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent rounded-2xl"></div>
 
-            <div className="relative w-72 h-72 rounded-full border border-white/10 bg-black flex items-center justify-center overflow-hidden mb-8 shadow-inner z-10">
+            <div className="relative w-72 h-72 rounded-full border border-white/20 bg-white/10 flex items-center justify-center overflow-hidden mb-8 shadow-inner z-10">
               {/* Scanning Line */}
-              <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-transparent via-[#ff4d00]/30 to-transparent animate-[spin_3s_linear_infinite]" style={{ clipPath: 'polygon(50% 50%, 100% 0, 100% 50%)' }}></div>
+              <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-transparent via-white/30 to-transparent animate-[spin_3s_linear_infinite]" style={{ clipPath: 'polygon(50% 50%, 100% 0, 100% 50%)' }}></div>
 
               {/* Grid Lines */}
-              <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+              <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.2) 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
 
               {/* Concentric Circles */}
-              <div className="absolute w-3/4 h-3/4 border border-white/10 rounded-full"></div>
-              <div className="absolute w-1/2 h-1/2 border border-white/10 rounded-full"></div>
-              <div className="absolute w-1/4 h-1/4 border border-white/10 rounded-full"></div>
+              <div className="absolute w-3/4 h-3/4 border border-white/20 rounded-full"></div>
+              <div className="absolute w-1/2 h-1/2 border border-white/20 rounded-full"></div>
+              <div className="absolute w-1/4 h-1/4 border border-white/20 rounded-full"></div>
 
               {/* Center Point */}
-              <div className="w-3 h-3 bg-red-600 rounded-full animate-ping shadow-[0_0_20px_#ff0000]"></div>
+              <div className="w-3 h-3 bg-white rounded-full animate-ping shadow-[0_0_20px_rgba(255,255,255,0.8)]"></div>
 
               {/* No Signal Text */}
-              <div className="absolute bottom-1/2 translate-y-8 font-mono text-[10px] text-red-500 uppercase tracking-widest font-bold animate-pulse bg-black/80 px-2 py-1 rounded">No Traffic Signal</div>
+              <div className="absolute bottom-1/2 translate-y-8 font-mono text-[10px] text-white uppercase tracking-widest font-bold animate-pulse bg-black/50 px-2 py-1 rounded">No Traffic Signal</div>
             </div>
 
             <div className="text-center space-y-2 relative z-10">
               <div className="text-xl font-black text-white uppercase tracking-tight">Search Engine Void</div>
-              <p className="text-sm text-gray-400 font-medium">Crawlers are skipping your site due to inactivity.</p>
+              <p className="text-sm text-orange-200 font-medium">Crawlers are skipping your site due to inactivity.</p>
             </div>
           </div>
         </div>
@@ -689,17 +688,17 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
       </section>
 
       {/* Footer */}
-      <footer className="bg-black text-white py-16 px-6">
+      <footer className="bg-[#ff4d00] text-white py-16 px-6">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="text-2xl font-black text-white tracking-tight">TRAFFIC CREATOR</div>
-          <div className="flex flex-col md:flex-row gap-8 text-xs font-bold uppercase tracking-widest text-gray-500 text-center md:text-left">
+          <div className="flex flex-col md:flex-row gap-8 text-xs font-bold uppercase tracking-widest text-white/70 text-center md:text-left">
             <Link to="/blog" className="hover:text-white uppercase">Blog</Link>
             <Link to="/helpdesk" className="hover:text-white uppercase">Help Center</Link>
             <Link to="/legal/refund" className="hover:text-white uppercase">Refund Policy</Link>
             <Link to="/legal/privacy" className="hover:text-white uppercase">Privacy Policy</Link>
             <Link to="/legal/terms" className="hover:text-white uppercase">Terms of Service</Link>
           </div>
-          <div className="text-xs text-gray-600">
+          <div className="text-xs text-white/60">
             © 2025 Traffic Creator Inc.
           </div>
         </div>

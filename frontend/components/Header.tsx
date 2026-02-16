@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Menu, X, Check, Info, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Bell, Menu, X, Check, Info, AlertTriangle, CheckCircle, Plus } from 'lucide-react';
 import { db } from '../services/db';
 import { Notification } from '../types';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 interface HeaderProps {
   title: string;
@@ -12,6 +13,16 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ title, onMobileMenuClick, isAdmin = false }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const showCreateButton = !isAdmin && (
+    location.pathname === '/dashboard' ||
+    location.pathname === '/dashboard/campaigns' ||
+    location.pathname.startsWith('/dashboard/campaigns') ||
+    location.pathname === '/dashboard/buy-credits' ||
+    location.pathname === '/dashboard/balance'
+  );
 
   useEffect(() => {
     const fetchNotifs = async () => {
@@ -67,6 +78,17 @@ const Header: React.FC<HeaderProps> = ({ title, onMobileMenuClick, isAdmin = fal
       </div>
 
       <div className="flex items-center gap-6">
+        {showCreateButton && (
+          <button
+            onClick={() => navigate('/dashboard/campaigns/new')}
+            className="bg-[#ff4d00] text-white px-4 py-2 text-xs font-bold uppercase tracking-wider hover:bg-[#e64500] transition-colors flex items-center gap-2 shadow-md"
+          >
+            <Plus size={16} />
+            <span className="hidden sm:inline">Create a Project</span>
+            <span className="sm:hidden">Create</span>
+          </button>
+        )}
+        
         <div className="relative cursor-pointer">
           <button onClick={() => setShowNotifications(!showNotifications)} className="relative p-1">
             <Bell className={unreadCount > 0 ? "text-[#ff4d00]" : "text-gray-400"} size={22} strokeWidth={2} />

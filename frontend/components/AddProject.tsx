@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/db';
-import { Project, ProjectSettings, GeoTarget, PayloadTemplate, Transaction } from '../types';
-import { ArrowLeft, Save, Globe, Info, Zap, Calculator, Calendar, BarChart2, Check, ExternalLink, MapPin, Search, Upload, X, Layers, Award } from 'lucide-react';
+import { Project, ProjectSettings, GeoTarget, Transaction } from '../types';
+import { ArrowLeft, Save, Globe, Info, Zap, MapPin, Search, X, Check, Calendar, Clock, AlertCircle, Settings, Layers } from 'lucide-react';
 import CustomSelect from './CustomSelect';
-import { COUNTRIES_LIST } from '../constants';
+import { COUNTRIES_LIST, TRAFFIC_SOURCES, TIME_ON_PAGE_OPTS } from '../constants';
 
 interface AddProjectProps {
     onBack: () => void;
@@ -12,25 +12,30 @@ interface AddProjectProps {
 
 const steps = [
     { id: 1, label: 'Identity', icon: Globe },
-    { id: 2, label: 'Audience', icon: MapPin },
-    { id: 3, label: 'Behavior', icon: Zap },
-    { id: 4, label: 'Volume', icon: Calculator },
-    { id: 5, label: 'Run', icon: Check }
+    { id: 2, label: 'Volume', icon: Layers },
+    { id: 3, label: 'Geo', icon: MapPin },
+    { id: 4, label: 'Behavior', icon: Zap },
+    { id: 5, label: 'Review', icon: Check }
+];
+
+const SOCIAL_PLATFORMS = [
+    { id: 'facebook', label: 'Facebook' },
+    { id: 'twitter', label: 'X (Twitter)' },
+    { id: 'instagram', label: 'Instagram' },
+    { id: 'linkedin', label: 'LinkedIn' },
+    { id: 'pinterest', label: 'Pinterest' },
+    { id: 'youtube', label: 'YouTube' },
+    { id: 'tiktok', label: 'TikTok' },
+    { id: 'reddit', label: 'Reddit' },
 ];
 
 const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
-    // State: Wizard Steps
     const [currentStep, setCurrentStep] = useState(1);
-    // State: Configuration & Tier
-    const [selectedTier, setSelectedTier] = useState<'economy' | 'professional' | 'expert'>('expert');
-    const [title, setTitle] = useState('');
-    const [url, setUrl] = useState('');
-    const [gaId, setGaId] = useState('');
-    const [isScanningGA, setIsScanningGA] = useState(false);
-
-    // State: Transactions for balance lookup
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState('');
+    
     const [transactions, setTransactions] = useState<Transaction[]>([]);
-
+    
     useEffect(() => {
         const loadTransactions = async () => {
             await db.syncTransactions();
@@ -51,112 +56,147 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
         return purchasedHits - usedHits;
     };
 
-    // Template State
-    const [showLoadTemplate, setShowLoadTemplate] = useState(false);
-    const [systemTemplates, setSystemTemplates] = useState<PayloadTemplate[]>([]);
+    const availableTiers = useMemo(() => {
+        const tiers: ('expert' | 'professional' | 'economy')[] = ['expert', 'professional', 'economy'];
+        return tiers.filter(t => calculateAvailableHits(t) > 0);
+    }, [transactions]);
 
-    useEffect(() => {
-        const sys = db.getSystemSettings();
-        setSystemTemplates(sys.payloadTemplates || []);
-    }, []);
+    const getDefaultTier = (): 'expert' | 'professional' | 'economy' => {
+        if (calculateAvailableHits('expert') > 0) return 'expert';
+        if (calculateAvailableHits('professional') > 0) return 'professional';
+        if (calculateAvailableHits('economy') > 0) return 'economy';
+        return 'expert';
+    };
 
-    const handleApplyTemplate = (json: string) => {
+    const [selectedTier, setSelectedTier] = useState<'expert' | 'professional' | 'economy'>(getDefaultTier());
+    const [title, setTitle] = useState('');
+    const [url, setUrl] = useState('');
+    const [gaId, setGaId] = useState('');
+    const [isScanningGA, setIsScanningGA] = useState(false);
+
+    const [totalHits, setTotalHits] = useState<number>(1000);
+    const [dailyLimit, setDailyLimit] = useState<number>(100);
+    const [startAt, setStartAt] = useState<string>(() => {
+        const today = new Date();
+        return today.toISOString().split('T')[0];
+    });
+    const [durationDays, setDurationDays] = useState<number>(10);
+    const [noEndDate, setNoEndDate] = useState<boolean>(false);
+
+    const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
+    const [countryPercents, setCountryPercents] = useState<Record<string, number>>({});
+    const [countrySearch, setCountrySearch] = useState('');
+
+    const [bounceRate, setBounceRate] = useState(35);
+    const [timeOnPage, setTimeOnPage] = useState('3 minutes');
+    const [trafficSource, setTrafficSource] = useState('Direct');
+    const [keywords, setKeywords] = useState('');
+    const [referralUrls, setReferralUrls] = useState('');
+    const [selectedSocialPlatforms, setSelectedSocialPlatforms] = useState<string[]>([]);
+
+    const estimatedDuration = useMemo(() => {
+        if (noEndDate && dailyLimit > 0) {
+            return Math.ceil(totalHits / dailyLimit);
+        }
+        return durationDays;
+    }, [noEndDate, dailyLimit, totalHits, durationDays]);
+
+    const handleScanGA = async () => {
+        if (!url) return;
+        setIsScanningGA(true);
+        setError('');
         try {
-            const tpl: ProjectSettings = JSON.parse(json);
-            // Apply major settings to state
-            if (tpl.entryUrls) setUrl(tpl.entryUrls);
-            if (tpl.gaId) setGaId(tpl.gaId);
-            if (tpl.countries) setSelectedCountries(tpl.countries);
-            if (tpl.deviceSplit) setDeviceSplit(tpl.deviceSplit);
-            if (tpl.bounceRate !== undefined) setBounceRate(tpl.bounceRate);
-            if (tpl.timeOnPage) setTimeOnPage(tpl.timeOnPage);
-            if (tpl.trafficSource) setTrafficSource(tpl.trafficSource);
-            if (tpl.utmSource) setUtmSource(tpl.utmSource);
-            if (tpl.utmMedium) setUtmMedium(tpl.utmMedium);
-            if (tpl.utmCampaign) setUtmCampaign(tpl.utmCampaign);
-
-            setShowLoadTemplate(false);
-            alert('Template applied! Please verify details.');
-        } catch (e) {
-            alert('Failed to apply template.');
+            const tid = await db.scanGA4(url);
+            if (tid) {
+                setGaId(tid);
+            } else {
+                setError('No GA4 ID found on this page. Please enter manually.');
+            }
+        } catch (e: any) {
+            setError(e?.message || 'Failed to scan for GA4.');
+        } finally {
+            setIsScanningGA(false);
         }
     };
 
-    // State: Geo-Targeting
-    const [selectedCountries, setSelectedCountries] = useState<string[]>(['US']);
-    const [countrySearch, setCountrySearch] = useState('');
-    const [deviceSplit, setDeviceSplit] = useState(70); // Default 70% Desktop
+    const toggleCountry = (code: string) => {
+        if (selectedCountries.includes(code)) {
+            setSelectedCountries(prev => prev.filter(c => c !== code));
+            setCountryPercents(prev => {
+                const newPercents = { ...prev };
+                delete newPercents[code];
+                return newPercents;
+            });
+        } else {
+            setSelectedCountries(prev => [...prev, code]);
+            setCountryPercents(prev => ({ ...prev, [code]: 0 }));
+        }
+    };
 
-    // State: Traffic Behavior
-    const [bounceRate, setBounceRate] = useState(0); // 0-100%
-    const [timeOnPage, setTimeOnPage] = useState('3 minutes');
-    const [trafficSource, setTrafficSource] = useState('Direct');
+    const updateCountryPercent = (code: string, percent: number) => {
+        setCountryPercents(prev => ({ ...prev, [code]: Math.max(0, Math.min(100, percent)) }));
+    };
 
-    // State: Volume & Duration
-    const [totalVisitors, setTotalVisitors] = useState<number>(1000);
-    const [durationDays, setDurationDays] = useState<number>(30);
-    const [dailyVisitors, setDailyVisitors] = useState<number>(0);
-    const [totalCost, setTotalCost] = useState<number>(0);
+    const totalCountryPercent = useMemo(() => {
+        return Object.values(countryPercents).reduce((sum, p) => sum + p, 0);
+    }, [countryPercents]);
 
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [error, setError] = useState('');
+    const distributeEvenly = () => {
+        if (selectedCountries.length === 0) return;
+        const percent = Math.floor(100 / selectedCountries.length);
+        const newPercents: Record<string, number> = {};
+        selectedCountries.forEach(code => {
+            newPercents[code] = percent;
+        });
+        const remainder = 100 - (percent * selectedCountries.length);
+        if (remainder > 0 && selectedCountries.length > 0) {
+            newPercents[selectedCountries[0]] += remainder;
+        }
+        setCountryPercents(newPercents);
+    };
 
-    // UTM State (Optional in Identity Step)
-    const [utmSource, setUtmSource] = useState('');
-    const [utmMedium, setUtmMedium] = useState('');
-    const [utmCampaign, setUtmCampaign] = useState('');
-
-    // Pricing Logic
-    useEffect(() => {
-        const days = durationDays > 0 ? durationDays : 1;
-        const daily = Math.ceil(totalVisitors / days);
-        setDailyVisitors(daily);
-
-        // Curve fitting logic from BuyCredits
-        let cpm = 0.50;
-        if (totalVisitors >= 50000000) cpm = 0.20;
-        else if (totalVisitors >= 10000000) cpm = 0.21;
-        else if (totalVisitors >= 1000000) cpm = 0.30;
-        else if (totalVisitors >= 500000) cpm = 0.35;
-        else if (totalVisitors >= 100000) cpm = 0.45;
-
-        // Apply Tier Factor
-        const factor = selectedTier === 'expert' ? 1.0 : (selectedTier === 'professional' ? 0.65 : 0.35);
-        const calculatedCost = (totalVisitors / 1000) * cpm * factor;
-
-        setTotalCost(Math.max(calculatedCost, 1.00));
-    }, [totalVisitors, durationDays, selectedTier]);
+    const toggleSocialPlatform = (id: string) => {
+        if (selectedSocialPlatforms.includes(id)) {
+            setSelectedSocialPlatforms(prev => prev.filter(p => p !== id));
+        } else {
+            setSelectedSocialPlatforms(prev => [...prev, id]);
+        }
+    };
 
     const handleNext = () => {
         setError('');
 
-        // Step 1 Validation
         if (currentStep === 1) {
-            if (!title) return setError('Please verify project name.');
-            if (!url) return setError('Please verify target URL.');
+            if (!title.trim()) return setError('Please enter a project name.');
+            if (!url.trim()) return setError('Please enter a target URL.');
+            if (!gaId.trim()) return setError('Google Analytics ID is required.');
         }
 
-        // Step 2 Validation
         if (currentStep === 2) {
-            if (selectedCountries.length === 0) return setError('Select at least one country.');
-        }
-
-        // Step 3 Validation (Defaults often work, maybe specific checks later)
-        if (currentStep === 3) {
-            // Feature gating check
-            if (selectedTier === 'economy' && trafficSource !== 'Direct') {
-                return setError('Economy tier only supports Direct traffic. Upgrade to Growth or Business for Organic/Social.');
+            if (totalHits < 100) return setError('Minimum 100 hits required.');
+            if (dailyLimit < 1) return setError('Minimum 1 hit per day required.');
+            if (!noEndDate && durationDays < 1) return setError('Minimum 1 day duration required.');
+            
+            const available = calculateAvailableHits(selectedTier);
+            if (totalHits > available) {
+                return setError(`Insufficient ${selectedTier} hits. Available: ${available.toLocaleString()}`);
             }
         }
 
-        // Step 4 Validation
+        if (currentStep === 3) {
+            if (selectedCountries.length === 0) return setError('Please select at least one country.');
+            if (totalCountryPercent !== 100) return setError('Country distribution must total 100%.');
+        }
+
         if (currentStep === 4) {
-            if (totalVisitors < 1000) return setError('Minimum 1,000 visitors required for this tier.');
-            if (durationDays < 1) return setError('Minimum 1 day duration.');
-            
-            const availableHits = calculateAvailableHits(selectedTier);
-            if (totalVisitors > availableHits) {
-                return setError(`Insufficient ${selectedTier} hits. Required: ${totalVisitors.toLocaleString()}, Available: ${availableHits.toLocaleString()}`);
+            if (trafficSource === 'Organic (General)' || trafficSource.startsWith('Organic')) {
+                if (!keywords.trim()) return setError('Please enter keywords for organic traffic.');
+            }
+            if (trafficSource === 'Social (General)' || trafficSource.startsWith('Social')) {
+                if (selectedSocialPlatforms.length === 0) return setError('Please select at least one social platform.');
+            }
+            if (trafficSource === 'Referral') {
+                if (!referralUrls.trim()) return setError('Please enter referral URLs.');
             }
         }
 
@@ -172,79 +212,68 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
         else onBack();
     };
 
-    const handleScanGA = async () => {
-        if (!url) return;
-        setIsScanningGA(true);
-        setError('');
-        try {
-            const tid = await db.scanGA4(url);
-            if (tid) {
-                setGaId(tid);
-                alert(`Found Analytics ID: ${tid}`);
-            } else {
-                setError('No GA4 ID found on this page. Please enter manually.');
-            }
-        } catch (e: any) {
-            console.error("GA Scan failed", e);
-            const errorMsg = e?.message || 'Failed to scan for GA4. Please enter manually.';
-            setError(errorMsg);
-        } finally {
-            setIsScanningGA(false);
-        }
-    };
-
     const handleSubmit = async () => {
         setIsSubmitting(true);
-        setTimeout(() => {
-            const success = db.spendCredits(totalCost, `New Campaign: ${title} (${selectedTier.toUpperCase()})`);
-            if (!success) {
-                setIsSubmitting(false);
-                setError('Transaction failed. Please try again.');
-                return;
+        setError('');
+
+        try {
+            const startDate = new Date(startAt);
+            let endDate: Date;
+            
+            if (noEndDate) {
+                endDate = new Date(startDate.getTime() + (365 * 24 * 60 * 60 * 1000));
+            } else {
+                endDate = new Date(startDate.getTime() + (durationDays * 24 * 60 * 60 * 1000));
             }
 
-            const newId = Math.floor(Math.random() * 9000 + 1000).toString();
-            const today = new Date();
-            const expiresDate = new Date(today.getTime() + (durationDays * 24 * 60 * 60 * 1000));
-
-            // Construct Geo Targets
             const geoTargets: GeoTarget[] = selectedCountries.map(code => ({
                 id: `geo-${code}`,
                 country: code,
-                percent: Math.floor(100 / selectedCountries.length) // Even split for now
+                percent: countryPercents[code] || 0
             }));
 
-            const defaultSettings: ProjectSettings = {
-                trafficSpeed: 80,
-                bounceRate: bounceRate,
+            const settings: ProjectSettings = {
+                bounceRate,
                 returnRate: 0,
-                deviceSplit: deviceSplit,
+                deviceSplit: 70,
                 tabletSplit: 0,
-                deviceSpecific: "All",
-                browser: "Random",
-                timeOnPage: timeOnPage,
+                deviceSpecific: 'All',
+                browser: 'Random',
+                timeOnPage,
                 timezone: 'UTC',
                 language: 'en-US',
                 languages: ['en-US'],
-                gaId: gaId,
+                gaId,
                 urlVisitOrder: 'random',
-                entryUrls: url, innerUrls: '', exitUrls: '',
-                autoCrawlEntry: true, autoCrawlInner: false, autoCrawlExit: false,
+                entryUrls: url,
+                innerUrls: '',
+                exitUrls: '',
+                autoCrawlEntry: true,
+                autoCrawlInner: false,
+                autoCrawlExit: false,
                 innerUrlCount: 0,
                 countries: selectedCountries,
-                geoTargets: geoTargets,
-                trafficSource: trafficSource,
-                keywords: '', referralUrls: '',
-                utmSource, utmMedium, utmCampaign, utmTerm: '', utmContent: '',
-                proxyMode: selectedTier === 'expert' ? 'auto' : 'auto', // Placeholder logic 
+                geoTargets,
+                trafficSource,
+                keywords,
+                referralUrls,
+                socialPlatforms: selectedSocialPlatforms,
+                noEndDate,
+                proxyMode: 'auto',
                 customProxies: '',
-                scheduleMode: 'continuous', scheduleTime: '', scheduleDuration: 60,
-                sitemap: '', shortener: '',
+                scheduleMode: 'continuous',
+                scheduleTime: '',
+                scheduleDuration: 60,
+                sitemap: '',
+                shortener: '',
                 autoRenew: false,
-                cacheWebsite: false, minimizeCpu: false,
-                randomizeSession: true, antiFingerprint: true,
-                pageViewsWithScroll: 0, clickExternal: 0, clickInternal: 0,
-                // New Expert Defaults
+                cacheWebsite: false,
+                minimizeCpu: false,
+                randomizeSession: true,
+                antiFingerprint: true,
+                pageViewsWithScroll: 0,
+                clickExternal: 0,
+                clickInternal: 0,
                 residentialIps: selectedTier !== 'economy',
                 citiesGeoTargeting: selectedTier !== 'economy',
                 nightDayVolume: selectedTier === 'expert',
@@ -254,595 +283,553 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
             };
 
             const newProject: Project = {
-                id: newId,
+                id: 'proj_' + Date.now(),
                 userId: db.getCurrentUser()?.id || 'unknown',
                 name: title,
                 plan: selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1),
                 tier: selectedTier,
                 customTarget: {
-                    totalVisitors: totalVisitors,
-                    durationDays: durationDays,
-                    dailyLimit: dailyVisitors
+                    totalVisitors: totalHits,
+                    durationDays: noEndDate ? estimatedDuration : durationDays,
+                    dailyLimit
                 },
-                expires: expiresDate.toISOString().split('T')[0],
+                startAt: startDate.toISOString(),
+                expires: endDate.toISOString().split('T')[0],
                 createdAt: new Date().toISOString(),
                 status: 'active',
-                settings: defaultSettings
+                settings
             };
 
-            db.addProject(newProject);
-            setIsSubmitting(false);
+            await db.addProject(newProject);
             onCreated();
             onBack();
-        }, 800);
-    };
-
-    const filteredCountries = countrySearch 
-        ? COUNTRIES_LIST.filter(c => c.name.toLowerCase().includes(countrySearch.toLowerCase()) || c.code.toLowerCase().includes(countrySearch.toLowerCase()))
-        : COUNTRIES_LIST;
-
-    const toggleCountry = (code: string) => {
-        if (selectedCountries.includes(code)) {
-            // Prevent removing last country
-            if (selectedCountries.length > 1) {
-                setSelectedCountries(prev => prev.filter(c => c !== code));
-            }
-        } else {
-            if (selectedCountries.length < 5) {
-                setSelectedCountries(prev => [...prev, code]);
-            }
+        } catch (e: any) {
+            setError(e.message || 'Failed to create project');
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
+    const filteredCountries = countrySearch 
+        ? COUNTRIES_LIST.filter(c => 
+            c.name.toLowerCase().includes(countrySearch.toLowerCase()) || 
+            c.code.toLowerCase().includes(countrySearch.toLowerCase()))
+        : COUNTRIES_LIST;
+
+    const renderStepHint = () => {
+        const hints: Record<number, string[]> = {
+            1: ['UTM Tracking', 'Sitemap Crawling', 'Custom Proxies'],
+            2: ['Night/Day Volume', 'Auto-Renew', 'Schedule Burst Mode'],
+            3: ['City-Level Targeting', 'Language Settings', 'Device Split'],
+            4: ['Device Targeting', 'Browser Selection', 'Session Randomization']
+        };
+        return hints[currentStep] || [];
+    };
+
     return (
-        <div className="max-w-5xl mx-auto pb-20">
-            {/* Header / Nav */}
+        <div className="max-w-4xl mx-auto pb-20">
             <div className="flex items-center justify-between mb-8">
-                <button onClick={onBack} className="flex items-center gap-2 text-gray-500 hover:text-black transition-colors font-bold text-xs uppercase tracking-wider">
+                <button 
+                    onClick={onBack} 
+                    className="flex items-center gap-2 text-gray-500 hover:text-black transition-colors font-bold text-xs uppercase tracking-wider"
+                >
                     <ArrowLeft size={16} /> Back to Projects
                 </button>
                 <div className="flex items-center gap-2">
-                    {steps.map((step) => (
+                    {steps.map((step, idx) => (
                         <div key={step.id} className="flex items-center">
                             <div className={`
-                                w-8 h-8 rounded-full flex items-center justify-center text-xs font-black
-                                ${currentStep === step.id ? 'bg-[#ff4d00] text-white shadow-lg scale-110' :
-                                    currentStep > step.id ? 'bg-black text-white' : 'bg-gray-100 text-gray-400'}
+                                w-10 h-10 rounded-full flex items-center justify-center text-xs font-black
+                                ${currentStep === step.id 
+                                    ? 'bg-[#ff4d00] text-white shadow-lg scale-110' 
+                                    : currentStep > step.id 
+                                        ? 'bg-black text-white' 
+                                        : 'bg-gray-100 text-gray-400'}
                                 transition-all duration-300
                             `}>
                                 {currentStep > step.id ? <Check size={14} /> : step.id}
                             </div>
-                            {step.id !== 5 && <div className={`w-8 h-1 mx-2 ${currentStep > step.id ? 'bg-black' : 'bg-gray-100'}`} />}
+                            {idx < steps.length - 1 && (
+                                <div className={`w-8 h-1 mx-1 ${currentStep > step.id ? 'bg-black' : 'bg-gray-100'}`} />
+                            )}
                         </div>
                     ))}
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Main Content Form */}
-                <div className="lg:col-span-2 space-y-6">
+            <div className="flex justify-center mb-4">
+                <span className="text-sm font-bold text-gray-500">
+                    Step {currentStep}: {steps[currentStep - 1].label}
+                </span>
+            </div>
 
-                    {error && (
-                        <div className="bg-red-50 border-l-4 border-red-500 p-4 flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
-                            <Info className="text-red-500" size={20} />
-                            <span className="text-red-700 text-sm font-bold">{error}</span>
+            {error && (
+                <div className="bg-red-50 border-l-4 border-red-500 p-4 flex items-center gap-3 mb-6 animate-in fade-in">
+                    <AlertCircle className="text-red-500" size={20} />
+                    <span className="text-red-700 text-sm font-bold">{error}</span>
+                </div>
+            )}
+
+            <div className="bg-white border border-gray-200 p-8 shadow-sm space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                
+                {currentStep === 1 && (
+                    <>
+                        <div>
+                            <h2 className="text-2xl font-black text-gray-900 mb-2">Project Identity</h2>
+                            <p className="text-sm text-gray-500">Configure the basic details of your traffic campaign.</p>
                         </div>
-                    )}
 
-                    {/* Step 1: Identity */}
-                    {currentStep === 1 && (
-                        <div className="bg-white border border-gray-200 p-8 shadow-sm space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <h2 className="text-2xl font-black text-gray-900 mb-2">Project Configuration</h2>
-                                    <p className="text-sm text-gray-500">Basic details about your campaign target and quality.</p>
-                                </div>
-                                <button
-                                    onClick={() => setShowLoadTemplate(true)}
-                                    className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-[#ff4d00] transition-colors bg-gray-50 px-3 py-2 border border-gray-100"
-                                >
-                                    <Upload size={14} /> Load Template
-                                </button>
-                            </div>
-
-                            {/* Template Modal */}
-                            {showLoadTemplate && (
-                                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                                    <div className="bg-white p-6 w-full max-w-md shadow-2xl border border-gray-200">
-                                        <div className="flex justify-between items-center mb-6">
-                                            <h3 className="text-sm font-black uppercase tracking-widest">Select Template</h3>
-                                            <button onClick={() => setShowLoadTemplate(false)} className="text-gray-400 hover:text-black"><X size={18} /></button>
-                                        </div>
-                                        <div className="space-y-2 mb-6 max-h-[300px] overflow-y-auto pr-2">
-                                            {systemTemplates.length === 0 ? (
-                                                <div className="text-center py-8 text-gray-400 text-xs italic">No templates saved yet. Create a project and save it as a template first.</div>
-                                            ) : (
-                                                systemTemplates.map(t => (
-                                                    <button
-                                                        key={t.id}
-                                                        onClick={() => handleApplyTemplate(t.json)}
-                                                        className="w-full text-left p-4 bg-gray-50 hover:bg-orange-50 hover:border-orange-200 border border-transparent transition-all group"
-                                                    >
-                                                        <div className="font-bold text-gray-900 group-hover:text-[#ff4d00]">{t.name}</div>
-                                                        <div className="text-[10px] text-gray-400 mt-1 uppercase">Apply configuration</div>
-                                                    </button>
-                                                ))
-                                            )}
-                                        </div>
-                                        <button onClick={() => setShowLoadTemplate(false)} className="w-full py-4 text-xs font-black uppercase bg-black text-white hover:bg-gray-800 transition-colors">Close</button>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Tier Selection */}
-                            <div className="space-y-4">
-                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block">Select Traffic Quality</label>
-                                <div className="grid grid-cols-3 gap-4">
-                                    {(['economy', 'professional', 'expert'] as const).map(t => (
+                        <div className="space-y-4">
+                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block">Select Traffic Quality Tier</label>
+                            <div className="grid grid-cols-3 gap-4">
+                                {(['expert', 'professional', 'economy'] as const).map(t => {
+                                    const available = calculateAvailableHits(t);
+                                    const isSelected = selectedTier === t;
+                                    const isDisabled = available === 0;
+                                    return (
                                         <button
                                             key={t}
-                                            onClick={() => setSelectedTier(t)}
+                                            onClick={() => !isDisabled && setSelectedTier(t)}
+                                            disabled={isDisabled}
                                             className={`p-4 border-2 transition-all flex flex-col gap-1 text-left rounded-lg
-                                                ${selectedTier === t ? 'border-[#ff4d00] bg-orange-50 shadow-md' : 'border-gray-100 bg-white hover:border-gray-200'}
+                                                ${isSelected ? 'border-[#ff4d00] bg-orange-50 shadow-md' : 'border-gray-100 bg-white hover:border-gray-200'}
+                                                ${isDisabled ? 'opacity-40 cursor-not-allowed' : ''}
                                             `}
                                         >
                                             <span className="text-[10px] font-black uppercase tracking-widest text-[#ff4d00]">
                                                 {t === 'expert' ? '★ Premium' : (t === 'professional' ? 'Standard' : 'Value')}
                                             </span>
                                             <span className="font-bold text-gray-900 capitalize">{t}</span>
-                                            <span className="text-[10px] text-gray-400 font-bold uppercase">{t === 'expert' ? '1.0x Price' : (t === 'professional' ? '0.65x Price' : '0.35x Price')}</span>
+                                            <span className="text-[10px] text-gray-400 font-bold uppercase">{available.toLocaleString()} hits</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Project Name *</label>
+                            <input
+                                type="text"
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                placeholder="e.g. Q4 Marketing Campaign"
+                                className="w-full bg-[#f9fafb] border border-gray-200 p-4 text-lg font-bold text-gray-900 focus:border-[#ff4d00] outline-none"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Target URL *</label>
+                            <div className="relative">
+                                <Globe className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                                <input
+                                    type="url"
+                                    value={url}
+                                    onChange={(e) => setUrl(e.target.value)}
+                                    onBlur={() => { if (url && !gaId) handleScanGA(); }}
+                                    placeholder="https://example.com"
+                                    className="w-full bg-[#f9fafb] border border-gray-200 p-4 pl-12 text-lg font-medium font-mono text-gray-700 focus:border-[#ff4d00] outline-none"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="p-6 bg-gray-50 border border-gray-100 rounded-sm">
+                            <div className="flex justify-between items-center mb-4">
+                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Google Analytics ID *</label>
+                                <button
+                                    onClick={handleScanGA}
+                                    disabled={!url || isScanningGA}
+                                    className="text-[10px] font-bold uppercase tracking-wider text-[#ff4d00] hover:underline disabled:opacity-50"
+                                >
+                                    {isScanningGA ? 'Scanning...' : 'Auto-Detect'}
+                                </button>
+                            </div>
+                            <input
+                                type="text"
+                                value={gaId}
+                                onChange={(e) => setGaId(e.target.value)}
+                                placeholder="G-XXXXXXXXXX"
+                                className="w-full bg-white border border-gray-200 p-3 text-sm font-mono text-gray-700 outline-none focus:border-[#ff4d00]"
+                            />
+                        </div>
+                    </>
+                )}
+
+                {currentStep === 2 && (
+                    <>
+                        <div>
+                            <h2 className="text-2xl font-black text-gray-900 mb-2">Traffic Volume</h2>
+                            <p className="text-sm text-gray-500">Define how much traffic you want and when it should run.</p>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-4 mb-6">
+                            {(['economy', 'professional', 'expert'] as const).map(t => (
+                                <div key={t} className={`p-4 border-2 transition-all ${selectedTier === t ? 'border-[#ff4d00] bg-orange-50' : 'border-gray-100 bg-gray-50 opacity-50'}`}>
+                                    <div className="text-[10px] font-bold text-gray-400 uppercase mb-1">{t}</div>
+                                    <div className="text-xl font-black text-gray-900">{calculateAvailableHits(t).toLocaleString()}</div>
+                                    <div className="text-[10px] text-gray-400">hits available</div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-6">
+                            <div>
+                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Total Hits *</label>
+                                <input
+                                    type="number"
+                                    min="100"
+                                    value={totalHits}
+                                    onChange={(e) => setTotalHits(parseInt(e.target.value) || 0)}
+                                    className="w-full bg-[#f9fafb] border border-gray-200 p-4 text-2xl font-black text-gray-900 focus:border-[#ff4d00] outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Hits per Day *</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={dailyLimit}
+                                    onChange={(e) => setDailyLimit(parseInt(e.target.value) || 1)}
+                                    className="w-full bg-[#f9fafb] border border-gray-200 p-4 text-2xl font-black text-gray-900 focus:border-[#ff4d00] outline-none"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-6">
+                            <div>
+                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Start Date *</label>
+                                <input
+                                    type="date"
+                                    value={startAt}
+                                    onChange={(e) => setStartAt(e.target.value)}
+                                    className="w-full bg-[#f9fafb] border border-gray-200 p-4 text-lg font-bold text-gray-900 focus:border-[#ff4d00] outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Duration</label>
+                                <div className="flex items-center gap-3 mb-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={noEndDate}
+                                        onChange={(e) => setNoEndDate(e.target.checked)}
+                                        className="w-4 h-4 accent-[#ff4d00]"
+                                    />
+                                    <span className="text-sm font-medium text-gray-600">No end date (run until hits exhausted)</span>
+                                </div>
+                                {!noEndDate && (
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={durationDays}
+                                        onChange={(e) => setDurationDays(parseInt(e.target.value) || 1)}
+                                        className="w-full bg-[#f9fafb] border border-gray-200 p-4 text-lg font-bold text-gray-900 focus:border-[#ff4d00] outline-none"
+                                        placeholder="Days"
+                                    />
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="bg-gray-50 border border-gray-200 p-6 flex flex-col md:flex-row justify-between items-center gap-6">
+                            <div>
+                                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Estimated Duration</div>
+                                <div className="text-xl font-bold text-gray-900">
+                                    {noEndDate ? `~${estimatedDuration} days` : `${durationDays} days`}
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Total Cost</div>
+                                <div className="text-3xl font-black text-[#ff4d00]">{totalHits.toLocaleString()} <span className="text-sm font-bold text-gray-400">hits</span></div>
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                {currentStep === 3 && (
+                    <>
+                        <div>
+                            <h2 className="text-2xl font-black text-gray-900 mb-2">Geographic Targeting</h2>
+                            <p className="text-sm text-gray-500">Select countries for your traffic and set the distribution.</p>
+                        </div>
+
+                        <div className="relative mb-4">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                            <input
+                                type="text"
+                                placeholder="Search countries..."
+                                value={countrySearch}
+                                onChange={(e) => setCountrySearch(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2 border border-gray-200 text-sm focus:border-[#ff4d00] outline-none"
+                            />
+                            {countrySearch && (
+                                <button onClick={() => setCountrySearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                    <X size={14} />
+                                </button>
+                            )}
+                        </div>
+
+                        {selectedCountries.length > 0 && (
+                            <div className="mb-4">
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className="text-xs font-bold text-gray-400 uppercase">Selected ({selectedCountries.length})</span>
+                                    <button onClick={distributeEvenly} className="text-[10px] font-bold text-[#ff4d00] uppercase hover:underline">
+                                        Distribute Evenly
+                                    </button>
+                                </div>
+                                <div className="space-y-2">
+                                    {selectedCountries.map(code => {
+                                        const country = COUNTRIES_LIST.find(c => c.code === code);
+                                        const percent = countryPercents[code] || 0;
+                                        return (
+                                            <div key={code} className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-100">
+                                                <img 
+                                                    src={`https://flagcdn.com/w24/${code.toLowerCase()}.png`} 
+                                                    alt={code} 
+                                                    className="w-6 h-auto rounded-sm"
+                                                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                />
+                                                <span className="flex-1 font-bold text-sm text-gray-900">{country?.name || code}</span>
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max="100"
+                                                    value={percent}
+                                                    onChange={(e) => updateCountryPercent(code, parseInt(e.target.value))}
+                                                    className="w-24 accent-[#ff4d00]"
+                                                />
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    max="100"
+                                                    value={percent}
+                                                    onChange={(e) => updateCountryPercent(code, parseInt(e.target.value) || 0)}
+                                                    className="w-16 p-1 text-center text-sm font-bold border border-gray-200 outline-none focus:border-[#ff4d00]"
+                                                />
+                                                <span className="text-sm font-bold text-gray-400">%</span>
+                                                <button onClick={() => toggleCountry(code)} className="text-gray-400 hover:text-red-500">
+                                                    <X size={14} />
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <div className={`text-right mt-2 text-sm font-bold ${totalCountryPercent === 100 ? 'text-green-600' : 'text-red-500'}`}>
+                                    Total: {totalCountryPercent}%
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="border border-gray-200 max-h-[300px] overflow-y-auto">
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-1 p-1">
+                                {filteredCountries.slice(0, 100).map((c) => (
+                                    <button
+                                        key={c.code}
+                                        onClick={() => toggleCountry(c.code)}
+                                        className={`p-2 text-left border text-xs font-bold flex justify-between items-center transition-all ${
+                                            selectedCountries.includes(c.code)
+                                                ? 'border-[#ff4d00] bg-orange-50 text-[#ff4d00]'
+                                                : 'border-transparent bg-gray-50 text-gray-600 hover:bg-gray-100'
+                                        }`}
+                                    >
+                                        <span className="flex items-center gap-2 truncate">
+                                            <img 
+                                                src={`https://flagcdn.com/w20/${c.code.toLowerCase()}.png`} 
+                                                alt={c.code} 
+                                                className="w-4 h-auto rounded-sm flex-shrink-0"
+                                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                            />
+                                            <span className="truncate">{c.name}</span>
+                                        </span>
+                                        {selectedCountries.includes(c.code) && <Check size={12} className="flex-shrink-0" />}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                {currentStep === 4 && (
+                    <>
+                        <div>
+                            <h2 className="text-2xl font-black text-gray-900 mb-2">Traffic Behavior</h2>
+                            <p className="text-sm text-gray-500">Configure how visitors interact with your site.</p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-6">
+                            <div>
+                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Bounce Rate</label>
+                                <div className="bg-gray-50 p-6 border border-gray-200 text-center">
+                                    <div className="text-4xl font-black text-gray-900 mb-2">{bounceRate}%</div>
+                                    <p className="text-xs text-gray-500 font-medium mb-4">Visitors leaving immediately</p>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="100"
+                                        value={bounceRate}
+                                        onChange={(e) => setBounceRate(parseInt(e.target.value))}
+                                        className="w-full accent-[#ff4d00]"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Time on Page</label>
+                                <CustomSelect
+                                    value={timeOnPage}
+                                    onChange={setTimeOnPage}
+                                    options={TIME_ON_PAGE_OPTS}
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Traffic Source</label>
+                            <CustomSelect
+                                value={trafficSource}
+                                onChange={setTrafficSource}
+                                options={TRAFFIC_SOURCES}
+                            />
+                        </div>
+
+                        {(trafficSource === 'Organic (General)' || trafficSource.startsWith('Organic')) && (
+                            <div>
+                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Keywords (one per line)</label>
+                                <textarea
+                                    value={keywords}
+                                    onChange={(e) => setKeywords(e.target.value)}
+                                    placeholder="keyword1&#10;keyword2&#10;keyword3"
+                                    className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-medium text-gray-900 outline-none focus:border-[#ff4d00] h-24"
+                                />
+                            </div>
+                        )}
+
+                        {(trafficSource === 'Social (General)' || trafficSource.startsWith('Social')) && (
+                            <div>
+                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Social Platforms</label>
+                                <div className="grid grid-cols-4 gap-2">
+                                    {SOCIAL_PLATFORMS.map(p => (
+                                        <button
+                                            key={p.id}
+                                            onClick={() => toggleSocialPlatform(p.id)}
+                                            className={`p-2 text-xs font-bold border transition-all ${
+                                                selectedSocialPlatforms.includes(p.id)
+                                                    ? 'border-[#ff4d00] bg-orange-50 text-[#ff4d00]'
+                                                    : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+                                            }`}
+                                        >
+                                            {p.label}
                                         </button>
                                     ))}
                                 </div>
                             </div>
+                        )}
 
+                        {trafficSource === 'Referral' && (
                             <div>
-                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Project Name</label>
-                                <input
-                                    type="text"
-                                    value={title}
-                                    onChange={(e) => setTitle(e.target.value)}
-                                    placeholder="e.g. Q4 Marketing Push"
-                                    className="w-full bg-[#f9fafb] border border-gray-200 p-4 text-lg font-bold text-gray-900 focus:border-[#ff4d00] focus:ring-0 outline-none transition-colors"
+                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Referral URLs (one per line)</label>
+                                <textarea
+                                    value={referralUrls}
+                                    onChange={(e) => setReferralUrls(e.target.value)}
+                                    placeholder="https://example.com/page1&#10;https://example.com/page2"
+                                    className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-medium text-gray-900 outline-none focus:border-[#ff4d00] h-24"
                                 />
                             </div>
+                        )}
+                    </>
+                )}
 
-                            <div>
-                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Target URL</label>
-                                <div className="relative">
-                                    <Globe className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                                    <input
-                                        type="url"
-                                        value={url}
-                                        onChange={(e) => setUrl(e.target.value)}
-                                        onBlur={() => { if (url && !gaId) handleScanGA(); }}
-                                        placeholder="https://example.com"
-                                        className="w-full bg-[#f9fafb] border border-gray-200 p-4 pl-12 text-lg font-medium font-mono text-gray-700 focus:border-[#ff4d00] outline-none"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="p-6 bg-gray-50 border border-gray-100 rounded-sm">
-                                <div className="flex justify-between items-center mb-4">
-                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Tracking (Optional)</label>
-                                    <button
-                                        onClick={handleScanGA}
-                                        disabled={!url || isScanningGA}
-                                        className="text-[10px] font-bold uppercase tracking-wider text-[#ff4d00] hover:underline disabled:opacity-50"
-                                    >
-                                        {isScanningGA ? 'Scanning...' : 'Auto-Detect GA4'}
-                                    </button>
-                                </div>
-                                <input
-                                    type="text"
-                                    value={gaId}
-                                    onChange={(e) => setGaId(e.target.value)}
-                                    placeholder="G-XXXXXXXXXX"
-                                    className="w-full bg-white border border-gray-200 p-3 text-sm font-mono text-gray-700 outline-none focus:border-[#ff4d00] mb-4"
-                                />
-                                <div className="grid grid-cols-3 gap-4">
-                                    <input type="text" placeholder="utm_source" value={utmSource} onChange={e => setUtmSource(e.target.value)} className="bg-white p-2 text-xs border border-gray-200 outline-none focus:border-[#ff4d00]" />
-                                    <input type="text" placeholder="utm_medium" value={utmMedium} onChange={e => setUtmMedium(e.target.value)} className="bg-white p-2 text-xs border border-gray-200 outline-none focus:border-[#ff4d00]" />
-                                    <input type="text" placeholder="utm_campaign" value={utmCampaign} onChange={e => setUtmCampaign(e.target.value)} className="bg-white p-2 text-xs border border-gray-200 outline-none focus:border-[#ff4d00]" />
-                                </div>
-                            </div>
+                {currentStep === 5 && (
+                    <>
+                        <div>
+                            <h2 className="text-2xl font-black text-gray-900 mb-2">Review Campaign</h2>
+                            <p className="text-sm text-gray-500">Confirm all settings before creating your project.</p>
                         </div>
-                    )}
 
-                    {/* Step 2: Audience (Geo & Device) */}
-                    {currentStep === 2 && (
-                        <div className="bg-white border border-gray-200 p-8 shadow-sm space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
-                            <div>
-                                <h2 className="text-2xl font-black text-gray-900 mb-2">Audience Targeting</h2>
-                                <p className="text-sm text-gray-500">Where should your visitors come from?</p>
-                            </div>
-
-                            {/* Geo Map */}
-                            <div>
-                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Geographic Location (Max 5)</label>
-                                
-                                {/* Search Input */}
-                                <div className="relative mb-4">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                                    <input
-                                        type="text"
-                                        placeholder="Search countries..."
-                                        value={countrySearch}
-                                        onChange={(e) => setCountrySearch(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2 border border-gray-200 text-sm focus:border-[#ff4d00] outline-none"
-                                    />
-                                    {countrySearch && (
-                                        <button
-                                            onClick={() => setCountrySearch('')}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                                        >
-                                            <X size={14} />
-                                        </button>
-                                    )}
-                                </div>
-
-                                {/* Selected Countries */}
-                                {selectedCountries.length > 0 && (
-                                    <div className="flex flex-wrap gap-2 mb-4">
-                                        {selectedCountries.map(code => {
-                                            const country = COUNTRIES_LIST.find(c => c.code === code);
-                                            return (
-                                                <span
-                                                    key={code}
-                                                    className="inline-flex items-center gap-1 px-2 py-1 bg-[#ff4d00]/10 text-[#ff4d00] text-xs font-bold"
-                                                >
-                                                    <img src={`https://flagcdn.com/w16/${code.toLowerCase()}.png`} alt={code} className="w-4 h-auto" />
-                                                    {country?.name || code}
-                                                    <button
-                                                        onClick={() => selectedCountries.length > 1 && toggleCountry(code)}
-                                                        className="ml-1 hover:text-red-500 disabled:opacity-30"
-                                                        disabled={selectedCountries.length <= 1}
-                                                    >
-                                                        <X size={12} />
-                                                    </button>
-                                                </span>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-
-                                {/* Country List - Scrollable */}
-                                <div className="border border-gray-200 max-h-[300px] overflow-y-auto">
-                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-1 p-1">
-                                        {filteredCountries.map((c) => (
-                                            <button
-                                                key={c.code}
-                                                onClick={() => toggleCountry(c.code)}
-                                                className={`p-2 text-left border text-xs font-bold flex justify-between items-center transition-all ${selectedCountries.includes(c.code)
-                                                    ? 'border-[#ff4d00] bg-orange-50 text-[#ff4d00]'
-                                                    : 'border-transparent bg-gray-50 text-gray-600 hover:bg-gray-100'
-                                                    }`}
-                                            >
-                                                <span className="flex items-center gap-2 truncate">
-                                                    <img src={`https://flagcdn.com/w20/${c.code.toLowerCase()}.png`} alt={c.code} className="w-4 h-auto rounded-sm flex-shrink-0" />
-                                                    <span className="truncate">{c.name}</span>
-                                                </span>
-                                                {selectedCountries.includes(c.code) && <Check size={12} className="flex-shrink-0" />}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                                <p className="text-[10px] text-gray-400 mt-2">
-                                    Showing {filteredCountries.length} countries • {selectedCountries.length}/5 selected
-                                </p>
-                            </div>
-
-                            {/* Device Split */}
-                            <div>
-                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-4">Device Distribution</label>
-                                <div className="bg-gray-100 h-4 rounded-full overflow-hidden flex mb-4">
-                                    <div className="bg-gray-900 h-full transition-all duration-500" style={{ width: `${deviceSplit}%` }}></div>
-                                    <div className="bg-[#ff4d00] h-full transition-all duration-500" style={{ width: `${100 - deviceSplit}%` }}></div>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-3 h-3 bg-gray-900 rounded-full"></div>
-                                        <span className="text-sm font-bold text-gray-900">Desktop ({deviceSplit}%)</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm font-bold text-[#ff4d00]">Mobile ({100 - deviceSplit}%)</span>
-                                        <div className="w-3 h-3 bg-[#ff4d00] rounded-full"></div>
-                                    </div>
-                                </div>
-                                <input
-                                    type="range"
-                                    min="0"
-                                    max="100"
-                                    value={deviceSplit}
-                                    onChange={(e) => setDeviceSplit(Number(e.target.value))}
-                                    className="w-full mt-4 accent-black"
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Step 3: Behavior */}
-                    {currentStep === 3 && (
-                        <div className="bg-white border border-gray-200 p-8 shadow-sm space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
-                            <div>
-                                <h2 className="text-2xl font-black text-gray-900 mb-2">User Behavior</h2>
-                                <p className="text-sm text-gray-500">How should visitors interact with your site?</p>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className={`p-4 border-2 ${calculateAvailableHits(selectedTier) >= totalHits ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'}`}>
+                            <div className="flex justify-between items-center">
                                 <div>
-                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Bounce Rate Control</label>
-                                    <div className="bg-gray-50 p-6 border border-gray-200 text-center relative overflow-hidden">
-                                        {selectedTier === 'economy' && (
-                                            <div className="absolute top-0 right-0 p-1 bg-yellow-100 text-yellow-700 text-[8px] font-black uppercase tracking-tighter">Economy: Basic</div>
-                                        )}
-                                        <div className="text-4xl font-black text-gray-900 mb-2">{bounceRate}%</div>
-                                        <p className="text-xs text-gray-500 font-medium mb-4">Visitors leaving immediately</p>
-                                        <input
-                                            type="range"
-                                            min="0"
-                                            max="100"
-                                            value={bounceRate}
-                                            onChange={(e) => setBounceRate(Number(e.target.value))}
-                                            className="w-full accent-[#ff4d00]"
-                                        />
+                                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                                        {selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)} Balance
                                     </div>
-                                </div>
-                                <div>
-                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Time on Page</label>
-                                    <CustomSelect
-                                        value={timeOnPage}
-                                        onChange={setTimeOnPage}
-                                        options={[
-                                            { value: '30 seconds', label: '30 Seconds (Pulse)' },
-                                            { value: '1 minute', label: '1 Minute (Standard)' },
-                                            { value: '3 minutes', label: '3 Minutes (Engaged)' },
-                                            { value: '5 minutes', label: '5 Minutes (Deep Read)' },
-                                        ]}
-                                    />
-                                    <div className="mt-4">
-                                        <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Traffic Source Simulation</label>
-                                        {selectedTier === 'economy' ? (
-                                            <div className="p-4 bg-orange-50 border border-orange-100 text-xs font-bold text-orange-700 flex items-center justify-between">
-                                                <span>DIRECT TRAFFIC ONLY (Economy)</span>
-                                                <div className="flex items-center gap-1 text-[8px] bg-white px-2 py-0.5 rounded border border-orange-200">
-                                                    <Zap size={8} /> TIER LOCKED
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <CustomSelect
-                                                value={trafficSource}
-                                                onChange={setTrafficSource}
-                                                options={[
-                                                    { value: 'Direct', label: 'Direct (Type-in)' },
-                                                    { value: 'Google Search', label: 'Organic Search (Google)' },
-                                                    { value: 'Social Media', label: 'Social Media (FB/Twitter)' },
-                                                    { value: 'Referral', label: 'Referral Link' },
-                                                ]}
-                                            />
-                                        )}
-                                        {selectedTier === 'economy' && (
-                                            <div className="mt-2 text-[10px] text-gray-400 italic">
-                                                Upgrade to Growth or Business for Organic & Social sources.
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Step 4: Volume & Duration (Existing logic) */}
-                    {currentStep === 4 && (
-                        <div className="bg-white border border-gray-200 p-8 shadow-sm space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
-                            <div>
-                                <h2 className="text-2xl font-black text-gray-900 mb-2">Volume & Budget</h2>
-                                <p className="text-sm text-gray-500">Define the scale of your campaign.</p>
-                            </div>
-
-                            {/* Available Hits Display */}
-                            <div className="grid grid-cols-3 gap-4">
-                                <div className={`p-4 border-2 transition-all ${selectedTier === 'economy' ? 'border-[#ff4d00] bg-orange-50' : 'border-gray-100 bg-gray-50 opacity-50'}`}>
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <Layers size={14} className={selectedTier === 'economy' ? 'text-[#ff4d00]' : 'text-gray-400'} />
-                                        <span className="text-[10px] font-bold text-gray-400 uppercase">Economy Balance</span>
-                                    </div>
-                                    <div className={`text-xl font-black ${selectedTier === 'economy' ? 'text-gray-900' : 'text-gray-400'}`}>
-                                        {calculateAvailableHits('economy').toLocaleString()}
-                                    </div>
-                                    <div className="text-[10px] text-gray-400 uppercase">hits available</div>
-                                </div>
-                                <div className={`p-4 border-2 transition-all ${selectedTier === 'professional' ? 'border-orange-400 bg-orange-50' : 'border-gray-100 bg-gray-50 opacity-50'}`}>
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <Award size={14} className={selectedTier === 'professional' ? 'text-orange-500' : 'text-gray-400'} />
-                                        <span className="text-[10px] font-bold text-gray-400 uppercase">Professional Balance</span>
-                                    </div>
-                                    <div className={`text-xl font-black ${selectedTier === 'professional' ? 'text-gray-900' : 'text-gray-400'}`}>
-                                        {calculateAvailableHits('professional').toLocaleString()}
-                                    </div>
-                                    <div className="text-[10px] text-gray-400 uppercase">hits available</div>
-                                </div>
-                                <div className={`p-4 border-2 transition-all ${selectedTier === 'expert' ? 'border-[#ff4d00] bg-[#ff4d00]/5' : 'border-gray-100 bg-gray-50 opacity-50'}`}>
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <Zap size={14} className={selectedTier === 'expert' ? 'text-[#ff4d00]' : 'text-gray-400'} />
-                                        <span className="text-[10px] font-bold text-gray-400 uppercase">Expert Balance</span>
-                                    </div>
-                                    <div className={`text-xl font-black ${selectedTier === 'expert' ? 'text-[#ff4d00]' : 'text-gray-400'}`}>
-                                        {calculateAvailableHits('expert').toLocaleString()}
-                                    </div>
-                                    <div className="text-[10px] text-gray-400 uppercase">hits available</div>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                                <div>
-                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Total Visitors Goal</label>
-                                    <div className="relative">
-                                        <input
-                                            type="number"
-                                            min="100"
-                                            step="100"
-                                            value={totalVisitors}
-                                            onChange={(e) => setTotalVisitors(parseInt(e.target.value) || 0)}
-                                            className="w-full bg-[#f9fafb] border border-gray-200 p-4 text-2xl font-black text-gray-900 focus:border-[#ff4d00] outline-none"
-                                        />
-                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 uppercase">Hits</div>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Duration (Days)</label>
-                                    <div className="relative">
-                                        <input
-                                            type="number"
-                                            min="1"
-                                            max="365"
-                                            value={durationDays}
-                                            onChange={(e) => setDurationDays(parseInt(e.target.value) || 1)}
-                                            className="w-full bg-[#f9fafb] border border-gray-200 p-4 text-2xl font-black text-gray-900 focus:border-[#ff4d00] outline-none"
-                                        />
-                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 uppercase">Days</div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Summary Box */}
-                            <div className="bg-gray-50 border border-gray-200 p-6 flex flex-col md:flex-row justify-between items-center gap-6">
-                                <div>
-                                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-1">
-                                        <Zap size={10} /> Daily Volume
-                                    </div>
-                                    <div className="text-xl font-bold text-gray-900">
-                                        {dailyVisitors.toLocaleString()} <span className="text-sm font-medium text-gray-400">/ day</span>
+                                    <div className="text-lg font-black text-gray-900">
+                                        {calculateAvailableHits(selectedTier).toLocaleString()} available
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Estimated Cost</div>
-                                    <div className="text-3xl font-black text-[#ff4d00]">€{totalCost.toFixed(2)}</div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Step 5: Review */}
-                    {currentStep === 5 && (
-                        <div className="bg-white border border-gray-200 p-8 shadow-sm space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                            <div>
-                                <h2 className="text-2xl font-black text-gray-900 mb-2">Review Campaign</h2>
-                                <p className="text-sm text-gray-500">Confirm details before launching.</p>
-                            </div>
-
-                            {/* Hits Balance Check */}
-                            <div className={`p-4 border-2 ${calculateAvailableHits(selectedTier) >= totalVisitors ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'}`}>
-                                <div className="flex justify-between items-center">
-                                    <div>
-                                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
-                                            {selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)} Balance Check
-                                        </div>
-                                        <div className="text-lg font-black text-gray-900">
-                                            {calculateAvailableHits(selectedTier).toLocaleString()} available
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="text-xs text-gray-500 font-bold">Required</div>
-                                        <div className={`text-xl font-black ${calculateAvailableHits(selectedTier) >= totalVisitors ? 'text-green-600' : 'text-red-600'}`}>
-                                            {totalVisitors.toLocaleString()}
-                                        </div>
+                                    <div className="text-xs text-gray-500 font-bold">Required</div>
+                                    <div className={`text-xl font-black ${calculateAvailableHits(selectedTier) >= totalHits ? 'text-green-600' : 'text-red-600'}`}>
+                                        {totalHits.toLocaleString()}
                                     </div>
                                 </div>
-                                {calculateAvailableHits(selectedTier) < totalVisitors && (
-                                    <div className="mt-3 text-xs font-bold text-red-600">
-                                        Insufficient hits! Please purchase more {selectedTier} hits or reduce your volume.
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="space-y-4">
-                                <ReviewRow label="Project Name" value={title} />
-                                <ReviewRow label="Target URL" value={url} isUrl />
-                                <div className="h-px bg-gray-100 my-4"></div>
-                                <ReviewRow label="Geo Targets" value={selectedCountries.join(', ')} />
-                                <ReviewRow label="Device Split" value={`Desktop: ${deviceSplit}%, Mobile: ${100 - deviceSplit}%`} />
-                                <div className="h-px bg-gray-100 my-4"></div>
-                                <ReviewRow label="Total Volume" value={`${totalVisitors.toLocaleString()} Visitors`} />
-                                <ReviewRow label="Duration" value={`${durationDays} Days`} />
-                                <ReviewRow label="Daily Pace" value={`~${dailyVisitors.toLocaleString()} / day`} />
-                                <ReviewRow label="Total Cost" value={`€${totalCost.toFixed(2)}`} highlight />
-                            </div>
-
-                            <div className="mt-8 bg-blue-50 p-4 flex items-start gap-3 border border-blue-100">
-                                <Info className="text-blue-500 flex-shrink-0" size={18} />
-                                <p className="text-xs text-blue-700 font-medium leading-relaxed">
-                                    Your campaign will start automatically within 5 minutes of launch. You can pause or edit settings at any time from the dashboard.
-                                </p>
                             </div>
                         </div>
-                    )}
 
-                    {/* Navigation Buttons */}
-                    <div className="flex justify-between pt-4">
-                        <button
-                            onClick={handleBack}
-                            className="px-8 py-4 text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-black transition-colors"
-                        >
-                            {currentStep === 1 ? 'Cancel' : 'Previous Step'}
-                        </button>
-                        <button
-                            onClick={handleNext}
-                            disabled={isSubmitting}
-                            className="bg-black text-white px-8 py-4 text-xs font-bold uppercase tracking-wider hover:bg-[#ff4d00] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 duration-200"
-                        >
-                            {isSubmitting ? 'Processing...' : (currentStep === 5 ? 'Launch Campaign' : 'Next Step')}
-                            {!isSubmitting && currentStep < 5 && <ArrowLeft className="rotate-180" size={16} />}
-                        </button>
-                    </div>
+                        <div className="space-y-4">
+                            <ReviewRow label="Project Name" value={title} />
+                            <ReviewRow label="Tier" value={selectedTier.toUpperCase()} />
+                            <ReviewRow label="Target URL" value={url} isUrl />
+                            <ReviewRow label="Google Analytics" value={gaId} />
+                            <div className="h-px bg-gray-100"></div>
+                            <ReviewRow label="Total Hits" value={`${totalHits.toLocaleString()} hits`} highlight />
+                            <ReviewRow label="Daily Limit" value={`${dailyLimit.toLocaleString()} hits/day`} />
+                            <ReviewRow label="Start Date" value={startAt} />
+                            <ReviewRow label="Duration" value={noEndDate ? `~${estimatedDuration} days (no end)` : `${durationDays} days`} />
+                            <div className="h-px bg-gray-100"></div>
+                            <ReviewRow label="Countries" value={selectedCountries.length > 0 ? `${selectedCountries.length} selected` : 'None'} />
+                            <div className="h-px bg-gray-100"></div>
+                            <ReviewRow label="Bounce Rate" value={`${bounceRate}%`} />
+                            <ReviewRow label="Time on Page" value={timeOnPage} />
+                            <ReviewRow label="Traffic Source" value={trafficSource} />
+                        </div>
 
-                </div>
-
-                {/* Vertical Summary Sidebar (Sticky) */}
-                <div className="hidden lg:block">
-                    <div className="sticky top-8 bg-gray-50 border border-gray-200 p-6 space-y-6">
-                        <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4">Campaign Summary</h3>
-
-                        <SummaryItem label="Target" value={url || 'Not set'} isLink={!!url} />
-                        <SummaryItem label="Locations" value={selectedCountries.length > 0 ? `${selectedCountries.length} Countries` : 'Global'} />
-                        <SummaryItem label="Volume" value={totalVisitors > 0 ? totalVisitors.toLocaleString() : '-'} />
-                        <SummaryItem label="Duration" value={`${durationDays} Days`} />
-
-                        <div className="pt-6 border-t border-gray-200 mt-6">
-                            <div className="flex justify-between items-center mb-2">
-                                <span className="text-xs font-bold text-gray-500 uppercase">Estimated Cost</span>
-                                <span className="text-xl font-black text-gray-900">€{totalCost.toFixed(2)}</span>
-                            </div>
-                            <div className="text-[10px] text-gray-400 font-medium">
-                                * Final price logic applied
+                        <div className="mt-8 bg-blue-50 p-4 flex items-start gap-3 border border-blue-100">
+                            <Info className="text-blue-500 flex-shrink-0" size={18} />
+                            <div className="text-xs text-blue-700 font-medium leading-relaxed">
+                                <p className="font-bold mb-1">After creation, more settings will be available:</p>
+                                <p>UTM Tracking, Device Split, Browser Selection, Custom Proxies, Sitemap Crawling, City-Level Targeting, and more.</p>
                             </div>
                         </div>
-                    </div>
+                    </>
+                )}
+            </div>
+
+            <div className="mt-6 p-4 bg-gray-50 border border-gray-200">
+                <div className="flex items-center gap-2 mb-2">
+                    <Settings size={14} className="text-gray-400" />
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Available after creation</span>
                 </div>
+                <div className="flex flex-wrap gap-2">
+                    {renderStepHint().map((hint, idx) => (
+                        <span key={idx} className="text-[10px] font-bold text-gray-500 bg-white px-2 py-1 border border-gray-200">
+                            {hint}
+                        </span>
+                    ))}
+                </div>
+            </div>
+
+            <div className="flex justify-between pt-6">
+                <button
+                    onClick={handleBack}
+                    className="px-8 py-4 text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-black transition-colors"
+                >
+                    {currentStep === 1 ? 'Cancel' : 'Previous Step'}
+                </button>
+                <button
+                    onClick={handleNext}
+                    disabled={isSubmitting}
+                    className="bg-black text-white px-8 py-4 text-xs font-bold uppercase tracking-wider hover:bg-[#ff4d00] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg"
+                >
+                    {isSubmitting ? 'Creating...' : (currentStep === 5 ? 'Create Project' : 'Next Step')}
+                    {!isSubmitting && currentStep < 5 && <ArrowLeft className="rotate-180" size={16} />}
+                </button>
             </div>
         </div>
     );
 };
 
-const SummaryItem = ({ label, value, isLink = false }: { label: string, value: string, isLink?: boolean }) => (
-    <div className="flex justify-between items-start">
-        <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">{label}</span>
-        {isLink ? (
-            <span className="text-xs font-bold text-gray-900 truncate max-w-[120px] block" title={value}>{value}</span>
-        ) : (
-            <span className="text-xs font-bold text-gray-900">{value}</span>
-        )}
-    </div>
-);
-
-const ReviewRow = ({ label, value, isUrl = false, highlight = false }: { label: string, value: string, isUrl?: boolean, highlight?: boolean }) => (
-    <div className={`flex justify-between items-center p-3 ${highlight ? 'bg-orange-50 border border-orange-100' : 'border-b border-gray-50 last:border-0'}`}>
+const ReviewRow = ({ label, value, isUrl = false, highlight = false }: { label: string; value: string; isUrl?: boolean; highlight?: boolean }) => (
+    <div className={`flex justify-between items-center p-3 ${highlight ? 'bg-orange-50 border border-orange-100' : ''}`}>
         <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">{label}</span>
         {isUrl ? (
-            <a href={value} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-sm font-bold text-[#ff4d00] hover:underline">
-                {value} <ExternalLink size={12} />
-            </a>
+            <span className="text-sm font-bold text-[#ff4d00] truncate max-w-[200px]">{value}</span>
         ) : (
             <span className={`text-sm font-bold ${highlight ? 'text-[#ff4d00] text-lg' : 'text-gray-900'}`}>{value}</span>
         )}
