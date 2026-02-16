@@ -24,8 +24,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigate, view }) => {
         setIsLoading(true);
         try {
             await db.resendVerificationEmail(email);
-            setSuccess('Verification email sent! Check your inbox.');
-            setShowResendOption(false);
+            navigate(`/verify-email?email=${encodeURIComponent(email)}`);
         } catch (err: any) {
             setError(err.message || 'Failed to resend verification email');
         } finally {
@@ -47,10 +46,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigate, view }) => {
                 }
 
                 await db.register(name, email, password);
-                setSuccess('Account created! Please check your email to verify your account before logging in.');
-                setEmail('');
-                setPassword('');
-                setName('');
+                navigate(`/verify-email?email=${encodeURIComponent(email)}`);
+                return;
 
             } else if (view === 'login') {
                 const userData = await db.login(email, password);

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import SEO from '../SEO';
 import { Link } from 'react-router-dom';
-import { ArrowRight, BarChart3, Globe, ShieldCheck, ChevronDown, ChevronUp, Target, Clock, Code, TrendingUp, BarChart2, Bitcoin, Briefcase, Search, Zap, AlertTriangle, Cpu, Activity, Moon, Radio, MapPin, Link2 } from 'lucide-react';
+import { ArrowRight, BarChart3, Globe, ShieldCheck, ChevronDown, ChevronUp, Target, Clock, Code, TrendingUp, BarChart2, Bitcoin, Briefcase, Search, Zap, AlertTriangle, Cpu, Activity, Moon, Radio, MapPin, Link2, Check, Star, Sparkles, Users, Calculator } from 'lucide-react';
 import QuickCampaign from './QuickCampaign';
 
 interface LandingPageProps {
@@ -424,118 +424,188 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
       </section>
 
       {/* Pricing Section */}
-      <section id="pricing" className="py-32 px-6 bg-white border-b border-gray-100">
+      <section id="pricing" className="py-24 px-6 bg-gradient-to-b from-white via-gray-50/30 to-white">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-black uppercase tracking-tight mb-6 text-gray-900">Scalable Traffic Plans</h2>
-            <p className="text-gray-500 max-w-md mx-auto mb-10 font-medium text-lg">
-              {pricingMode === 'business'
-                ? 'One-time credits. No monthly commitment. Use them whenever you need a boost.'
-                : 'High-volume monthly pools designed for agencies managing multiple clients.'
-              }
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 bg-[#ff4d00]/10 text-[#ff4d00] px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest mb-6">
+              <Sparkles size={14} /> Transparent Pricing
+            </div>
+            <h2 className="text-4xl md:text-5xl font-black uppercase tracking-tight mb-4 text-gray-900">
+              Pay Only For <span className="text-[#ff4d00]">Results</span>
+            </h2>
+            <p className="text-gray-500 max-w-2xl mx-auto font-medium text-lg mb-8">
+              No hidden fees. No monthly contracts. Volume discounts up to 60%. Choose your quality tier.
             </p>
 
-            {/* Pricing Toggle */}
-            <div className="inline-flex bg-gray-100 p-1.5 rounded-lg">
+            <div className="inline-flex bg-gray-900 p-1.5 rounded-xl shadow-2xl">
               <button
                 onClick={() => setPricingMode('business')}
-                className={`px-8 py-3 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${pricingMode === 'business' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-500 hover:text-gray-900'
-                  }`}
+                className={`px-8 py-3.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${pricingMode === 'business' ? 'bg-[#ff4d00] text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
               >
-                For Business
+                Credit Packs
               </button>
               <button
                 onClick={() => setPricingMode('agency')}
-                className={`px-8 py-3 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${pricingMode === 'agency' ? 'bg-[#ff4d00] text-white shadow-md' : 'text-gray-500 hover:text-[#ff4d00]'
-                  }`}
+                className={`px-8 py-3.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${pricingMode === 'agency' ? 'bg-[#ff4d00] text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
               >
-                For Agencies
+                Agency Plans
               </button>
             </div>
           </div>
 
           {pricingMode === 'business' ? (
-            <div className="grid md:grid-cols-4 gap-6">
-              {[
-                { name: "Foundation", traffic: "50,000", price: "€29", desc: "Perfect for testing new landing pages and verifying analytics setup." },
-                { name: "Momentum", traffic: "300,000", price: "€129", desc: "Ideal for small business sites needing a consistent baseline." },
-                { name: "Breakthrough", traffic: "1,000,000", price: "€399", desc: "The growth standard. Sufficient data to impact domain authority.", featured: true },
-                { name: "Apex", traffic: "3,000,000+", price: "€999", desc: "Maximum power for competitive niches and large e-commerce sites." },
-              ].map((p, i) => (
-                <div key={i} className={`flex flex-col bg-white relative transition-all duration-300 rounded-2xl ${p.featured
-                  ? 'border-2 border-[#ff4d00] shadow-2xl scale-105 z-10'
-                  : 'border border-gray-100 hover:border-gray-200 hover:shadow-xl'
-                  } p-8`}>
-                  {p.featured && (
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#ff4d00] text-white px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest shadow-md rounded-full">
-                      Most Popular
-                    </div>
-                  )}
-                  <div className="mb-4">
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-2">{p.name}</h3>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-4xl font-black text-gray-900">{p.price}</span>
-                      <span className="text-gray-400 text-xs font-medium uppercase">/ lifetime</span>
+            <div className="space-y-16">
+              <div className="grid md:grid-cols-4 gap-4">
+                {[
+                  { name: "Starter", traffic: "60,000", price: "€29", cpm: "€0.48", desc: "Test new landing pages", highlight: false, badge: null },
+                  { name: "Growth", traffic: "500,000", price: "€129", cpm: "€0.26", desc: "Small business baseline", highlight: false, badge: "Most Popular", badgeColor: "bg-[#ff4d00]" },
+                  { name: "Business", traffic: "1,000,000", price: "€299", cpm: "€0.30", desc: "Impact domain authority", highlight: true, badge: "Best Value", badgeColor: "bg-green-500" },
+                  { name: "Enterprise", traffic: "10,000,000+", price: "€2,099", cpm: "€0.21", desc: "Competitive niches", highlight: false, badge: null },
+                ].map((p, i) => (
+                  <div key={i} className={`relative group transition-all duration-500 ${p.highlight ? 'md:-mt-4 md:mb-4' : ''}`}>
+                    <div className={`h-full flex flex-col bg-white transition-all duration-300 rounded-2xl ${p.highlight ? 'border-2 border-[#ff4d00] shadow-2xl shadow-[#ff4d00]/20 scale-105 z-10' : 'border border-gray-100 hover:border-[#ff4d00]/50 hover:shadow-xl'} p-6`}>
+                      {p.badge && (
+                        <div className={`absolute -top-3 left-1/2 -translate-x-1/2 ${p.badgeColor} text-white px-4 py-1 text-[9px] font-bold uppercase tracking-widest shadow-lg rounded-full whitespace-nowrap`}>
+                          {p.badge}
+                        </div>
+                      )}
+                      
+                      <div className="mb-4">
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">{p.name}</h3>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-4xl font-black text-gray-900">{p.price}</span>
+                          <span className="text-gray-400 text-xs font-medium">one-time</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 mb-4 text-center border border-gray-100">
+                        <div className="text-2xl font-black text-gray-900">{p.traffic}</div>
+                        <div className="text-[10px] uppercase text-gray-500 font-bold tracking-wide">Visitors</div>
+                        <div className="text-[10px] text-[#ff4d00] font-bold mt-1">~{p.cpm}/1k</div>
+                      </div>
+
+                      <p className="text-xs text-gray-500 font-medium mb-4 min-h-[32px]">
+                        {p.desc}
+                      </p>
+
+                      <ul className="space-y-2 mb-6 flex-1 text-[11px]">
+                        <li className="text-gray-600 flex items-center gap-2 font-medium"><Check size={12} className="text-green-500 flex-shrink-0" /> Geo Targeting</li>
+                        <li className="text-gray-600 flex items-center gap-2 font-medium"><Check size={12} className="text-green-500 flex-shrink-0" /> Device Split</li>
+                        <li className="text-gray-600 flex items-center gap-2 font-medium"><Check size={12} className="text-green-500 flex-shrink-0" /> All Traffic Sources</li>
+                      </ul>
+
+                      <Link to="/signup" className={`w-full py-3 text-xs font-bold uppercase tracking-widest transition-all text-center rounded-xl ${p.highlight ? 'bg-[#ff4d00] text-white hover:bg-black shadow-lg' : 'bg-gray-900 text-white hover:bg-[#ff4d00]'}`}>
+                        Get Started
+                      </Link>
                     </div>
                   </div>
+                ))}
+              </div>
 
-                  <div className="bg-gray-50 rounded-lg p-4 mb-6 text-center border border-gray-100">
-                    <div className="text-sm font-bold text-gray-900">{p.traffic}</div>
-                    <div className="text-[10px] uppercase text-gray-500 font-bold tracking-wide">Traffic Credits</div>
+              <div className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 rounded-3xl p-8 md:p-12 relative overflow-hidden">
+                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20"></div>
+                <div className="absolute top-0 right-0 w-64 h-64 bg-[#ff4d00]/20 rounded-full blur-3xl"></div>
+                <div className="absolute bottom-0 left-0 w-48 h-48 bg-[#ff4d00]/10 rounded-full blur-3xl"></div>
+                
+                <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
+                  <div className="flex items-center gap-6">
+                    <div className="w-16 h-16 bg-[#ff4d00] rounded-2xl flex items-center justify-center shadow-lg shadow-[#ff4d00]/30">
+                      <Users size={28} className="text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-black text-white mb-1">Bulk Discounts Available</h3>
+                      <p className="text-gray-400 text-sm">Save up to <span className="text-[#ff4d00] font-bold">40%</span> with multi-packs</p>
+                    </div>
                   </div>
-
-                  <p className="text-xs text-gray-500 font-medium mb-8 min-h-[40px] leading-relaxed">
-                    {p.desc}
-                  </p>
-
-                  <ul className="space-y-3 mb-8 flex-1 border-t border-gray-50 pt-6">
-                    <li className="text-xs text-gray-600 flex gap-2 font-medium"><div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-1"></div> Full Feature Access</li>
-                    <li className="text-xs text-gray-600 flex gap-2 font-medium"><div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-1"></div> Geo Targeting (Country)</li>
-                    <li className="text-xs text-gray-600 flex gap-2 font-medium"><div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-1"></div> Mobile/Desktop Split</li>
-                  </ul>
-
-                  <Link to="/signup" className={`w-full py-4 text-xs font-bold uppercase tracking-widest transition-all text-center rounded-lg ${p.featured
-                    ? 'bg-[#ff4d00] text-white hover:bg-black shadow-lg hover:shadow-xl'
-                    : 'bg-black text-white hover:bg-gray-800'
-                    }`}>
-                    Select Plan
-                  </Link>
+                  <div className="flex gap-4">
+                    <div className="text-center px-6 py-3 bg-white/5 rounded-xl border border-white/10">
+                      <div className="text-2xl font-black text-white">6x</div>
+                      <div className="text-xs text-[#ff4d00] font-bold">-20%</div>
+                    </div>
+                    <div className="text-center px-6 py-3 bg-white/5 rounded-xl border border-white/10">
+                      <div className="text-2xl font-black text-white">24x</div>
+                      <div className="text-xs text-[#ff4d00] font-bold">-40%</div>
+                    </div>
+                  </div>
                 </div>
-              ))}
+              </div>
             </div>
           ) : (
-            <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-              {[
-                { name: "Agency Pro", traffic: "5 Million", price: "€1,249", features: ["Client Dashboard", "Traffic Pooling", "Priority Support"] },
-                { name: "Agency Scale", traffic: "15 Million", price: "€2,999", featured: true, features: ["Client Dashboard", "Traffic Pooling", "White-Label Reports", "Dedicated Manager"] },
-                { name: "Agency Enterprise", traffic: "50 Million+", price: "Custom", features: ["Everything in Scale", "Full API Access", "Custom Integrations", "Strategy Calls"] },
-              ].map((p, i) => (
-                <div key={i} className={`flex flex-col bg-white relative transition-all duration-300 rounded-2xl ${p.featured
-                  ? 'border-2 border-[#ff4d00] shadow-2xl z-10 scale-105'
-                  : 'border border-gray-100 hover:shadow-xl'
-                  } p-10`}>
-                  {p.featured && <div className="absolute top-0 right-10 -translate-y-1/2 bg-[#ff4d00] text-white px-4 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full">Top Value</div>}
-                  <h3 className="text-lg font-black uppercase tracking-tight text-gray-900 mb-2">{p.name}</h3>
-                  <div className="text-4xl font-black text-gray-900 mb-2">{p.price}</div>
-                  <div className="text-sm font-bold text-gray-500 mb-8 pb-4 border-b border-gray-100">
-                    Monthly Pool: <span className="text-black">{p.traffic}</span>
+            <div className="space-y-12">
+              <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+                {[
+                  { name: "Agency Pro", traffic: "5M", price: "€1,249", perVisitor: "€0.00025", features: ["Client Dashboard", "Traffic Pooling", "Priority Support", "API Access"], featured: false },
+                  { name: "Agency Scale", traffic: "15M", price: "€2,999", perVisitor: "€0.00020", featured: true, features: ["Everything in Pro", "White-Label Reports", "Dedicated Manager", "Custom Integrations"] },
+                  { name: "Agency Enterprise", traffic: "50M+", price: "Custom", perVisitor: "Volume", features: ["Full API Access", "Strategy Calls", "SLA Guarantee", "Custom Features"] },
+                ].map((p, i) => (
+                  <div key={i} className={`relative h-full ${p.featured ? 'md:-mt-4 md:mb-4' : ''}`}>
+                    <div className={`h-full flex flex-col bg-white relative transition-all duration-300 rounded-2xl ${p.featured ? 'border-2 border-[#ff4d00] shadow-2xl shadow-[#ff4d00]/20 z-10 scale-105' : 'border border-gray-100 hover:shadow-xl'} p-8`}>
+                      {p.featured && (
+                        <div className="absolute -top-3 right-8 bg-[#ff4d00] text-white px-4 py-1 text-[9px] font-bold uppercase tracking-widest rounded-full shadow-lg flex items-center gap-1">
+                          <Star size={10} /> Best Value
+                        </div>
+                      )}
+                      
+                      <div className="mb-6">
+                        <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400 mb-2">{p.name}</h3>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-4xl font-black text-gray-900">{p.price}</span>
+                          {p.price !== 'Custom' && <span className="text-gray-400 text-xs font-medium">/month</span>}
+                        </div>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-[#ff4d00]/5 to-[#ff4d00]/10 rounded-xl p-4 mb-6 text-center border border-[#ff4d00]/20">
+                        <div className="text-3xl font-black text-gray-900">{p.traffic}</div>
+                        <div className="text-[10px] uppercase text-gray-500 font-bold tracking-wide">Monthly Pool</div>
+                        <div className="text-[10px] text-[#ff4d00] font-bold mt-1">~{p.perVisitor}/visitor</div>
+                      </div>
+
+                      <ul className="space-y-3 mb-8 flex-1">
+                        {p.features.map((f, idx) => (
+                          <li key={idx} className="text-sm text-gray-600 flex items-center gap-3 font-medium">
+                            <ShieldCheck size={14} className="text-[#ff4d00] flex-shrink-0" /> {f}
+                          </li>
+                        ))}
+                      </ul>
+
+                      <Link to="/signup" className={`w-full py-4 text-xs font-bold uppercase tracking-widest text-center rounded-xl transition-all ${p.featured ? 'bg-[#ff4d00] text-white hover:bg-black shadow-lg' : 'bg-gray-900 text-white hover:bg-[#ff4d00]'}`}>
+                        {p.price === 'Custom' ? 'Contact Sales' : 'Start Subscription'}
+                      </Link>
+                    </div>
                   </div>
+                ))}
+              </div>
 
-                  <ul className="space-y-4 mb-10 flex-1">
-                    {p.features.map((f, idx) => (
-                      <li key={idx} className="text-sm text-gray-600 flex items-center gap-3 font-medium">
-                        <ShieldCheck size={16} className="text-[#ff4d00]" /> {f}
-                      </li>
-                    ))}
-                  </ul>
-
-                  <Link to="/signup" className="w-full bg-black text-white py-4 text-xs font-bold uppercase tracking-widest hover:bg-[#ff4d00] transition-colors shadow-lg text-center rounded-lg">
-                    {p.price === 'Custom' ? 'Contact Sales team' : 'Start Subscription'}
-                  </Link>
+              <div className="bg-gradient-to-r from-[#ff4d00] to-[#ff6b35] rounded-2xl p-6 md:p-8 text-white text-center max-w-3xl mx-auto">
+                <div className="flex items-center justify-center gap-3 mb-2">
+                  <Calculator size={20} />
+                  <h4 className="font-black uppercase tracking-wide">Need a Custom Volume?</h4>
                 </div>
-              ))}
+                <p className="text-white/80 text-sm mb-4">Contact us for enterprise pricing with up to 60% bulk discounts</p>
+                <Link to="/signup" className="inline-block bg-white text-[#ff4d00] px-8 py-3 text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-gray-100 transition-colors">
+                  Get a Quote
+                </Link>
+              </div>
             </div>
           )}
+
+          <div className="mt-16 grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+            {[
+              { icon: <Zap size={20} />, title: "Instant Delivery", desc: "Campaigns start within 5 minutes" },
+              { icon: <ShieldCheck size={20} />, title: "Money-Back Guarantee", desc: "Full refund if we fail to deliver" },
+              { icon: <Globe size={20} />, title: "Global Coverage", desc: "190+ countries available" },
+            ].map((item, i) => (
+              <div key={i} className="flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-100">
+                <div className="w-10 h-10 bg-[#ff4d00]/10 rounded-lg flex items-center justify-center text-[#ff4d00]">
+                  {item.icon}
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-gray-900">{item.title}</div>
+                  <div className="text-xs text-gray-500">{item.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
