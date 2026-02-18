@@ -582,3 +582,42 @@ class UserNotificationPrefs(Base):
     newsletter_sub = Column(Boolean, default=False)
     email_frequency = Column(String, default="instant")
     updated_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class ImpersonationLog(Base):
+    __tablename__ = "impersonation_logs"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    admin_id = Column(String, ForeignKey("users.id"), nullable=False)
+    target_user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    action = Column(String, nullable=False)
+    ip_address = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class BalanceAdjustmentLog(Base):
+    __tablename__ = "balance_adjustment_logs"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    admin_id = Column(String, ForeignKey("users.id"), nullable=True)
+    adjustment_type = Column(String, nullable=False)
+    tier = Column(String, nullable=False)
+    amount = Column(Float, default=0.0)
+    hits = Column(Integer, nullable=True)
+    reason = Column(String, nullable=False)
+    notes = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class EmailLog(Base):
+    __tablename__ = "email_logs"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=True)
+    email_type = Column(String, nullable=False)
+    to_email = Column(String, nullable=False)
+    subject = Column(String, nullable=True)
+    status = Column(String, default="sent")
+    error_message = Column(String, nullable=True)
+    sent_at = Column(DateTime, default=datetime.datetime.utcnow)
