@@ -5063,11 +5063,10 @@ def add_bonus_hits(
         user_id=user_id,
         type="credit",
         amount=0,
-        description=f"Bonus hits added by admin: {request.hits} {request.tier} hits - {request.reason}",
+        description=f"Bonus hits added by admin ({current_user.email}): {request.hits} {request.tier} hits - {request.reason}",
         status="completed",
         tier=request.tier,
         hits=request.hits,
-        admin_id=current_user.id,
     )
     db.add(trx)
 

@@ -1827,7 +1827,14 @@ export const db = {
         const response = await fetchWithAuth(`${API_BASE_URL}/admin/users/${userId}/adjust-balance`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(adjustment)
+            body: JSON.stringify({
+                adjustment_type: adjustment.adjustmentType,
+                tier: adjustment.tier,
+                amount: adjustment.amount,
+                hits: adjustment.hits,
+                reason: adjustment.reason,
+                notes: adjustment.notes
+            })
         });
         if (!response.ok) {
             let errorMsg = 'Failed to adjust balance';
