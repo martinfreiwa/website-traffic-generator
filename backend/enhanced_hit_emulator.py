@@ -583,15 +583,17 @@ class GAEmuEngine:
         selected_state = None
         selected_city = None
 
+        # Select geo target regardless of proxies (for language/country reporting)
+        if geo_targets:
+            chosen_geo = random.choices(
+                geo_targets, weights=[g.get("percent", 1) for g in geo_targets]
+            )[0]
+            selected_country = chosen_geo.get("country")
+            selected_state = chosen_geo.get("state")
+            selected_city = chosen_geo.get("city")
+
         if proxies:
             if geo_targets:
-                chosen_geo = random.choices(
-                    geo_targets, weights=[g.get("percent", 1) for g in geo_targets]
-                )[0]
-                selected_country = chosen_geo.get("country")
-                selected_state = chosen_geo.get("state")
-                selected_city = chosen_geo.get("city")
-
                 # Filter by country first
                 valid_proxies = [
                     p for p in proxies if p.get("country") == selected_country
