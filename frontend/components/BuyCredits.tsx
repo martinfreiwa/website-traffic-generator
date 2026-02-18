@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { db } from '../services/db';
+import { TIERS, PRICING_MATRIX, VOLUME_STEPS, BULK_OPTIONS, TierId, TierDefinition } from '../constants/pricing';
 import {
     Check, CreditCard, Zap, Shield, Wallet, ArrowRight, Lock,
     Loader2, Landmark, Smartphone, Calculator, Star, Sliders,
@@ -15,44 +17,6 @@ interface BuyCreditsProps {
     onBack: () => void;
     onPurchase?: () => void;
 }
-
-interface TierDef {
-    id: 'economy' | 'professional' | 'expert';
-    name: string;
-    factor: number;
-    quality: string;
-    popular?: boolean;
-    features: string[];
-    color: string;
-}
-
-const TIERS: TierDef[] = [
-    {
-        id: 'economy',
-        name: 'Economy',
-        factor: 0.35,
-        quality: '10% Quality',
-        features: ['Residential IPs', 'Direct Traffic Only', 'Standard Proxy Pool', 'No Geo Targeting'],
-        color: 'border-gray-200'
-    },
-    {
-        id: 'professional',
-        name: 'Professional',
-        factor: 0.65,
-        quality: '50% Quality',
-        popular: true,
-        features: ['Residential Geo IPs', 'Country Geo Targeting', 'RSS and Sitemap Support', 'URL Shorteners'],
-        color: 'border-orange-300'
-    },
-    {
-        id: 'expert',
-        name: 'Expert',
-        factor: 1.0,
-        quality: '100% Quality',
-        features: ['State & City Targeting', 'Night & Day Volume', 'Automatic Website Crawler', 'GA4 Natural Events'],
-        color: 'border-[#ff4d00]'
-    }
-];
 
 interface BankDetails {
     name: string;
@@ -117,33 +81,6 @@ const BANK_DETAILS: Record<string, BankDetails> = {
 
 type Currency = 'USD' | 'EUR' | 'GBP' | 'AUD' | 'RON';
 
-const VOLUME_STEPS = [60000, 500000, 1000000, 10000000, 50000000];
-const BULK_OPTIONS = [1, 6, 24];
-
-const PRICING_MATRIX: Record<string, Record<number, Record<number, number>>> = {
-    economy: {
-        60000: { 1: 9.96, 6: 47.81, 24: 143.42 },
-        500000: { 1: 57.96, 6: 278.21, 24: 834.62 },
-        1000000: { 1: 99.96, 6: 479.81, 24: 1439.42 },
-        10000000: { 1: 699.96, 6: 3359.81, 24: 10079.42 },
-        50000000: { 1: 2799.96, 6: 13439.81, 24: 40319.42 },
-    },
-    professional: {
-        60000: { 1: 19.96, 6: 95.81, 24: 287.42 },
-        500000: { 1: 115.92, 6: 556.42, 24: 1669.25 },
-        1000000: { 1: 199.96, 6: 959.81, 24: 2879.42 },
-        10000000: { 1: 1399.96, 6: 6719.81, 24: 20159.42 },
-        50000000: { 1: 5599.96, 6: 26879.81, 24: 80639.42 },
-    },
-    expert: {
-        60000: { 1: 29.96, 6: 143.81, 24: 431.42 },
-        500000: { 1: 173.96, 6: 835.01, 24: 2505.02 },
-        1000000: { 1: 299.96, 6: 1439.81, 24: 4319.42 },
-        10000000: { 1: 2099.96, 6: 10079.81, 24: 30239.42 },
-        50000000: { 1: 8399.96, 6: 40319.81, 24: 120959.42 },
-    }
-};
-
 const CheckoutForm = ({ amount, onSuccess, onError }: { amount: number, onSuccess: (pid: string) => void, onError: (msg: string) => void }) => {
     const stripe = useStripe();
     const elements = useElements();
@@ -194,8 +131,9 @@ const CheckoutForm = ({ amount, onSuccess, onError }: { amount: number, onSucces
 };
 
 const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
+    const navigate = useNavigate();
     const [step, setStep] = useState(1);
-    const [selectedTier, setSelectedTier] = useState<TierDef>(TIERS[1]);
+    const [selectedTier, setSelectedTier] = useState<TierDefinition>(TIERS[1]);
     const [volumeIndex, setVolumeIndex] = useState(1);
     const [bulkPack, setBulkPack] = useState(1);
     const [balance, setBalance] = useState(0);
@@ -237,40 +175,37 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
     const cpm = totalPrice / (totalVisitors / 1000);
 
     const handleCreatePayment = async () => {
-        // Only for Card payment we need intent
         if (paymentMethod === 'card') {
             setIsProcessing(true);
             try {
-                // Convert base price to cents for initial intent creation
-                // The backend will apply the discount automatically
-                const amountInCents = Math.round(basePrice * 100);
-                const data = await db.createPaymentIntent(amountInCents, 'eur');
-                if (data.clientSecret) {
-                    setClientSecret(data.clientSecret);
-                    setStep(2);
+                const data = await db.createCreditsCheckout({
+                    tier: selectedTier.id,
+                    visitors: visitors,
+                    bulk_months: bulkPack,
+                    currency: 'eur'
+                });
+                if (data.url) {
+                    window.location.href = data.url;
                 } else {
-                    alert("Failed to initialize payment gateway.");
+                    alert("Failed to initialize Stripe checkout.");
                 }
             } catch (error: any) {
-                alert("Payment Error: " + error.message);
+                alert("Checkout Error: " + error.message);
             } finally {
                 setIsProcessing(false);
             }
         } else {
-            // Other methods (Bank/Apple) - Placeholder flow
             setStep(2);
         }
     };
 
     const handlePaymentSuccess = async (paymentId: string) => {
         setIsProcessing(true);
-        // Credit full value (basePrice) despite paying discounted price
         await db.purchaseCredits(basePrice, `Traffic Credits (${totalVisitors.toLocaleString()} ${selectedTier.name}) - Stripe ${paymentId}`, selectedTier.id, totalVisitors);
         setBalance(db.getBalance());
         setIsProcessing(false);
         if (onPurchase) onPurchase();
-        alert("Payment Successful! Credits added.");
-        onBack();
+        navigate(`/dashboard/payment-success?type=credits&amount=${totalPrice.toFixed(2)}&credits=${totalVisitors}`);
     };
 
     const copyToClipboard = (text: string, label: string) => {

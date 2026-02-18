@@ -33,6 +33,20 @@ const fetchWithAuth = async (url: string, options: any = {}) => {
     return response;
 };
 
+const fillMissingDays = (stats: { date: string; visitors: number; pageviews: number }[], days: number = 30): { date: string; visitors: number; pageviews: number }[] => {
+    const result: { date: string; visitors: number; pageviews: number }[] = [];
+    const statsMap = new Map(stats.map(s => [s.date, s]));
+    
+    for (let i = days - 1; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toISOString().split('T')[0];
+        const existing = statsMap.get(dateStr);
+        result.push(existing || { date: dateStr, visitors: 0, pageviews: 0 });
+    }
+    return result;
+};
+
 export const db = {
     init: () => {
         // No-op for API-based DB, but we keep the signature
@@ -46,6 +60,72 @@ export const db = {
         } catch (e) {
             console.error('Failed to parse user data from localStorage:', e);
             localStorage.removeItem('modus_current_user');
+            return undefined;
+        }
+    },
+
+    refreshCurrentUser: async (): Promise<User | undefined> => {
+        try {
+            const response = await fetchWithAuth(`${API_BASE_URL}/users/me`);
+            if (!response.ok) {
+                if (response.status === 401) {
+                    db.logout();
+                    return undefined;
+                }
+                throw new Error('Failed to fetch user');
+            }
+            const userData = await response.json();
+            
+            const mappedUser: User = {
+                id: userData.id,
+                email: userData.email,
+                name: userData.name || userData.email?.split('@')[0] || 'User',
+                role: userData.role,
+                balance: userData.balance,
+                balanceEconomy: userData.balance_economy,
+                balanceProfessional: userData.balance_professional,
+                balanceExpert: userData.balance_expert,
+                status: userData.status || 'active',
+                joinedDate: userData.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
+                projectsCount: userData.projects_count || 0,
+                apiKey: userData.api_key,
+                isVerified: userData.is_verified ?? false,
+                phone: userData.phone,
+                company: userData.company,
+                vatId: userData.vat_id,
+                address: userData.address,
+                city: userData.city,
+                country: userData.country,
+                zip: userData.zip,
+                website: userData.website,
+                displayName: userData.display_name,
+                bio: userData.bio,
+                jobTitle: userData.job_title,
+                publicProfile: userData.public_profile,
+                twoFactorEnabled: userData.two_factor_enabled,
+                emailFrequency: userData.email_frequency,
+                loginNotificationEnabled: userData.login_notification_enabled,
+                newsletterSub: userData.newsletter_sub,
+                soundEffects: userData.sound_effects,
+                developerMode: userData.developer_mode,
+                apiWhitelist: userData.api_whitelist,
+                webhookSecret: userData.webhook_secret,
+                accessibility: userData.accessibility,
+                socialLinks: userData.social_links,
+                recoveryEmail: userData.recovery_email,
+                timezone: userData.timezone,
+                language: userData.language,
+                themeAccentColor: userData.theme_accent_color,
+                dateFormat: userData.date_format,
+                numberFormat: userData.number_format,
+                requirePasswordReset: userData.require_password_reset,
+                avatarUrl: userData.avatar_url,
+            };
+            
+            db.setCurrentUser(mappedUser);
+            return mappedUser;
+        } catch (e) {
+            console.error('Failed to refresh user:', e);
             return undefined;
         }
     },
@@ -97,7 +177,7 @@ export const db = {
         const mappedUser: User = {
             id: userData.id,
             email: userData.email,
-            name: userData.email.split('@')[0],
+            name: userData.email?.split('@')[0] || userData.name || 'User',
             role: userData.role,
             balance: userData.balance,
             balanceEconomy: userData.balance_economy,
@@ -105,7 +185,7 @@ export const db = {
             balanceExpert: userData.balance_expert,
             status: 'active',
             joinedDate: userData.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
-            projectsCount: 0,
+            projectsCount: userData.projects_count || 0,
             apiKey: userData.api_key,
             isVerified: userData.is_verified ?? false,
 
@@ -258,7 +338,7 @@ export const db = {
                 expires: p.expires_at || 'Never',
                 createdAt: p.created_at,
                 settings: p.settings,
-                stats: statsData[p.id] || [],
+                stats: fillMissingDays(statsData[p.id] || [], 30),
                 totalHits: p.total_hits || 0,
                 hitsToday: p.hits_today || 0,
                 customTarget: {
@@ -292,6 +372,36 @@ export const db = {
         } catch (e) {
             console.error("Failed to fetch hourly project stats:", e);
             return [];
+        }
+    },
+
+    syncProjectStatsLive: async (projectId: string): Promise<{ time: string; visitors: number; pageviews: number }[]> => {
+        try {
+            const response = await fetchWithAuth(`${API_BASE_URL}/projects/${projectId}/stats/live`);
+            if (!response.ok) return [];
+            return await response.json();
+        } catch (e) {
+            console.error("Failed to fetch live project stats:", e);
+            return [];
+        }
+    },
+
+    getCalculatedExpiry: async (projectId: string): Promise<{
+        daysRemaining: number | null;
+        expiresDate: string | null;
+        balance: number;
+        totalDailyConsumption: number;
+        message: string | null;
+    }> => {
+        try {
+            const response = await fetchWithAuth(`${API_BASE_URL}/projects/${projectId}/expires-calculated`);
+            if (!response.ok) {
+                return { daysRemaining: null, expiresDate: null, balance: 0, totalDailyConsumption: 0, message: 'Failed to calculate' };
+            }
+            return await response.json();
+        } catch (e) {
+            console.error("Failed to fetch calculated expiry:", e);
+            return { daysRemaining: null, expiresDate: null, balance: 0, totalDailyConsumption: 0, message: 'Error' };
         }
     },
 
@@ -333,7 +443,7 @@ export const db = {
                 expires: p.expires_at || 'Never',
                 createdAt: p.created_at,
                 settings: p.settings,
-                stats: statsData[p.id] || []
+                stats: fillMissingDays(statsData[p.id] || [], 30)
             }));
 
             localStorage.setItem('modus_admin_projects_cache', JSON.stringify(mapped));
@@ -379,10 +489,12 @@ export const db = {
     },
 
     updateProject: async (project: Project) => {
+        const dailyLimit = project.settings?.scheduleTrafficAmount || project.customTarget?.dailyLimit || 0;
+        
         const payload = {
             name: project.name,
             settings: project.settings,
-            daily_limit: project.customTarget?.dailyLimit || 0,
+            daily_limit: dailyLimit,
             total_target: project.customTarget?.totalVisitors || 0,
             status: project.status,
             tier: project.tier
@@ -436,7 +548,7 @@ export const db = {
     // Financials
     getBalance: (): number => {
         const user = db.getCurrentUser();
-        return user ? user.balance : 0;
+        return user?.balance ?? 0;
     },
 
     // Unified Syncing
@@ -586,8 +698,41 @@ export const db = {
             },
             body: JSON.stringify({
                 price_id: priceId,
-                success_url: `${currentOrigin}/dashboard?subscription=success`,
+                success_url: `${currentOrigin}/dashboard/payment-success?type=subscription&session_id={CHECKOUT_SESSION_ID}`,
                 cancel_url: `${currentOrigin}/pricing?subscription=cancelled`
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to create checkout session');
+        }
+        return await response.json();
+    },
+
+    createCreditsCheckout: async (params: {
+        tier: 'economy' | 'professional' | 'expert';
+        visitors: number;
+        bulk_months: number;
+        currency?: string;
+    }) => {
+        const token = localStorage.getItem('tgp_token');
+        if (!token) throw new Error("Not authenticated");
+
+        const currentOrigin = window.location.origin;
+        const response = await fetch(`${API_BASE_URL}/stripe/create-checkout`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                tier: params.tier,
+                visitors: params.visitors,
+                bulk_months: params.bulk_months,
+                currency: params.currency || 'eur',
+                success_url: `${currentOrigin}/dashboard/payment-success?type=credits&session_id={CHECKOUT_SESSION_ID}`,
+                cancel_url: `${currentOrigin}/dashboard/buy-credits?payment=cancelled`
             })
         });
 
@@ -667,13 +812,39 @@ export const db = {
     },
 
     // Tickets
-    getTickets: (): Ticket[] => {
+    getTickets: (filters?: { status?: string; category?: string; search?: string }): Ticket[] => {
         const data = localStorage.getItem('modus_tickets_cache');
-        return data ? JSON.parse(data) : [];
+        let tickets: Ticket[] = data ? JSON.parse(data) : [];
+        
+        if (filters) {
+            if (filters.status) {
+                tickets = tickets.filter(t => t.status === filters.status);
+            }
+            if (filters.category) {
+                tickets = tickets.filter(t => t.category === filters.category);
+            }
+            if (filters.search) {
+                const searchLower = filters.search.toLowerCase();
+                tickets = tickets.filter(t => 
+                    t.subject.toLowerCase().includes(searchLower) ||
+                    t.lastMessage?.toLowerCase().includes(searchLower) ||
+                    t.messages?.some(m => m.text.toLowerCase().includes(searchLower))
+                );
+            }
+        }
+        
+        return tickets;
     },
 
-    syncTickets: async () => {
-        const response = await fetchWithAuth(`${API_BASE_URL}/tickets`);
+    syncTickets: async (filters?: { status?: string; category?: string; search?: string }) => {
+        let url = `${API_BASE_URL}/tickets`;
+        const params = new URLSearchParams();
+        if (filters?.status) params.append('status', filters.status);
+        if (filters?.category) params.append('category', filters.category);
+        if (filters?.search) params.append('search', filters.search);
+        if (params.toString()) url += `?${params.toString()}`;
+        
+        const response = await fetchWithAuth(url);
         if (!response.ok) return;
         const data = await response.json();
         const mapped: Ticket[] = data.map((t: any) => ({
@@ -682,22 +853,60 @@ export const db = {
             userId: t.user_id,
             userName: t.user_email?.split('@')[0] || 'User',
             subject: t.subject,
-            status: 'open',
-            priority: t.priority,
+            status: t.status || 'open',
+            priority: t.priority || 'low',
+            category: t.category || 'general',
+            projectId: t.project_id,
+            projectName: t.project_name,
+            attachmentUrls: t.attachment_urls || [],
             date: t.created_at?.split('T')[0] || new Date().toLocaleDateString(),
-            lastMessage: 'Ticket created',
-            unread: false
+            lastMessage: t.messages?.length > 0 ? t.messages[t.messages.length - 1].text : 'Ticket created',
+            messages: t.messages || [],
+            unread: false,
+            updatedAt: t.updated_at
         }));
         localStorage.setItem('modus_tickets_cache', JSON.stringify(mapped));
     },
 
     createTicket: async (ticket: Partial<Ticket>) => {
+        const payload = {
+            subject: ticket.subject,
+            priority: ticket.priority || 'low',
+            type: ticket.type || 'ticket',
+            category: ticket.category || 'general',
+            project_id: ticket.projectId,
+            attachment_urls: ticket.attachmentUrls || [],
+            messages: ticket.messages || []
+        };
         await fetchWithAuth(`${API_BASE_URL}/tickets`, {
             method: 'POST',
-            body: JSON.stringify(ticket)
+            body: JSON.stringify(payload)
         });
         await db.syncTickets();
         return db.getTickets();
+    },
+
+    closeTicket: async (ticketId: string) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/tickets/${ticketId}/close`, {
+            method: 'POST'
+        });
+        if (!response.ok) throw new Error("Failed to close ticket");
+        await db.syncTickets();
+    },
+
+    uploadTicketAttachment: async (file: File): Promise<{ url: string; filename: string }> => {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const token = localStorage.getItem('tgp_token');
+        const response = await fetch(`${API_BASE_URL}/tickets/upload`, {
+            method: 'POST',
+            headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+            body: formData
+        });
+        
+        if (!response.ok) throw new Error("Failed to upload file");
+        return await response.json();
     },
 
     // Notifications
@@ -754,7 +963,20 @@ export const db = {
 
     // Misc
     trackPresence: (view: string, user: User) => {
-        console.log(`User ${user.email} is viewing ${view}`);
+        const sessionToken = localStorage.getItem('modus_session_token');
+        fetchWithAuth(`${API_BASE_URL}/users/presence`, {
+            method: 'POST',
+            body: JSON.stringify({
+                session_token: sessionToken,
+                current_page: view,
+                user_agent: navigator.userAgent,
+                device: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop'
+            })
+        }).then(res => res.json()).then(data => {
+            if (data.session_token) {
+                localStorage.setItem('modus_session_token', data.session_token);
+            }
+        }).catch(() => {});
     },
 
     getTicketById: (id: string): Ticket | undefined => {
@@ -874,10 +1096,56 @@ export const db = {
         }
 
         const updatedUser = await response.json();
-        // Update local state with the returned mapped user if needed,
-        // but for now we'll just update localStorage with the current frontend object
-        // assuming it's consistent.
-        db.setCurrentUser(user);
+        
+        // Map the response back to frontend User type and update localStorage
+        const mappedUser: User = {
+            id: updatedUser.id,
+            email: updatedUser.email,
+            name: updatedUser.name || updatedUser.email?.split('@')[0] || 'User',
+            role: updatedUser.role,
+            balance: updatedUser.balance,
+            balanceEconomy: updatedUser.balance_economy,
+            balanceProfessional: updatedUser.balance_professional,
+            balanceExpert: updatedUser.balance_expert,
+            status: updatedUser.status || 'active',
+            joinedDate: updatedUser.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
+            projectsCount: updatedUser.projects_count || 0,
+            apiKey: updatedUser.api_key,
+            isVerified: updatedUser.is_verified ?? false,
+            phone: updatedUser.phone,
+            company: updatedUser.company,
+            vatId: updatedUser.vat_id,
+            address: updatedUser.address,
+            city: updatedUser.city,
+            country: updatedUser.country,
+            zip: updatedUser.zip,
+            website: updatedUser.website,
+            displayName: updatedUser.display_name,
+            bio: updatedUser.bio,
+            jobTitle: updatedUser.job_title,
+            publicProfile: updatedUser.public_profile,
+            twoFactorEnabled: updatedUser.two_factor_enabled,
+            emailFrequency: updatedUser.email_frequency,
+            loginNotificationEnabled: updatedUser.login_notification_enabled,
+            newsletterSub: updatedUser.newsletter_sub,
+            soundEffects: updatedUser.sound_effects,
+            developerMode: updatedUser.developer_mode,
+            apiWhitelist: updatedUser.api_whitelist,
+            webhookSecret: updatedUser.webhook_secret,
+            accessibility: updatedUser.accessibility,
+            socialLinks: updatedUser.social_links,
+            recoveryEmail: updatedUser.recovery_email,
+            timezone: updatedUser.timezone,
+            language: updatedUser.language,
+            themeAccentColor: updatedUser.theme_accent_color,
+            dateFormat: updatedUser.date_format,
+            numberFormat: updatedUser.number_format,
+            requirePasswordReset: updatedUser.require_password_reset,
+            avatarUrl: updatedUser.avatar_url,
+        };
+        
+        db.setCurrentUser(mappedUser);
+        return mappedUser;
     },
 
     regenerateApiKey: async (): Promise<string> => {
@@ -1014,7 +1282,30 @@ export const db = {
     },
 
     getRealTimeVisitors: async (): Promise<LiveVisitor[]> => {
-        return [];
+        try {
+            const response = await fetchWithAuth(`${API_BASE_URL}/admin/active-users`);
+            if (!response.ok) return [];
+            const data = await response.json();
+            return data.map((s: any) => ({
+                id: s.id,
+                userId: s.user?.id,
+                name: s.user?.name || 'Guest',
+                email: s.user?.email || '',
+                role: s.role,
+                currentPage: s.currentPage,
+                durationMinutes: s.durationMinutes,
+                device: s.device,
+                browser: s.browser,
+                ip: s.ip,
+                location: s.location,
+                totalVisits: s.totalVisits,
+                status: s.status,
+                lastActive: s.lastActive
+            }));
+        } catch (e) {
+            console.error("Failed to fetch real-time visitors:", e);
+            return [];
+        }
     },
 
     scanGA4: async (url: string): Promise<string> => {
@@ -1135,110 +1426,210 @@ export const db = {
         }
     },
 
-    // Marketing & Coupons (MOCK / LocalStorage)
-    getCoupons: (): Coupon[] => {
-        const data = localStorage.getItem('modus_coupons_cache');
-        if (data) return JSON.parse(data);
-
-        // Return some dummy data if empty
-        const initial: Coupon[] = [
-            { id: '1', code: 'WELCOME20', discountType: 'percent', discountValue: 20, active: true, usedCount: 45 },
-            { id: '2', code: 'BLACKFRIDAY', discountType: 'fixed', discountValue: 50, active: false, usedCount: 120, expiryDate: '2025-11-29' }
-        ];
-        localStorage.setItem('modus_coupons_cache', JSON.stringify(initial));
-        return initial;
-    },
-
-    saveCoupon: (coupon: Coupon) => {
-        const coupons = db.getCoupons();
-        const index = coupons.findIndex(c => c.id === coupon.id);
-        if (index >= 0) {
-            coupons[index] = coupon;
-        } else {
-            coupons.push(coupon);
+    // Marketing & Coupons
+    getCoupons: async (): Promise<Coupon[]> => {
+        try {
+            const response = await fetchWithAuth(`${API_BASE_URL}/admin/coupons`);
+            if (!response.ok) throw new Error('Failed to fetch');
+            const data = await response.json();
+            return data.map((c: any) => ({
+                id: c.id,
+                code: c.code,
+                discountType: c.discount_type,
+                discountValue: c.discount_value,
+                minPurchase: c.min_purchase,
+                maxUses: c.max_uses,
+                usedCount: c.used_count,
+                maxUsesPerUser: c.max_uses_per_user,
+                planRestriction: c.plan_restriction,
+                duration: c.duration,
+                expiryDate: c.expires_at ? c.expires_at.split('T')[0] : null,
+                active: c.is_active
+            }));
+        } catch (e) {
+            return [];
         }
-        localStorage.setItem('modus_coupons_cache', JSON.stringify(coupons));
     },
 
-    deleteCoupon: (id: string) => {
-        const coupons = db.getCoupons().filter(c => c.id !== id);
-        localStorage.setItem('modus_coupons_cache', JSON.stringify(coupons));
+    saveCoupon: async (coupon: Coupon): Promise<void> => {
+        const payload = {
+            code: coupon.code,
+            discount_type: coupon.discountType === 'percent' ? 'percentage' : 'fixed',
+            discount_value: coupon.discountValue,
+            min_purchase: coupon.minPurchase || 0,
+            max_uses: coupon.maxUses,
+            max_uses_per_user: coupon.maxUsesPerUser || 1,
+            plan_restriction: coupon.planRestriction,
+            duration: coupon.duration || 'once',
+            expires_at: coupon.expiryDate || null
+        };
+        
+        if (coupon.id) {
+            await fetchWithAuth(`${API_BASE_URL}/admin/coupons/${coupon.id}`, {
+                method: 'PUT',
+                body: JSON.stringify(payload)
+            });
+        } else {
+            await fetchWithAuth(`${API_BASE_URL}/admin/coupons`, {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+        }
     },
 
-    getMarketingStats: (): MarketingCampaign[] => {
-        const data = localStorage.getItem('modus_marketing_cache');
-        if (data) return JSON.parse(data);
+    deleteCoupon: async (id: string): Promise<void> => {
+        await fetchWithAuth(`${API_BASE_URL}/admin/coupons/${id}`, {
+            method: 'DELETE'
+        });
+    },
 
-        // Dummy Data
-        const initial: MarketingCampaign[] = [
-            { id: '1', name: 'Welcome Email Sequence', type: 'email', status: 'active', sentCount: 12500, openRate: 45, clickRate: 12, dateCreated: '2024-01-15' },
-            { id: '2', name: 'Google Ads Q1', type: 'ad_tracking', status: 'active', utmSource: 'google_ads', clicks: 8500, conversions: 320, revenue: 14500, dateCreated: '2024-01-01' },
-            { id: '3', name: 'Newsletter: Feb Update', type: 'email', status: 'ended', sentCount: 5000, openRate: 38, clickRate: 5, dateCreated: '2024-02-01' }
-        ];
-        localStorage.setItem('modus_marketing_cache', JSON.stringify(initial));
-        return initial;
+    getMarketingStats: async (): Promise<MarketingCampaign[]> => {
+        try {
+            const response = await fetchWithAuth(`${API_BASE_URL}/admin/marketing`);
+            if (!response.ok) throw new Error('Failed to fetch');
+            const data = await response.json();
+            return data.map((c: any) => ({
+                id: c.id,
+                name: c.name,
+                type: c.campaign_type,
+                status: c.status,
+                clicks: c.clicks,
+                conversions: c.conversions,
+                revenue: c.revenue,
+                spend: c.spend,
+                dateCreated: c.created_at ? c.created_at.split('T')[0] : new Date().toISOString().split('T')[0]
+            }));
+        } catch (e) {
+            return [];
+        }
+    },
+
+    createMarketingCampaign: async (campaign: Partial<MarketingCampaign>): Promise<void> => {
+        await fetchWithAuth(`${API_BASE_URL}/admin/marketing`, {
+            method: 'POST',
+            body: JSON.stringify({
+                name: campaign.name,
+                campaign_type: campaign.type || 'ad_tracking',
+                start_date: campaign.dateCreated || null,
+                end_date: null
+            })
+        });
+    },
+
+    sendEmailBlast: async (subject: string, body: string, targetAudience: string = 'all'): Promise<void> => {
+        await fetchWithAuth(`${API_BASE_URL}/admin/email-blast`, {
+            method: 'POST',
+            body: JSON.stringify({
+                subject,
+                body,
+                target_audience: targetAudience
+            })
+        });
     },
 
     // Conversion Settings
-    getConversionSettings: (): ConversionSettings => {
-        const data = localStorage.getItem('modus_conversion_settings');
-        if (data) return JSON.parse(data);
-
-        const initial: ConversionSettings = {
-            socialProof: {
-                enabled: true,
-                position: 'bottom-left',
-                delay: 5,
-                showRealData: false,
-                customMessages: ['Someone in New York purchased Momentum Plan', 'New user joined from London']
-            },
-            exitIntent: {
-                enabled: false,
-                headline: 'Wait! Don\'t miss out.',
-                subtext: 'Get 20% off your first month with code: STAY20',
-                couponCode: 'STAY20',
-                showOncePerSession: true
-            },
-            promoBar: {
-                enabled: false,
-                message: 'Limited Time Offer: Get 50% off all annual plans!',
-                buttonText: 'Claim Offer',
-                buttonLink: '/pricing',
-                backgroundColor: '#ff4d00',
-                textColor: '#ffffff'
-            }
-        };
-        localStorage.setItem('modus_conversion_settings', JSON.stringify(initial));
-        return initial;
+    getConversionSettings: async (): Promise<ConversionSettings> => {
+        try {
+            const response = await fetchWithAuth(`${API_BASE_URL}/conversion-settings`);
+            if (!response.ok) throw new Error('Failed to fetch');
+            const data = await response.json();
+            return {
+                socialProof: {
+                    enabled: data.socialProofEnabled,
+                    position: data.socialProofPosition,
+                    delay: data.socialProofDelay,
+                    showRealData: data.socialProofShowSimulated,
+                    customMessages: []
+                },
+                exitIntent: {
+                    enabled: data.exitIntentEnabled,
+                    headline: data.exitIntentHeadline,
+                    subtext: data.exitIntentSubtext,
+                    couponCode: data.exitIntentCouponCode,
+                    showOncePerSession: true
+                },
+                promoBar: {
+                    enabled: data.promoBarEnabled,
+                    message: data.promoBarMessage,
+                    buttonText: data.promoBarButtonText,
+                    buttonLink: data.promoBarButtonUrl,
+                    backgroundColor: data.promoBarBackgroundColor,
+                    textColor: data.promoBarTextColor
+                }
+            };
+        } catch (e) {
+            const initial: ConversionSettings = {
+                socialProof: { enabled: false, position: 'bottom-left', delay: 5, showRealData: false, customMessages: [] },
+                exitIntent: { enabled: false, headline: 'Wait! Don\'t miss out.', subtext: 'Get 20% off with code: STAY20', couponCode: 'STAY20', showOncePerSession: true },
+                promoBar: { enabled: false, message: 'Limited Time Offer!', buttonText: 'Claim Offer', buttonLink: '/pricing', backgroundColor: '#ff4d00', textColor: '#ffffff' }
+            };
+            return initial;
+        }
     },
 
-    saveConversionSettings: (settings: ConversionSettings) => {
-        localStorage.setItem('modus_conversion_settings', JSON.stringify(settings));
+    saveConversionSettings: async (settings: ConversionSettings): Promise<void> => {
+        await fetchWithAuth(`${API_BASE_URL}/conversion-settings`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                social_proof_enabled: settings.socialProof.enabled,
+                social_proof_position: settings.socialProof.position,
+                social_proof_delay: settings.socialProof.delay,
+                social_proof_show_simulated: settings.socialProof.showRealData,
+                exit_intent_enabled: settings.exitIntent.enabled,
+                exit_intent_headline: settings.exitIntent.headline,
+                exit_intent_subtext: settings.exitIntent.subtext,
+                exit_intent_coupon_code: settings.exitIntent.couponCode,
+                promo_bar_enabled: settings.promoBar.enabled,
+                promo_bar_message: settings.promoBar.message,
+                promo_bar_button_text: settings.promoBar.buttonText,
+                promo_bar_button_url: settings.promoBar.buttonLink,
+                promo_bar_background_color: settings.promoBar.backgroundColor,
+                promo_bar_text_color: settings.promoBar.textColor
+            })
+        });
     },
 
     // Loyalty & Referrals
-    getLoyaltySettings: (): import('../types').LoyaltySettings => {
-        const data = localStorage.getItem('modus_loyalty_settings');
-        if (data) return JSON.parse(data);
-        const initial = { enabled: false, pointsPerDollar: 1, redemptionRate: 100, bonusSignupPoints: 50 };
-        localStorage.setItem('modus_loyalty_settings', JSON.stringify(initial));
-        return initial;
+    getLoyaltySettings: async (): Promise<import('../types').LoyaltySettings> => {
+        try {
+            const response = await fetchWithAuth(`${API_BASE_URL}/loyalty-settings`);
+            if (!response.ok) throw new Error('Failed to fetch');
+            const data = await response.json();
+            return { enabled: data.enabled, pointsPerDollar: data.pointsPerDollar, redemptionRate: data.redemptionRate, bonusSignupPoints: data.bonusSignupPoints };
+        } catch (e) {
+            return { enabled: false, pointsPerDollar: 1, redemptionRate: 100, bonusSignupPoints: 50 };
+        }
     },
 
-    saveLoyaltySettings: (settings: import('../types').LoyaltySettings) => {
-        localStorage.setItem('modus_loyalty_settings', JSON.stringify(settings));
+    saveLoyaltySettings: async (settings: import('../types').LoyaltySettings): Promise<void> => {
+        await fetchWithAuth(`${API_BASE_URL}/loyalty-settings`, {
+            method: 'PUT',
+            body: JSON.stringify(settings)
+        });
     },
 
-    getReferralSettings: (): import('../types').ReferralSettings => {
-        const data = localStorage.getItem('modus_referral_settings');
-        if (data) return JSON.parse(data);
-        const initial = { enabled: false, referrerReward: 25, refereeReward: 25, rewardType: 'credit' as const };
-        localStorage.setItem('modus_referral_settings', JSON.stringify(initial));
-        return initial;
+    getReferralSettings: async (): Promise<import('../types').ReferralSettings> => {
+        try {
+            const response = await fetchWithAuth(`${API_BASE_URL}/referral-settings`);
+            if (!response.ok) throw new Error('Failed to fetch');
+            const data = await response.json();
+            return { enabled: data.enabled, referrerReward: data.referrerRewardValue, refereeReward: data.refereeRewardValue, rewardType: data.referrerRewardType as 'credit' | 'percentage' };
+        } catch (e) {
+            return { enabled: false, referrerReward: 25, refereeReward: 25, rewardType: 'credit' };
+        }
     },
 
-    saveReferralSettings: (settings: import('../types').ReferralSettings) => {
-        localStorage.setItem('modus_referral_settings', JSON.stringify(settings));
+    saveReferralSettings: async (settings: import('../types').ReferralSettings): Promise<void> => {
+        await fetchWithAuth(`${API_BASE_URL}/referral-settings`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                enabled: settings.enabled,
+                referrer_reward_type: settings.rewardType,
+                referrer_reward_value: settings.referrerReward,
+                referee_reward_type: settings.rewardType,
+                referee_reward_value: settings.refereeReward
+            })
+        });
     },
 
     getBankTransfers: async (statusFilter: string = 'all'): Promise<any[]> => {
@@ -1251,6 +1642,16 @@ export const db = {
         const response = await fetchWithAuth(`${API_BASE_URL}/bank-transfer/my-proofs`);
         if (!response.ok) return [];
         return await response.json();
+    },
+
+    getFAQs: async (): Promise<any[]> => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/faqs`);
+            if (!response.ok) return [];
+            return await response.json();
+        } catch (e) {
+            return [];
+        }
     },
 
     approveBankTransfer: async (proofId: string, approved: boolean, adminNotes?: string): Promise<any> => {

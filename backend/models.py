@@ -89,6 +89,7 @@ class User(Base):
 
     id = Column(String, primary_key=True, default=generate_uuid)
     email = Column(String, unique=True, index=True)
+    name = Column(String, nullable=True)
     password_hash = Column(String)
     role = Column(String, default="user")
     balance = Column(Float, default=0.0)
@@ -100,7 +101,7 @@ class User(Base):
     referred_by = Column(String, nullable=True)
     status = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    token_version = Column(Integer, default=0)
+    token_version = Column(Integer, default=1)
     phone = Column(String, nullable=True)
     company = Column(String, nullable=True)
     vat_id = Column(String, nullable=True)
@@ -190,6 +191,7 @@ class User(Base):
     payout_requests = relationship(
         "PayoutRequest", back_populates="user", foreign_keys=[PayoutRequest.user_id]
     )
+    sessions = relationship("UserSession", back_populates="user")
 
 
 class Project(Base):
@@ -305,10 +307,19 @@ class Ticket(Base):
     user_id = Column(String, ForeignKey("users.id"))
     subject = Column(String)
     status = Column(String, default="open")
+    priority = Column(String, default="low")
+    type = Column(String, default="ticket")
+    category = Column(String, default="general")
+    project_id = Column(String, ForeignKey("projects.id"), nullable=True)
+    attachment_urls = Column(JSON, default=list)
+    messages = Column(JSON, default=list)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(
+        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+    )
 
-    messages = relationship("TicketMessage", back_populates="ticket")
     user = relationship("User")
+    project = relationship("Project", foreign_keys=[project_id])
 
 
 class TicketMessage(Base):
@@ -320,7 +331,7 @@ class TicketMessage(Base):
     message = Column(Text)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
-    ticket = relationship("Ticket", back_populates="messages")
+    ticket = relationship("Ticket")
 
 
 class Notification(Base):
@@ -383,3 +394,154 @@ class AffiliateTier(Base):
     last_tier_update = Column(DateTime, default=datetime.datetime.utcnow)
 
     user = relationship("User", back_populates="affiliate_tier")
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=True)
+    session_token = Column(String, unique=True, index=True)
+    ip_address = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
+    device = Column(String, nullable=True)
+    browser = Column(String, nullable=True)
+    current_page = Column(String, nullable=True)
+    total_visits = Column(Integer, default=1)
+    status = Column(String, default="active")
+    last_active = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)
+
+    user = relationship("User", back_populates="sessions")
+
+
+class ConversionSettings(Base):
+    __tablename__ = "conversion_settings"
+
+    id = Column(String, primary_key=True, default="global")
+    social_proof_enabled = Column(Boolean, default=False)
+    social_proof_position = Column(String, default="bottom-right")
+    social_proof_delay = Column(Integer, default=5)
+    social_proof_show_simulated = Column(Boolean, default=True)
+    exit_intent_enabled = Column(Boolean, default=False)
+    exit_intent_headline = Column(String, default="Wait! Don't miss out!")
+    exit_intent_subtext = Column(String, default="Get 10% off your first order")
+    exit_intent_coupon_code = Column(String, default="WELCOME10")
+    promo_bar_enabled = Column(Boolean, default=False)
+    promo_bar_message = Column(String, default="Free shipping on orders over $50!")
+    promo_bar_button_text = Column(String, default="Shop Now")
+    promo_bar_button_url = Column(String, default="/pricing")
+    promo_bar_background_color = Column(String, default="#000000")
+    promo_bar_text_color = Column(String, default="#ffffff")
+    promo_bar_countdown_end = Column(DateTime, nullable=True)
+    updated_at = Column(
+        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+    )
+
+
+class LoyaltySettings(Base):
+    __tablename__ = "loyalty_settings"
+
+    id = Column(String, primary_key=True, default="global")
+    enabled = Column(Boolean, default=False)
+    points_per_dollar = Column(Float, default=1.0)
+    redemption_rate = Column(Float, default=0.01)
+    bonus_signup_points = Column(Integer, default=100)
+    updated_at = Column(
+        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+    )
+
+
+class ReferralSettings(Base):
+    __tablename__ = "referral_settings"
+
+    id = Column(String, primary_key=True, default="global")
+    enabled = Column(Boolean, default=False)
+    referrer_reward_type = Column(String, default="percentage")
+    referrer_reward_value = Column(Float, default=10.0)
+    referee_reward_type = Column(String, default="percentage")
+    referee_reward_value = Column(Float, default=15.0)
+    updated_at = Column(
+        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+    )
+
+
+class FAQ(Base):
+    __tablename__ = "faqs"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    question = Column(String, nullable=False)
+    answer = Column(Text, nullable=False)
+    category = Column(String, default="general")
+    display_order = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(
+        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+    )
+
+
+class Coupon(Base):
+    __tablename__ = "coupons"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    code = Column(String, unique=True, nullable=False, index=True)
+    discount_type = Column(String, default="percentage")
+    discount_value = Column(Float, nullable=False)
+    min_purchase = Column(Float, default=0.0)
+    max_uses = Column(Integer, nullable=True)
+    used_count = Column(Integer, default=0)
+    max_uses_per_user = Column(Integer, default=1)
+    plan_restriction = Column(String, nullable=True)
+    duration = Column(String, default="once")
+    expires_at = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_by = Column(String, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class MarketingCampaign(Base):
+    __tablename__ = "marketing_campaigns"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    name = Column(String, nullable=False)
+    campaign_type = Column(String, default="ad_tracking")
+    status = Column(String, default="active")
+    clicks = Column(Integer, default=0)
+    conversions = Column(Integer, default=0)
+    revenue = Column(Float, default=0.0)
+    spend = Column(Float, default=0.0)
+    start_date = Column(DateTime, nullable=True)
+    end_date = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(
+        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+    )
+
+
+class Broadcast(Base):
+    __tablename__ = "broadcasts"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    title = Column(String, nullable=False)
+    message = Column(String, nullable=False)
+    type = Column(String, default="info")
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)
+    action_url = Column(String, nullable=True)
+    action_text = Column(String, nullable=True)
+
+
+class StripeProduct(Base):
+    __tablename__ = "stripe_products"
+
+    id = Column(String, primary_key=True)
+    stripe_product_id = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    factor = Column(Float, nullable=False)
+    quality_label = Column(String, nullable=True)
+    features = Column(JSON, nullable=True)
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)

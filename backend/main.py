@@ -225,6 +225,7 @@ class UserCreate(BaseModel):
 class UserResponse(BaseModel):
     id: str
     email: str
+    name: Optional[str] = None
     role: str
     balance: float
     balance_economy: float = 0.0
@@ -255,28 +256,28 @@ class UserResponse(BaseModel):
     display_name: Optional[str] = None
     bio: Optional[str] = None
     job_title: Optional[str] = None
-    public_profile: bool = False
-    two_factor_enabled: bool = False
-    email_frequency: str = "instant"
-    login_notification_enabled: bool = False
-    newsletter_sub: bool = False
-    sound_effects: bool = True
-    developer_mode: bool = False
-    api_whitelist: List[str] = []
+    public_profile: Optional[bool] = False
+    two_factor_enabled: Optional[bool] = False
+    email_frequency: Optional[str] = "instant"
+    login_notification_enabled: Optional[bool] = False
+    newsletter_sub: Optional[bool] = False
+    sound_effects: Optional[bool] = True
+    developer_mode: Optional[bool] = False
+    api_whitelist: Optional[List[str]] = []
     webhook_secret: Optional[str] = None
-    accessibility: Dict[str, Any] = {}
-    social_links: Dict[str, Any] = {}
-    login_history: List[Dict[str, Any]] = []
+    accessibility: Optional[Dict[str, Any]] = {}
+    social_links: Optional[Dict[str, Any]] = {}
+    login_history: Optional[List[Dict[str, Any]]] = []
     recovery_email: Optional[str] = None
-    timezone: str = "UTC"
-    language: str = "English"
+    timezone: Optional[str] = "UTC"
+    language: Optional[str] = "English"
     theme_accent_color: Optional[str] = "#ff4d00"
     skills_badges: Optional[List[str]] = []
     referral_code: Optional[str] = None
     support_pin: Optional[str] = None
-    date_format: str = "YYYY-MM-DD"
-    number_format: str = "en-US"
-    require_password_reset: bool = False
+    date_format: Optional[str] = "YYYY-MM-DD"
+    number_format: Optional[str] = "en-US"
+    require_password_reset: Optional[bool] = False
     avatar_url: Optional[str] = None
 
     # Gamification & Streak Fields
@@ -286,6 +287,7 @@ class UserResponse(BaseModel):
     gamification_permanent_discount: int = 0
     streak_days: int = 0
     streak_best: int = 0
+    projects_count: int = 0
 
     class Config:
         from_attributes = True
@@ -419,6 +421,9 @@ class TicketCreate(BaseModel):
     subject: str
     priority: str = "low"
     type: str = "ticket"
+    category: str = "general"
+    project_id: Optional[str] = None
+    attachment_urls: List[str] = []
     messages: List[Dict[str, Any]] = []
 
 
@@ -432,16 +437,24 @@ class TicketUpdate(BaseModel):
     status: Optional[str] = None
     priority: Optional[str] = None
     type: Optional[str] = None
+    category: Optional[str] = None
 
 
 class TicketResponse(BaseModel):
     id: str
+    user_id: str
+    user_email: Optional[str] = None
     subject: str
     status: str
     priority: str
     type: str
+    category: str = "general"
+    project_id: Optional[str] = None
+    project_name: Optional[str] = None
+    attachment_urls: List[str] = []
     messages: List[Dict[str, Any]]
     created_at: datetime
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -628,7 +641,6 @@ class UserUpdate(BaseModel):
     language: Optional[str] = None
     theme_accent_color: Optional[str] = None
     date_format: Optional[str] = None
-    number_format: Optional[str] = None
     number_format: Optional[str] = None
     require_password_reset: Optional[bool] = None
     avatar_url: Optional[str] = None
@@ -844,7 +856,10 @@ def create_user_access_token(
     user: models.User, expires_delta: Optional[timedelta] = None
 ):
     """Creates a token bound to the user's specific token version for invalidation support"""
-    data = {"sub": user.email, "ver": user.token_version or 1}
+    data = {
+        "sub": user.email,
+        "ver": user.token_version if user.token_version is not None else 1,
+    }
     return create_access_token(data, expires_delta)
 
 
@@ -1053,7 +1068,9 @@ def logout_all_sessions(
     current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     # Increment token version to invalidate all existing JWTs
-    current_user.token_version = (current_user.token_version or 1) + 1
+    current_user.token_version = (
+        current_user.token_version if current_user.token_version is not None else 1
+    ) + 1
     db.commit()
     return {"status": "all sessions invalidated", "message": "Please log in again."}
 
@@ -1108,8 +1125,159 @@ def export_user_data(
 
 
 @app.get("/users/me", response_model=UserResponse)
-def read_users_me(current_user: models.User = Depends(get_current_user_optional)):
-    return current_user
+def read_users_me(
+    current_user: models.User = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+):
+    if not current_user:
+        return None
+
+    projects_count = (
+        db.query(models.Project)
+        .filter(models.Project.user_id == current_user.id)
+        .count()
+    )
+
+    user_dict = UserResponse.model_validate(current_user)
+    user_dict.projects_count = projects_count
+    return user_dict
+
+
+class PresenceUpdate(BaseModel):
+    session_token: Optional[str] = None
+    current_page: str
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    device: Optional[str] = None
+    browser: Optional[str] = None
+
+
+@app.post("/users/presence")
+def update_presence(
+    presence: PresenceUpdate,
+    current_user: models.User = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+):
+    """Track user presence/activity"""
+    from datetime import datetime, timedelta
+
+    now = datetime.utcnow()
+
+    if presence.session_token:
+        session = (
+            db.query(models.UserSession)
+            .filter(models.UserSession.session_token == presence.session_token)
+            .first()
+        )
+
+        if session:
+            session.current_page = presence.current_page
+            session.last_active = now
+            session.total_visits += 1
+            db.commit()
+            return {"session_id": session.id, "status": "updated"}
+    else:
+        session_token = secrets.token_urlsafe(32)
+        user_agent = presence.user_agent or ""
+
+        device = "desktop"
+        if "mobile" in user_agent.lower():
+            device = "mobile"
+        elif "tablet" in user_agent.lower() or "ipad" in user_agent.lower():
+            device = "tablet"
+
+        browser = "other"
+        if "chrome" in user_agent.lower():
+            browser = "Chrome"
+        elif "firefox" in user_agent.lower():
+            browser = "Firefox"
+        elif "safari" in user_agent.lower():
+            browser = "Safari"
+        elif "edge" in user_agent.lower():
+            browser = "Edge"
+
+        session = models.UserSession(
+            user_id=current_user.id if current_user else None,
+            session_token=session_token,
+            ip_address=presence.ip_address,
+            user_agent=presence.user_agent,
+            device=device,
+            browser=browser,
+            current_page=presence.current_page,
+            total_visits=1,
+            status="active",
+            last_active=now,
+            expires_at=now + timedelta(minutes=30),
+        )
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+
+        return {
+            "session_id": session.id,
+            "session_token": session_token,
+            "status": "created",
+        }
+
+    return {"status": "noop"}
+
+
+@app.get("/admin/active-users")
+def get_active_users(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get all currently active users/sessions"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    from datetime import datetime, timedelta
+
+    cutoff = datetime.utcnow() - timedelta(minutes=5)
+
+    sessions = (
+        db.query(models.UserSession)
+        .filter(
+            models.UserSession.last_active >= cutoff,
+            models.UserSession.status == "active",
+        )
+        .all()
+    )
+
+    result = []
+    for session in sessions:
+        user_data = None
+        if session.user:
+            user_data = {
+                "id": session.user.id,
+                "email": session.user.email,
+                "name": session.user.email.split("@")[0]
+                if session.user.email
+                else "Unknown",
+            }
+
+        result.append(
+            {
+                "id": session.id,
+                "user": user_data,
+                "role": "admin"
+                if session.user and session.user.role == "admin"
+                else ("user" if session.user else "guest"),
+                "currentPage": session.current_page,
+                "durationMinutes": int(
+                    (datetime.utcnow() - session.created_at).total_seconds() / 60
+                ),
+                "device": session.device or "unknown",
+                "browser": session.browser or "unknown",
+                "ip": session.ip_address or "unknown",
+                "location": "Unknown",
+                "totalVisits": session.total_visits,
+                "status": session.status,
+                "lastActive": session.last_active.isoformat(),
+            }
+        )
+
+    return result
 
 
 @app.put("/users/me", response_model=UserResponse)
@@ -1226,6 +1394,71 @@ def verify_email(
     db.commit()
 
     return {"status": "success", "message": "Email verified successfully"}
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+@app.post("/auth/forgot-password")
+@limiter.limit("3/minute")
+def forgot_password(
+    request: Request, data: ForgotPasswordRequest, db: Session = Depends(get_db)
+):
+    user = db.query(models.User).filter(models.User.email == data.email).first()
+
+    if not user:
+        return {
+            "status": "success",
+            "message": "If the email exists, a reset link has been sent",
+        }
+
+    reset_token = secrets.token_urlsafe(32)
+    user.password_reset_token = reset_token
+    user.password_reset_token_expires = datetime.utcnow() + timedelta(hours=1)
+    db.commit()
+
+    email_service.send_password_reset_email(user.email, reset_token)
+
+    return {
+        "status": "success",
+        "message": "If the email exists, a reset link has been sent",
+    }
+
+
+@app.post("/auth/reset-password")
+@limiter.limit("5/minute")
+def reset_password(
+    request: Request, data: ResetPasswordRequest, db: Session = Depends(get_db)
+):
+    user = (
+        db.query(models.User)
+        .filter(models.User.password_reset_token == data.token)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
+    if (
+        user.password_reset_token_expires
+        and user.password_reset_token_expires < datetime.utcnow()
+    ):
+        raise HTTPException(status_code=400, detail="Reset token has expired")
+
+    pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+    user.password_hash = pwd_context.hash(data.new_password)
+    user.password_reset_token = None
+    user.password_reset_token_expires = None
+    user.password_changed_at = datetime.utcnow()
+    db.commit()
+
+    return {"status": "success", "message": "Password reset successfully"}
 
 
 @app.post("/users/me/avatar")
@@ -1451,7 +1684,9 @@ def get_streak_bonus(streak_days: int) -> int:
         return 20000
     elif streak_days >= 14:
         return 15000
-    elif streak_days >= 7:
+    elif streak_days >= 8:
+        return 10000
+    elif streak_days == 7:
         return 10000
     elif streak_days >= 5:
         return 3000
@@ -1533,6 +1768,18 @@ def claim_daily_bonus(
     current_user.balance_economy = (current_user.balance_economy or 0) + bonus_hits
     current_user.last_daily_bonus = now
     current_user.streak_last_date = now
+
+    # Create transaction record for streak bonus
+    trx = models.Transaction(
+        user_id=current_user.id,
+        type="bonus",
+        amount=0,
+        hits=bonus_hits,
+        description=f"Daily Streak Bonus (Day {current_user.streak_days})",
+        tier="economy",
+        status="completed",
+    )
+    db.add(trx)
 
     # Add XP for daily login
     current_user.gamification_xp = (current_user.gamification_xp or 0) + 5
@@ -3903,6 +4150,148 @@ def get_project_stats_hourly(
     return result
 
 
+@app.get("/projects/{project_id}/stats/live")
+def get_project_stats_live(
+    project_id: str,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Live stats for single project - returns visitor/pageview data for last 1 hour
+    in 5-minute intervals for real-time charts (12 data points).
+    """
+    from datetime import datetime, timedelta
+    from sqlalchemy import func, and_
+
+    project = (
+        db.query(models.Project)
+        .filter(
+            models.Project.id == project_id, models.Project.user_id == current_user.id
+        )
+        .first()
+    )
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    start_time = datetime.utcnow() - timedelta(hours=1)
+
+    logs = (
+        db.query(models.TrafficLog)
+        .filter(
+            and_(
+                models.TrafficLog.project_id == project_id,
+                models.TrafficLog.timestamp >= start_time,
+                models.TrafficLog.status == "success",
+            )
+        )
+        .all()
+    )
+
+    stats_dict = {}
+    for log in logs:
+        ts = log.timestamp
+        minute = (ts.minute // 5) * 5
+        slot_time = ts.replace(minute=minute, second=0, microsecond=0)
+        time_key = slot_time.strftime("%Y-%m-%d %H:%M")
+
+        if time_key not in stats_dict:
+            stats_dict[time_key] = {"visitors": set(), "pageviews": 0}
+
+        stats_dict[time_key]["pageviews"] += 1
+        if log.ip:
+            stats_dict[time_key]["visitors"].add(log.ip)
+        else:
+            stats_dict[time_key]["visitors"].add(str(log.id))
+
+    result = []
+    now = datetime.utcnow()
+    for i in range(12):
+        slot_time = now - timedelta(minutes=i * 5)
+        minute = (slot_time.minute // 5) * 5
+        slot_time = slot_time.replace(minute=minute, second=0, microsecond=0)
+        time_key = slot_time.strftime("%Y-%m-%d %H:%M")
+
+        if time_key in stats_dict:
+            result.append(
+                {
+                    "time": time_key,
+                    "visitors": len(stats_dict[time_key]["visitors"]),
+                    "pageviews": stats_dict[time_key]["pageviews"],
+                }
+            )
+        else:
+            result.append({"time": time_key, "visitors": 0, "pageviews": 0})
+
+    result.reverse()
+    return result
+
+
+@app.get("/projects/{project_id}/expires-calculated")
+def get_calculated_expiry(
+    project_id: str,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Calculate when the project will expire based on current tier balance
+    and total daily consumption of all active projects in that tier.
+    """
+    from datetime import datetime, timedelta
+
+    project = (
+        db.query(models.Project)
+        .filter(
+            models.Project.id == project_id, models.Project.user_id == current_user.id
+        )
+        .first()
+    )
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    tier = (project.tier or "economy").lower()
+    tier_balance_map = {
+        "economy": "balance_economy",
+        "professional": "balance_professional",
+        "expert": "balance_expert",
+    }
+    balance_field = tier_balance_map.get(tier, "balance_economy")
+    balance = float(getattr(current_user, balance_field, 0) or 0)
+
+    active_projects = (
+        db.query(models.Project)
+        .filter(
+            models.Project.user_id == current_user.id,
+            models.Project.status == "active",
+            models.Project.tier == tier,
+        )
+        .all()
+    )
+
+    total_daily = sum(p.daily_limit or 0 for p in active_projects)
+
+    if total_daily == 0:
+        return {
+            "daysRemaining": None,
+            "expiresDate": None,
+            "balance": balance,
+            "totalDailyConsumption": 0,
+            "message": "No daily limit set" if balance > 0 else "No balance",
+        }
+
+    days_remaining = balance / total_daily
+    expires_date = datetime.utcnow() + timedelta(days=days_remaining)
+
+    return {
+        "daysRemaining": round(days_remaining, 1),
+        "expiresDate": expires_date.strftime("%Y-%m-%d"),
+        "balance": balance,
+        "totalDailyConsumption": total_daily,
+        "message": None,
+    }
+
+
 @app.get("/admin/live-pulse")
 async def live_pulse(db: Session = Depends(get_db)):
     """SSE endpoint for real-time traffic monitoring"""
@@ -4957,15 +5346,62 @@ def update_transaction(
 # --- Ticket & Notification Endpoints ---
 
 
+def ticket_to_response(ticket: models.Ticket, db: Session) -> dict:
+    user = db.query(models.User).filter(models.User.id == ticket.user_id).first()
+    project_name = None
+    if ticket.project_id:
+        project = (
+            db.query(models.Project)
+            .filter(models.Project.id == ticket.project_id)
+            .first()
+        )
+        project_name = project.name if project else None
+    return {
+        "id": ticket.id,
+        "user_id": ticket.user_id,
+        "user_email": user.email if user else None,
+        "subject": ticket.subject,
+        "status": ticket.status,
+        "priority": ticket.priority,
+        "type": ticket.type,
+        "category": ticket.category or "general",
+        "project_id": ticket.project_id,
+        "project_name": project_name,
+        "attachment_urls": ticket.attachment_urls or [],
+        "messages": ticket.messages or [],
+        "created_at": ticket.created_at,
+        "updated_at": ticket.updated_at,
+    }
+
+
 @app.get("/tickets", response_model=List[TicketResponse])
 def get_tickets(
-    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
+    status: Optional[str] = None,
+    category: Optional[str] = None,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    if current_user.role == "admin":
-        return db.query(models.Ticket).all()
-    return (
-        db.query(models.Ticket).filter(models.Ticket.user_id == current_user.id).all()
-    )
+    query = db.query(models.Ticket)
+
+    if current_user.role != "admin":
+        query = query.filter(models.Ticket.user_id == current_user.id)
+
+    if status:
+        query = query.filter(models.Ticket.status == status)
+
+    if category:
+        query = query.filter(models.Ticket.category == category)
+
+    if search:
+        search_pattern = f"%{search}%"
+        query = query.filter(
+            (models.Ticket.subject.ilike(search_pattern))
+            | (models.Ticket.messages.cast(Text).ilike(search_pattern))
+        )
+
+    tickets = query.order_by(models.Ticket.created_at.desc()).all()
+    return [ticket_to_response(t, db) for t in tickets]
 
 
 @app.post("/tickets", response_model=TicketResponse)
@@ -4979,12 +5415,15 @@ def create_ticket(
         subject=ticket.subject,
         priority=ticket.priority,
         type=ticket.type,
+        category=ticket.category,
+        project_id=ticket.project_id,
+        attachment_urls=ticket.attachment_urls,
         messages=ticket.messages,
     )
     db.add(new_ticket)
     db.commit()
     db.refresh(new_ticket)
-    return new_ticket
+    return ticket_to_response(new_ticket, db)
 
 
 @app.post("/tickets/{ticket_id}/reply", response_model=TicketResponse)
@@ -5001,7 +5440,6 @@ def reply_ticket(
     if current_user.role != "admin" and ticket.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    # Construct new message
     new_msg = {
         "id": str(datetime.utcnow().timestamp()),
         "sender": "admin" if current_user.role == "admin" else "user",
@@ -5010,15 +5448,13 @@ def reply_ticket(
         "attachments": reply.attachments,
     }
 
-    # Append to JSON list
-    # SQLAlchemy requires flagging the field as modified or re-assigning for JSON
     current_messages = list(ticket.messages) if ticket.messages else []
     current_messages.append(new_msg)
     ticket.messages = current_messages
 
     db.commit()
     db.refresh(ticket)
-    return ticket
+    return ticket_to_response(ticket, db)
 
 
 @app.put("/tickets/{ticket_id}", response_model=TicketResponse)
@@ -5041,10 +5477,54 @@ def update_ticket(
         ticket.priority = update.priority
     if update.type:
         ticket.type = update.type
+    if update.category:
+        ticket.category = update.category
 
     db.commit()
     db.refresh(ticket)
-    return ticket
+    return ticket_to_response(ticket, db)
+
+
+@app.post("/tickets/{ticket_id}/close", response_model=TicketResponse)
+def close_ticket(
+    ticket_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    ticket = db.query(models.Ticket).filter(models.Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    if ticket.user_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    ticket.status = "closed"
+    db.commit()
+    db.refresh(ticket)
+    return ticket_to_response(ticket, db)
+
+
+@app.post("/tickets/upload")
+async def upload_ticket_attachment(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    import os
+
+    upload_dir = f"static/ticket_attachments/{current_user.id}"
+    os.makedirs(upload_dir, exist_ok=True)
+
+    file_ext = os.path.splitext(file.filename or "file")[1]
+    unique_filename = f"{datetime.utcnow().timestamp()}{file_ext}"
+    file_path = os.path.join(upload_dir, unique_filename)
+
+    content = await file.read()
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    file_url = f"/static/ticket_attachments/{current_user.id}/{unique_filename}"
+    return {"url": file_url, "filename": file.filename}
 
 
 @app.get("/tickets/{ticket_id}", response_model=TicketResponse)
@@ -5060,7 +5540,7 @@ def get_ticket(
     if current_user.role != "admin" and ticket.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    return ticket
+    return ticket_to_response(ticket, db)
 
 
 @app.delete("/tickets/{ticket_id}")
@@ -5138,6 +5618,661 @@ def update_settings(
         settings_row.settings = data.settings
     db.commit()
     return {"status": "updated"}
+
+
+class ConversionSettingsUpdate(BaseModel):
+    social_proof_enabled: bool = False
+    social_proof_position: str = "bottom-right"
+    social_proof_delay: int = 5
+    social_proof_show_simulated: bool = True
+    exit_intent_enabled: bool = False
+    exit_intent_headline: str = "Wait! Don't miss out!"
+    exit_intent_subtext: str = "Get 10% off your first order"
+    exit_intent_coupon_code: str = "WELCOME10"
+    promo_bar_enabled: bool = False
+    promo_bar_message: str = "Free shipping on orders over $50!"
+    promo_bar_button_text: str = "Shop Now"
+    promo_bar_button_url: str = "/pricing"
+    promo_bar_background_color: str = "#000000"
+    promo_bar_text_color: str = "#ffffff"
+    promo_bar_countdown_end: Optional[str] = None
+
+
+@app.get("/conversion-settings")
+def get_conversion_settings(db: Session = Depends(get_db)):
+    settings = db.query(models.ConversionSettings).first()
+    if not settings:
+        settings = models.ConversionSettings(id="global")
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+    return {
+        "id": settings.id,
+        "socialProofEnabled": settings.social_proof_enabled,
+        "socialProofPosition": settings.social_proof_position,
+        "socialProofDelay": settings.social_proof_delay,
+        "socialProofShowSimulated": settings.social_proof_show_simulated,
+        "exitIntentEnabled": settings.exit_intent_enabled,
+        "exitIntentHeadline": settings.exit_intent_headline,
+        "exitIntentSubtext": settings.exit_intent_subtext,
+        "exitIntentCouponCode": settings.exit_intent_coupon_code,
+        "promoBarEnabled": settings.promo_bar_enabled,
+        "promoBarMessage": settings.promo_bar_message,
+        "promoBarButtonText": settings.promo_bar_button_text,
+        "promoBarButtonUrl": settings.promo_bar_button_url,
+        "promoBarBackgroundColor": settings.promo_bar_background_color,
+        "promoBarTextColor": settings.promo_bar_text_color,
+        "promoBarCountdownEnd": settings.promo_bar_countdown_end.isoformat()
+        if settings.promo_bar_countdown_end
+        else None,
+    }
+
+
+@app.put("/conversion-settings")
+def update_conversion_settings(
+    data: ConversionSettingsUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    settings = db.query(models.ConversionSettings).first()
+    if not settings:
+        settings = models.ConversionSettings(id="global")
+        db.add(settings)
+
+    from datetime import datetime
+
+    settings.social_proof_enabled = data.social_proof_enabled
+    settings.social_proof_position = data.social_proof_position
+    settings.social_proof_delay = data.social_proof_delay
+    settings.social_proof_show_simulated = data.social_proof_show_simulated
+    settings.exit_intent_enabled = data.exit_intent_enabled
+    settings.exit_intent_headline = data.exit_intent_headline
+    settings.exit_intent_subtext = data.exit_intent_subtext
+    settings.exit_intent_coupon_code = data.exit_intent_coupon_code
+    settings.promo_bar_enabled = data.promo_bar_enabled
+    settings.promo_bar_message = data.promo_bar_message
+    settings.promo_bar_button_text = data.promo_bar_button_text
+    settings.promo_bar_button_url = data.promo_bar_button_url
+    settings.promo_bar_background_color = data.promo_bar_background_color
+    settings.promo_bar_text_color = data.promo_bar_text_color
+    if data.promo_bar_countdown_end:
+        settings.promo_bar_countdown_end = datetime.fromisoformat(
+            data.promo_bar_countdown_end
+        )
+    else:
+        settings.promo_bar_countdown_end = None
+
+    db.commit()
+    return {"status": "updated"}
+
+
+class LoyaltySettingsUpdate(BaseModel):
+    enabled: bool = False
+    points_per_dollar: float = 1.0
+    redemption_rate: float = 0.01
+    bonus_signup_points: int = 100
+
+
+@app.get("/loyalty-settings")
+def get_loyalty_settings(db: Session = Depends(get_db)):
+    settings = db.query(models.LoyaltySettings).first()
+    if not settings:
+        settings = models.LoyaltySettings(id="global")
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+    return {
+        "id": settings.id,
+        "enabled": settings.enabled,
+        "pointsPerDollar": settings.points_per_dollar,
+        "redemptionRate": settings.redemption_rate,
+        "bonusSignupPoints": settings.bonus_signup_points,
+    }
+
+
+@app.put("/loyalty-settings")
+def update_loyalty_settings(
+    data: LoyaltySettingsUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    settings = db.query(models.LoyaltySettings).first()
+    if not settings:
+        settings = models.LoyaltySettings(id="global")
+        db.add(settings)
+
+    settings.enabled = data.enabled
+    settings.points_per_dollar = data.points_per_dollar
+    settings.redemption_rate = data.redemption_rate
+    settings.bonus_signup_points = data.bonus_signup_points
+
+    db.commit()
+    return {"status": "updated"}
+
+
+class ReferralSettingsUpdate(BaseModel):
+    enabled: bool = False
+    referrer_reward_type: str = "percentage"
+    referrer_reward_value: float = 10.0
+    referee_reward_type: str = "percentage"
+    referee_reward_value: float = 15.0
+
+
+@app.get("/referral-settings")
+def get_referral_settings(db: Session = Depends(get_db)):
+    settings = db.query(models.ReferralSettings).first()
+    if not settings:
+        settings = models.ReferralSettings(id="global")
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+    return {
+        "id": settings.id,
+        "enabled": settings.enabled,
+        "referrerRewardType": settings.referrer_reward_type,
+        "referrerRewardValue": settings.referrer_reward_value,
+        "refereeRewardType": settings.referee_reward_type,
+        "refereeRewardValue": settings.referee_reward_value,
+    }
+
+
+@app.put("/referral-settings")
+def update_referral_settings(
+    data: ReferralSettingsUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    settings = db.query(models.ReferralSettings).first()
+    if not settings:
+        settings = models.ReferralSettings(id="global")
+        db.add(settings)
+
+    settings.enabled = data.enabled
+    settings.referrer_reward_type = data.referrer_reward_type
+    settings.referrer_reward_value = data.referrer_reward_value
+    settings.referee_reward_type = data.referee_reward_type
+    settings.referee_reward_value = data.referee_reward_value
+
+    db.commit()
+    return {"status": "updated"}
+
+
+class FAQCreate(BaseModel):
+    question: str
+    answer: str
+    category: str = "general"
+    display_order: int = 0
+
+
+class FAQUpdate(BaseModel):
+    question: Optional[str] = None
+    answer: Optional[str] = None
+    category: Optional[str] = None
+    display_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class FAQResponse(BaseModel):
+    id: str
+    question: str
+    answer: str
+    category: str
+    display_order: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+@app.get("/faqs")
+def get_faqs(db: Session = Depends(get_db)):
+    """Get all active FAQs for public display"""
+    faqs = (
+        db.query(models.FAQ)
+        .filter(models.FAQ.is_active == True)
+        .order_by(models.FAQ.display_order)
+        .all()
+    )
+    return [
+        {
+            "id": f.id,
+            "question": f.question,
+            "answer": f.answer,
+            "category": f.category,
+            "displayOrder": f.display_order,
+            "isActive": f.is_active,
+        }
+        for f in faqs
+    ]
+
+
+@app.get("/admin/faqs", response_model=List[FAQResponse])
+def get_admin_faqs(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get all FAQs for admin management"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return db.query(models.FAQ).order_by(models.FAQ.display_order).all()
+
+
+@app.post("/admin/faqs", response_model=FAQResponse)
+def create_faq(
+    faq: FAQCreate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create a new FAQ"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    new_faq = models.FAQ(
+        question=faq.question,
+        answer=faq.answer,
+        category=faq.category,
+        display_order=faq.display_order,
+    )
+    db.add(new_faq)
+    db.commit()
+    db.refresh(new_faq)
+    return new_faq
+
+
+@app.put("/admin/faqs/{faq_id}", response_model=FAQResponse)
+def update_faq(
+    faq_id: str,
+    faq_update: FAQUpdate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update an existing FAQ"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    faq = db.query(models.FAQ).filter(models.FAQ.id == faq_id).first()
+    if not faq:
+        raise HTTPException(status_code=404, detail="FAQ not found")
+
+    update_data = faq_update.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(faq, key, value)
+
+    db.commit()
+    db.refresh(faq)
+    return faq
+
+
+@app.delete("/admin/faqs/{faq_id}")
+def delete_faq(
+    faq_id: str,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete an FAQ"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    faq = db.query(models.FAQ).filter(models.FAQ.id == faq_id).first()
+    if not faq:
+        raise HTTPException(status_code=404, detail="FAQ not found")
+
+    db.delete(faq)
+    db.commit()
+    return {"status": "deleted"}
+
+
+class CouponCreate(BaseModel):
+    code: str
+    discount_type: str = "percentage"
+    discount_value: float
+    min_purchase: float = 0.0
+    max_uses: Optional[int] = None
+    max_uses_per_user: int = 1
+    plan_restriction: Optional[str] = None
+    duration: str = "once"
+    expires_at: Optional[str] = None
+
+
+class CouponUpdate(BaseModel):
+    code: Optional[str] = None
+    discount_type: Optional[str] = None
+    discount_value: Optional[float] = None
+    min_purchase: Optional[float] = None
+    max_uses: Optional[int] = None
+    max_uses_per_user: Optional[int] = None
+    plan_restriction: Optional[str] = None
+    duration: Optional[str] = None
+    expires_at: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class CouponResponse(BaseModel):
+    id: str
+    code: str
+    discount_type: str
+    discount_value: float
+    min_purchase: float
+    max_uses: Optional[int]
+    used_count: int
+    max_uses_per_user: int
+    plan_restriction: Optional[str]
+    duration: str
+    expires_at: Optional[datetime]
+    is_active: bool
+    created_at: datetime
+
+
+@app.get("/coupons/validate")
+def validate_coupon(
+    code: str,
+    db: Session = Depends(get_db),
+):
+    """Validate a coupon code for a user"""
+    coupon = (
+        db.query(models.Coupon)
+        .filter(models.Coupon.code == code.upper(), models.Coupon.is_active == True)
+        .first()
+    )
+
+    if not coupon:
+        raise HTTPException(status_code=404, detail="Invalid coupon code")
+
+    if coupon.expires_at and coupon.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Coupon has expired")
+
+    if coupon.max_uses and coupon.used_count >= coupon.max_uses:
+        raise HTTPException(status_code=400, detail="Coupon usage limit reached")
+
+    return {
+        "valid": True,
+        "code": coupon.code,
+        "discount_type": coupon.discount_type,
+        "discount_value": coupon.discount_value,
+        "min_purchase": coupon.min_purchase,
+        "duration": coupon.duration,
+    }
+
+
+@app.get("/admin/coupons", response_model=List[CouponResponse])
+def get_admin_coupons(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get all coupons for admin management"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return db.query(models.Coupon).order_by(models.Coupon.created_at.desc()).all()
+
+
+@app.post("/admin/coupons", response_model=CouponResponse)
+def create_coupon(
+    coupon: CouponCreate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create a new coupon"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    existing = (
+        db.query(models.Coupon)
+        .filter(models.Coupon.code == coupon.code.upper())
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="Coupon code already exists")
+
+    expires_at = None
+    if coupon.expires_at:
+        expires_at = datetime.fromisoformat(coupon.expires_at)
+
+    new_coupon = models.Coupon(
+        code=coupon.code.upper(),
+        discount_type=coupon.discount_type,
+        discount_value=coupon.discount_value,
+        min_purchase=coupon.min_purchase,
+        max_uses=coupon.max_uses,
+        max_uses_per_user=coupon.max_uses_per_user,
+        plan_restriction=coupon.plan_restriction,
+        duration=coupon.duration,
+        expires_at=expires_at,
+        created_by=current_user.id,
+    )
+    db.add(new_coupon)
+    db.commit()
+    db.refresh(new_coupon)
+    return new_coupon
+
+
+@app.put("/admin/coupons/{coupon_id}", response_model=CouponResponse)
+def update_coupon(
+    coupon_id: str,
+    coupon_update: CouponUpdate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update an existing coupon"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    coupon = db.query(models.Coupon).filter(models.Coupon.id == coupon_id).first()
+    if not coupon:
+        raise HTTPException(status_code=404, detail="Coupon not found")
+
+    update_data = coupon_update.dict(exclude_unset=True)
+    if "expires_at" in update_data and update_data["expires_at"]:
+        update_data["expires_at"] = datetime.fromisoformat(update_data["expires_at"])
+
+    for key, value in update_data.items():
+        setattr(coupon, key, value)
+
+    db.commit()
+    db.refresh(coupon)
+    return coupon
+
+
+@app.delete("/admin/coupons/{coupon_id}")
+def delete_coupon(
+    coupon_id: str,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a coupon"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    coupon = db.query(models.Coupon).filter(models.Coupon.id == coupon_id).first()
+    if not coupon:
+        raise HTTPException(status_code=404, detail="Coupon not found")
+
+    db.delete(coupon)
+    db.commit()
+    return {"status": "deleted"}
+
+
+class MarketingCampaignCreate(BaseModel):
+    name: str
+    campaign_type: str = "ad_tracking"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+
+class MarketingCampaignUpdate(BaseModel):
+    name: Optional[str] = None
+    campaign_type: Optional[str] = None
+    status: Optional[str] = None
+    clicks: Optional[int] = None
+    conversions: Optional[int] = None
+    revenue: Optional[float] = None
+    spend: Optional[float] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+
+class MarketingCampaignResponse(BaseModel):
+    id: str
+    name: str
+    campaign_type: str
+    status: str
+    clicks: int
+    conversions: int
+    revenue: float
+    spend: float
+    start_date: Optional[datetime]
+    end_date: Optional[datetime]
+    created_at: datetime
+    updated_at: datetime
+
+
+@app.get("/admin/marketing", response_model=List[MarketingCampaignResponse])
+def get_marketing_campaigns(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get all marketing campaigns"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return (
+        db.query(models.MarketingCampaign)
+        .order_by(models.MarketingCampaign.created_at.desc())
+        .all()
+    )
+
+
+@app.post("/admin/marketing", response_model=MarketingCampaignResponse)
+def create_marketing_campaign(
+    campaign: MarketingCampaignCreate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create a new marketing campaign"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    start_date = None
+    if campaign.start_date:
+        start_date = datetime.fromisoformat(campaign.start_date)
+
+    end_date = None
+    if campaign.end_date:
+        end_date = datetime.fromisoformat(campaign.end_date)
+
+    new_campaign = models.MarketingCampaign(
+        name=campaign.name,
+        campaign_type=campaign.campaign_type,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    db.add(new_campaign)
+    db.commit()
+    db.refresh(new_campaign)
+    return new_campaign
+
+
+@app.put("/admin/marketing/{campaign_id}", response_model=MarketingCampaignResponse)
+def update_marketing_campaign(
+    campaign_id: str,
+    campaign_update: MarketingCampaignUpdate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update a marketing campaign"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    campaign = (
+        db.query(models.MarketingCampaign)
+        .filter(models.MarketingCampaign.id == campaign_id)
+        .first()
+    )
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    update_data = campaign_update.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        if key in ("start_date", "end_date") and value:
+            update_data[key] = datetime.fromisoformat(value)
+        elif key in ("start_date", "end_date") and value is None:
+            update_data[key] = None
+
+    for key, value in update_data.items():
+        setattr(campaign, key, value)
+
+    db.commit()
+    db.refresh(campaign)
+    return campaign
+
+
+@app.delete("/admin/marketing/{campaign_id}")
+def delete_marketing_campaign(
+    campaign_id: str,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a marketing campaign"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    campaign = (
+        db.query(models.MarketingCampaign)
+        .filter(models.MarketingCampaign.id == campaign_id)
+        .first()
+    )
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    db.delete(campaign)
+    db.commit()
+    return {"status": "deleted"}
+
+
+class EmailBlastRequest(BaseModel):
+    subject: str
+    body: str
+    target_audience: str = "all"
+
+
+@app.post("/admin/email-blast")
+def send_email_blast(
+    request: EmailBlastRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Send bulk email to users"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    users = db.query(models.User).filter(models.User.is_verified == True).all()
+
+    if request.target_audience == "paying":
+        users = [u for u in users if u.balance > 0]
+
+    recipients = [u.email for u in users]
+
+    if not recipients:
+        raise HTTPException(status_code=400, detail="No recipients found")
+
+    import email_service
+
+    result = email_service.send_email(
+        to=recipients, subject=request.subject, html=request.body
+    )
+
+    if result.get("success"):
+        return {"status": "sent", "recipients_count": len(recipients)}
+    else:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to send emails: {result.get('error')}"
+        )
 
 
 # --- Broadcasts ---
@@ -5504,6 +6639,437 @@ async def create_payment_intent(
         return {"clientSecret": intent["client_secret"]}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# --- Stripe Subscription Endpoints ---
+
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+
+
+class StripeProductResponse(BaseModel):
+    id: str
+    stripe_product_id: str
+    name: str
+    factor: float
+    quality_label: Optional[str] = None
+    features: Optional[List[str]] = None
+    active: bool
+
+    class Config:
+        from_attributes = True
+
+
+class SeedStripeProductsRequest(BaseModel):
+    force: bool = False
+
+
+class CreateCreditsCheckoutRequest(BaseModel):
+    tier: str
+    visitors: int
+    bulk_months: int
+    currency: str = "eur"
+    success_url: str
+    cancel_url: str
+
+
+PRICING_MATRIX = {
+    "economy": {
+        60000: {1: 9.96, 6: 47.81, 24: 143.42},
+        500000: {1: 57.96, 6: 278.21, 24: 834.62},
+        1000000: {1: 99.96, 6: 479.81, 24: 1439.42},
+        10000000: {1: 699.96, 6: 3359.81, 24: 10079.42},
+        50000000: {1: 2799.96, 6: 13439.81, 24: 40319.42},
+    },
+    "professional": {
+        60000: {1: 19.96, 6: 95.81, 24: 287.42},
+        500000: {1: 115.92, 6: 556.42, 24: 1669.25},
+        1000000: {1: 199.96, 6: 959.81, 24: 2879.42},
+        10000000: {1: 1399.96, 6: 6719.81, 24: 20159.42},
+        50000000: {1: 5599.96, 6: 26879.81, 24: 80639.42},
+    },
+    "expert": {
+        60000: {1: 29.96, 6: 143.81, 24: 431.42},
+        500000: {1: 173.96, 6: 835.01, 24: 2505.02},
+        1000000: {1: 299.96, 6: 1439.81, 24: 4319.42},
+        10000000: {1: 2099.96, 6: 10079.81, 24: 30239.42},
+        50000000: {1: 8399.96, 6: 40319.81, 24: 120959.42},
+    },
+}
+
+
+@app.get("/admin/stripe/products", response_model=List[StripeProductResponse])
+async def get_stripe_products(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    products = db.query(models.StripeProduct).all()
+    return products
+
+
+@app.post("/admin/stripe/products/seed")
+async def seed_stripe_products(
+    request: SeedStripeProductsRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    tiers = [
+        {
+            "id": "economy",
+            "name": "TrafficGen Economy",
+            "description": "10% Quality Traffic - Residential IPs",
+            "factor": 0.35,
+            "quality_label": "10% Quality",
+            "features": [
+                "Residential IPs",
+                "Multiple Traffic Sources",
+                "Standard Proxy Pool",
+                "Geo Targeting Worldwide",
+            ],
+        },
+        {
+            "id": "professional",
+            "name": "TrafficGen Professional",
+            "description": "50% Quality Traffic - Country Geo Targeting",
+            "factor": 0.65,
+            "quality_label": "50% Quality",
+            "features": [
+                "Residential Geo IPs",
+                "Country Geo Targeting",
+                "RSS and Sitemap Support",
+                "URL Shorteners",
+            ],
+        },
+        {
+            "id": "expert",
+            "name": "TrafficGen Expert",
+            "description": "100% Quality Traffic - Full Features",
+            "factor": 1.0,
+            "quality_label": "100% Quality",
+            "features": [
+                "State & City Targeting",
+                "Night & Day Volume",
+                "Automatic Website Crawler",
+                "GA4 Natural Events",
+            ],
+        },
+    ]
+
+    results = []
+    for tier in tiers:
+        existing = db.query(models.StripeProduct).filter_by(id=tier["id"]).first()
+        if existing and not request.force:
+            results.append(
+                {
+                    "tier": tier["id"],
+                    "status": "skipped",
+                    "reason": "already exists",
+                }
+            )
+            continue
+
+        try:
+            product = stripe.Product.create(
+                name=tier["name"],
+                description=tier["description"],
+                statement_descriptor="Creator",
+                metadata={
+                    "tier_id": tier["id"],
+                    "factor": str(tier["factor"]),
+                    "quality": tier["quality_label"],
+                },
+            )
+
+            if existing:
+                existing.stripe_product_id = product.id
+                existing.name = tier["name"]
+                existing.factor = tier["factor"]
+                existing.quality_label = tier["quality_label"]
+                existing.features = tier["features"]
+            else:
+                db.add(
+                    models.StripeProduct(
+                        id=tier["id"],
+                        stripe_product_id=product.id,
+                        name=tier["name"],
+                        factor=tier["factor"],
+                        quality_label=tier["quality_label"],
+                        features=tier["features"],
+                    )
+                )
+
+            results.append(
+                {
+                    "tier": tier["id"],
+                    "status": "created",
+                    "product_id": product.id,
+                }
+            )
+        except Exception as e:
+            results.append({"tier": tier["id"], "status": "error", "error": str(e)})
+
+    db.commit()
+    return {"results": results}
+
+
+@app.post("/stripe/create-checkout")
+async def create_credits_checkout(
+    request: CreateCreditsCheckoutRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    product = db.query(models.StripeProduct).filter_by(id=request.tier).first()
+    if not product:
+        raise HTTPException(status_code=400, detail=f"Unknown tier: {request.tier}")
+
+    if request.tier not in PRICING_MATRIX:
+        raise HTTPException(status_code=400, detail=f"Invalid tier: {request.tier}")
+    if request.visitors not in PRICING_MATRIX[request.tier]:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid visitors amount: {request.visitors}"
+        )
+    if request.bulk_months not in PRICING_MATRIX[request.tier][request.visitors]:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid bulk months: {request.bulk_months}"
+        )
+
+    price_amount = PRICING_MATRIX[request.tier][request.visitors][request.bulk_months]
+    amount_cents = int(price_amount * 100)
+
+    try:
+        price = stripe.Price.create(
+            product=product.stripe_product_id,
+            currency=request.currency,
+            unit_amount=amount_cents,
+            metadata={
+                "tier": request.tier,
+                "visitors": str(request.visitors),
+                "bulk_months": str(request.bulk_months),
+            },
+        )
+
+        if not current_user.stripe_customer_id:
+            customer = stripe.Customer.create(
+                email=current_user.email, metadata={"user_id": current_user.id}
+            )
+            current_user.stripe_customer_id = customer.id
+            db.commit()
+
+        total_visitors = request.visitors * request.bulk_months
+
+        session = stripe.checkout.Session.create(
+            customer=current_user.stripe_customer_id,
+            mode="payment",
+            line_items=[{"price": price.id, "quantity": 1}],
+            success_url=request.success_url,
+            cancel_url=request.cancel_url,
+            metadata={
+                "user_id": current_user.id,
+                "tier": request.tier,
+                "visitors": str(request.visitors),
+                "bulk_months": str(request.bulk_months),
+                "total_visitors": str(total_visitors),
+                "amount_cents": str(amount_cents),
+            },
+        )
+
+        return {"url": session.url, "session_id": session.id}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/admin/stripe/prices/archive-old")
+async def archive_old_prices(
+    days: int = 30,
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    cutoff = datetime.utcnow() - __import__("datetime").timedelta(days=days)
+    prices = stripe.Price.list(active=True, limit=100)
+
+    archived = []
+    for price in prices.auto_paging_iter():
+        price_created = datetime.utcfromtimestamp(price.created)
+        if price_created < cutoff:
+            try:
+                stripe.Price.modify(price.id, active=False)
+                archived.append(price.id)
+            except Exception:
+                pass
+
+    return {"archived_count": len(archived), "price_ids": archived}
+
+
+class CreateCheckoutRequest(BaseModel):
+    price_id: str
+    success_url: str
+    cancel_url: str
+
+
+class CreatePortalRequest(BaseModel):
+    return_url: str
+
+
+class SubscriptionResponse(BaseModel):
+    subscription_id: Optional[str] = None
+    status: Optional[str] = None
+    plan: Optional[str] = None
+    current_period_end: Optional[datetime] = None
+    cancel_at_period_end: bool = False
+
+
+@app.post("/subscriptions/create-checkout")
+async def create_checkout_session(
+    request: CreateCheckoutRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        if not current_user.stripe_customer_id:
+            customer = stripe.Customer.create(
+                email=current_user.email, metadata={"user_id": current_user.id}
+            )
+            current_user.stripe_customer_id = customer.id
+            db.commit()
+
+        checkout_session = stripe.checkout.Session.create(
+            customer=current_user.stripe_customer_id,
+            mode="subscription",
+            line_items=[{"price": request.price_id, "quantity": 1}],
+            success_url=request.success_url,
+            cancel_url=request.cancel_url,
+            metadata={"user_id": current_user.id},
+        )
+        return {"url": checkout_session.url}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/subscriptions/portal")
+async def create_portal_session(
+    request: CreatePortalRequest, current_user: models.User = Depends(get_current_user)
+):
+    try:
+        if not current_user.stripe_customer_id:
+            raise HTTPException(status_code=400, detail="No Stripe customer found")
+
+        portal_session = stripe.billing_portal.Session.create(
+            customer=current_user.stripe_customer_id, return_url=request.return_url
+        )
+        return {"url": portal_session.url}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/subscriptions/current")
+async def get_current_subscription(
+    current_user: models.User = Depends(get_current_user),
+):
+    return SubscriptionResponse(
+        subscription_id=current_user.stripe_subscription_id,
+        status=current_user.subscription_status,
+        plan=current_user.subscription_plan,
+        current_period_end=current_user.subscription_current_period_end,
+        cancel_at_period_end=False,
+    )
+
+
+@app.post("/webhooks/stripe")
+async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature")
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, STRIPE_WEBHOOK_SECRET
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe.SignatureVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid signature")
+
+    if event["type"] == "checkout.session.completed":
+        session = event["data"]["object"]
+        user_id = session.get("metadata", {}).get("user_id")
+        mode = session.get("mode", "subscription")
+
+        if user_id:
+            user = db.query(models.User).filter(models.User.id == user_id).first()
+            if user:
+                if mode == "subscription":
+                    user.stripe_subscription_id = session.get("subscription")
+                    user.subscription_status = "active"
+                elif mode == "payment":
+                    tier = session.get("metadata", {}).get("tier")
+                    total_visitors = session.get("metadata", {}).get("total_visitors")
+                    amount_cents = session.get("metadata", {}).get("amount_cents")
+                    if tier and total_visitors:
+                        balance_field = f"balance_{tier}"
+                        current_balance = getattr(user, balance_field, 0) or 0
+                        setattr(
+                            user, balance_field, current_balance + int(total_visitors)
+                        )
+
+                        amount_float = float(amount_cents) / 100 if amount_cents else 0
+                        transaction = models.Transaction(
+                            user_id=user.id,
+                            type="credit",
+                            amount=amount_float,
+                            description=f"Stripe Checkout - {tier.title()} Tier ({int(total_visitors):,} visitors)",
+                            status="completed",
+                            tier=tier,
+                            hits=int(total_visitors),
+                            reference=session.get("payment_intent"),
+                        )
+                        db.add(transaction)
+                        user.gamification_total_spent = (
+                            user.gamification_total_spent or 0
+                        ) + amount_float
+                db.commit()
+
+    elif event["type"] == "customer.subscription.updated":
+        subscription = event["data"]["object"]
+        customer_id = subscription.get("customer")
+        user = (
+            db.query(models.User)
+            .filter(models.User.stripe_customer_id == customer_id)
+            .first()
+        )
+        if user:
+            user.subscription_status = subscription.get("status")
+            if subscription.get("plan"):
+                user.subscription_plan = subscription["plan"].get(
+                    "nickname"
+                ) or subscription["plan"].get("id")
+            if subscription.get("current_period_end"):
+                user.subscription_current_period_end = datetime.fromtimestamp(
+                    subscription["current_period_end"]
+                )
+            db.commit()
+
+    elif event["type"] == "customer.subscription.deleted":
+        subscription = event["data"]["object"]
+        customer_id = subscription.get("customer")
+        user = (
+            db.query(models.User)
+            .filter(models.User.stripe_customer_id == customer_id)
+            .first()
+        )
+        if user:
+            user.subscription_status = "canceled"
+            user.stripe_subscription_id = None
+            user.subscription_plan = None
+            user.subscription_current_period_end = None
+            db.commit()
+
+    return {"received": True}
 
 
 # --- SPA Catch-All Route (must be last) ---

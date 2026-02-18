@@ -34,7 +34,7 @@ steps:
       '--set-env-vars',
       'DB_USER=trafficgen_user,DB_NAME=trafficgen,ALLOWED_ORIGINS=https://traffic-creator.com,CLOUD_SQL_CONNECTION_NAME=$PROJECT_ID:europe-west1:trafficgen-db',
       '--set-secrets',
-      'DB_PASSWORD=db-password:latest,JWT_SECRET_KEY=jwt-secret-key:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,RESEND_API_KEY=resend-api-key:latest'
+      'DB_PASSWORD=db-password:latest,JWT_SECRET_KEY=jwt-secret-key:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest,RESEND_API_KEY=resend-api-key:latest'
     ]
 
 images:
