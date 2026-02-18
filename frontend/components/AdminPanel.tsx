@@ -137,27 +137,24 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
     };
 
     const handleCreateAlert = () => {
-        if (!newAlertMsg.trim()) return;
-        db.createAlert(newAlertMsg, newAlertType);
-        const handleCreateAlert = () => {
-            if (!newAlertMsg.trim() || !newAlertTitle.trim()) return alert('Title and Message are required');
-            db.createAlert(newAlertMsg, newAlertType, newAlertTitle);
-            setNewAlertMsg('');
-            setNewAlertTitle('');
-            refreshData();
-        };
+        if (!newAlertMsg.trim() || !newAlertTitle.trim()) return alert('Title and Message are required');
+        db.createAlert(newAlertMsg, newAlertType, newAlertTitle);
+        setNewAlertMsg('');
+        setNewAlertTitle('');
+        refreshData();
+    };
 
-        const handleToggleAlert = (id: string, active: boolean) => {
-            db.toggleAlert(id, active);
-            refreshData();
-        };
+    const handleToggleAlert = (id: string, active: boolean) => {
+        db.toggleAlert(id, active);
+        refreshData();
+    };
 
-        const handleDeleteAlert = (id: string) => {
-            db.deleteAlert(id);
-            refreshData();
-        }
+    const handleDeleteAlert = (id: string) => {
+        db.deleteAlert(id);
+        refreshData();
+    };
 
-        const handleCreateDemo = async () => {
+    const handleCreateDemo = async () => {
             if (!demoName || !demoUrl) {
                 alert('Please enter a Project Name and Target URL');
                 return;
@@ -838,4 +835,4 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
         );
     };
 
-    export default AdminPanel;
+export default AdminPanel;

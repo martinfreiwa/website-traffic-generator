@@ -21,6 +21,7 @@ import AdminMarketing from './AdminMarketing';
 import AdminCoupons from './AdminCoupons';
 import AdminConversion from './AdminConversion';
 import AdminBankTransfers from './AdminBankTransfers';
+import AdminBenefits from './AdminBenefits';
 
 import { MenuSection, User, Project, PriceClass, Transaction, Ticket, SystemSettings, SystemAlert, AdminStats } from '../../types';
 import { db } from '../../services/db';
@@ -157,6 +158,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
         { label: 'Marketing Hub', id: 'admin-marketing', path: 'marketing', icon: <TrendingUp size={18} /> },
         { label: 'Coupons', id: 'admin-coupons', path: 'coupons', icon: <Tag size={18} /> },
         { label: 'Conversion', id: 'admin-conversion', path: 'conversion', icon: <Zap size={18} /> },
+        { label: 'Benefits', id: 'admin-benefits', path: 'benefits', icon: <TrendingUp size={18} /> },
       ]
     },
     {
@@ -271,6 +273,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
               <Route path="coupons" element={<AdminCoupons onRefresh={refreshData} />} />
               <Route path="conversion" element={<AdminConversion />} />
               <Route path="bank-transfers" element={<AdminBankTransfers />} />
+              <Route path="benefits" element={<AdminBenefits />} />
               <Route path="*" element={<Navigate to="/admin" replace />} />
             </Routes>
           </div>

@@ -1818,102 +1818,121 @@ def create_quick_campaign(campaign: QuickCampaignCreate, db: Session = Depends(g
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    generated_password = "".join(
-        secrets.choice(string.ascii_letters + string.digits) for _ in range(12)
-    )
-    hashed_password = bcrypt.hashpw(
-        generated_password.encode(), bcrypt.gensalt()
-    ).decode()
+    try:
+        generated_password = "".join(
+            secrets.choice(string.ascii_letters + string.digits) for _ in range(12)
+        )
+        hashed_password = bcrypt.hashpw(
+            generated_password.encode(), bcrypt.gensalt()
+        ).decode()
 
-    tid = asyncio.run(find_ga4_tid(campaign.target_url))
+        tid = asyncio.run(find_ga4_tid(campaign.target_url))
 
-    new_user = models.User(
-        email=campaign.email,
-        password_hash=hashed_password,
-        balance=6.00,
-        affiliate_code=f"QC-{campaign.email[:3].upper()}-{secrets.token_hex(3).upper()}",
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+        new_user = models.User(
+            email=campaign.email,
+            password_hash=hashed_password,
+            balance=6.00,
+            affiliate_code=f"QC-{campaign.email[:3].upper()}-{secrets.token_hex(3).upper()}",
+        )
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
 
-    default_settings = {
-        "bounceRate": campaign.settings.get("bounce_rate", 40),
-        "returnRate": 0,
-        "device_distribution": {
-            "desktop": campaign.settings.get("device_split", {}).get("desktop", 60),
-            "mobile": campaign.settings.get("device_split", {}).get("mobile", 30),
-            "tablet": campaign.settings.get("device_split", {}).get("tablet", 10),
-        },
-        "deviceSpecific": "All",
-        "browser": "Random",
-        "timeOnPage": campaign.settings.get("time_on_page", "30 seconds"),
-        "timezone": "UTC",
-        "language": "en-US",
-        "languages": ["en-US"],
-        "gaId": tid or "",
-        "ga4Tid": tid or "",
-        "urlVisitOrder": "random",
-        "entryUrls": campaign.target_url,
-        "innerUrls": "",
-        "exitUrls": "",
-        "autoCrawlEntry": False,
-        "autoCrawlInner": False,
-        "autoCrawlExit": False,
-        "innerUrlCount": 0,
-        "countries": ["US"],
-        "geoTargets": [{"id": "geo-1", "country": "US", "percent": 100}],
-        "trafficSource": "Direct",
-        "keywords": "",
-        "referralUrls": "",
-        "utmSource": "",
-        "utmMedium": "",
-        "utmCampaign": "",
-        "utmTerm": "",
-        "utmContent": "",
-        "proxyMode": "auto",
-        "customProxies": "",
-        "scheduleMode": "continuous",
-        "scheduleTime": "",
-        "scheduleDuration": 60,
-        "sitemap": "",
-        "shortener": "",
-        "autoRenew": False,
-        "cacheWebsite": False,
-        "minimizeCpu": False,
-        "randomizeSession": True,
-        "antiFingerprint": True,
-        "pageViewsWithScroll": 0,
-        "clickExternal": 0,
-        "clickInternal": 0,
-    }
+        default_settings = {
+            "bounceRate": campaign.settings.get("bounce_rate", 40),
+            "returnRate": 0,
+            "device_distribution": {
+                "desktop": campaign.settings.get("device_split", {}).get("desktop", 60),
+                "mobile": campaign.settings.get("device_split", {}).get("mobile", 30),
+                "tablet": campaign.settings.get("device_split", {}).get("tablet", 10),
+            },
+            "deviceSpecific": "All",
+            "browser": "Random",
+            "timeOnPage": campaign.settings.get("time_on_page", "30 seconds"),
+            "timezone": "UTC",
+            "language": "en-US",
+            "languages": ["en-US"],
+            "gaId": tid or "",
+            "ga4Tid": tid or "",
+            "urlVisitOrder": "random",
+            "entryUrls": campaign.target_url,
+            "innerUrls": "",
+            "exitUrls": "",
+            "autoCrawlEntry": False,
+            "autoCrawlInner": False,
+            "autoCrawlExit": False,
+            "innerUrlCount": 0,
+            "countries": ["US"],
+            "geoTargets": [{"id": "geo-1", "country": "US", "percent": 100}],
+            "trafficSource": "Direct",
+            "keywords": "",
+            "referralUrls": "",
+            "utmSource": "",
+            "utmMedium": "",
+            "utmCampaign": "",
+            "utmTerm": "",
+            "utmContent": "",
+            "proxyMode": "auto",
+            "customProxies": "",
+            "scheduleMode": "continuous",
+            "scheduleTime": "",
+            "scheduleDuration": 60,
+            "sitemap": "",
+            "shortener": "",
+            "autoRenew": False,
+            "cacheWebsite": False,
+            "minimizeCpu": False,
+            "randomizeSession": True,
+            "antiFingerprint": True,
+            "pageViewsWithScroll": 0,
+            "clickExternal": 0,
+            "clickInternal": 0,
+        }
 
-    expires_at = datetime.utcnow() + timedelta(hours=24)
-    total_visitors = min(campaign.total_visitors, 10000)
+        expires_at = datetime.utcnow() + timedelta(hours=24)
+        total_visitors = min(campaign.total_visitors, 10000)
 
-    db_project = models.Project(
-        user_id=new_user.id,
-        name=campaign.project_name,
-        plan_type="QuickCampaign",
-        daily_limit=total_visitors,
-        total_target=total_visitors,
-        settings=default_settings,
-        expires_at=expires_at,
-        status="active",
-    )
-    db.add(db_project)
-    db.commit()
-    db.refresh(db_project)
+        db_project = models.Project(
+            user_id=new_user.id,
+            name=campaign.project_name,
+            plan_type="QuickCampaign",
+            daily_limit=total_visitors,
+            total_target=total_visitors,
+            settings=default_settings,
+            expires_at=expires_at,
+            status="active",
+        )
+        db.add(db_project)
+        db.commit()
+        db.refresh(db_project)
 
-    logger.info(
-        f"QUICK CAMPAIGN CREATED: email={campaign.email}, project_id={db_project.id}, project_name={campaign.project_name}, target_url={campaign.target_url}, ga4_tid={tid or 'Not found'}, visitors={total_visitors}, expires={expires_at}"
-    )
+        logger.info(
+            f"QUICK CAMPAIGN CREATED: email={campaign.email}, project_id={db_project.id}, project_name={campaign.project_name}, target_url={campaign.target_url}, ga4_tid={tid or 'Not found'}, visitors={total_visitors}, expires={expires_at}"
+        )
 
-    return {
-        "success": True,
-        "project_id": db_project.id,
-        "message": "Campaign started! Check your email for login credentials.",
-    }
+        return {
+            "success": True,
+            "project_id": db_project.id,
+            "message": "Campaign started! Check your email for login credentials.",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Quick campaign creation failed for {campaign.email}: {e}")
+        capture_exception(
+            e,
+            context={
+                "campaign": {
+                    "email": campaign.email,
+                    "project_name": campaign.project_name,
+                    "target_url": campaign.target_url,
+                }
+            },
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create campaign: {str(e)}"
+        )
 
 
 @app.post("/admin/promote")
@@ -2921,19 +2940,43 @@ def create_project(
             detail="Email verification required to create projects. Please verify your email first.",
         )
 
-    db_project = models.Project(
-        user_id=current_user.id,
-        name=project.name,
-        plan_type=project.plan_type,
-        tier=project.tier,
-        daily_limit=project.daily_limit,
-        total_target=project.total_target,
-        settings=project.settings,  # Just dump the JSON!
-    )
-    db.add(db_project)
-    db.commit()
-    db.refresh(db_project)
-    return db_project
+    try:
+        db_project = models.Project(
+            user_id=current_user.id,
+            name=project.name,
+            plan_type=project.plan_type,
+            tier=project.tier,
+            daily_limit=project.daily_limit,
+            total_target=project.total_target,
+            settings=project.settings,
+        )
+        db.add(db_project)
+        db.commit()
+        db.refresh(db_project)
+
+        add_breadcrumb(
+            message=f"Project created: {db_project.id}",
+            category="project",
+            data={"project_id": db_project.id, "name": project.name},
+        )
+
+        return db_project
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Project creation failed for user {current_user.id}: {e}")
+        capture_exception(
+            e,
+            context={
+                "project": {
+                    "name": project.name,
+                    "tier": project.tier,
+                    "user_id": current_user.id,
+                }
+            },
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create project: {str(e)}"
+        )
 
 
 @app.get("/projects", response_model=List[ProjectResponse])
@@ -3031,24 +3074,53 @@ def create_project_admin(
             status_code=404, detail=f"User {project.user_email} not found"
         )
 
-    db_project = models.Project(
-        user_id=target_user.id,
-        name=project.name,
-        plan_type=project.plan_type,
-        daily_limit=project.daily_limit,
-        total_target=project.total_target,
-        settings=project.settings,
-        # Admin Extras
-        priority=project.priority,
-        is_hidden=project.is_hidden,
-        internal_tags=project.internal_tags,
-        notes=project.notes,
-        status="active",
-    )
-    db.add(db_project)
-    db.commit()
-    db.refresh(db_project)
-    return db_project
+    try:
+        db_project = models.Project(
+            user_id=target_user.id,
+            name=project.name,
+            plan_type=project.plan_type,
+            daily_limit=project.daily_limit,
+            total_target=project.total_target,
+            settings=project.settings,
+            priority=project.priority,
+            is_hidden=project.is_hidden,
+            internal_tags=project.internal_tags,
+            notes=project.notes,
+            status="active",
+        )
+        db.add(db_project)
+        db.commit()
+        db.refresh(db_project)
+
+        add_breadcrumb(
+            message=f"Admin created project: {db_project.id}",
+            category="project",
+            data={
+                "project_id": db_project.id,
+                "name": project.name,
+                "user_email": project.user_email,
+            },
+        )
+
+        return db_project
+    except Exception as e:
+        db.rollback()
+        logger.error(
+            f"Admin project creation failed for user {project.user_email}: {e}"
+        )
+        capture_exception(
+            e,
+            context={
+                "project": {
+                    "name": project.name,
+                    "user_email": project.user_email,
+                    "admin_id": current_user.id,
+                }
+            },
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create project: {str(e)}"
+        )
 
 
 @app.put("/admin/projects/{project_id}", response_model=ProjectResponse)
