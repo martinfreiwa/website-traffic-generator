@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../../types';
 import { db } from '../../services/db';
-import { ArrowLeft, Save, LogIn, User as UserIcon, CreditCard, Folder, Ticket, Shield, Activity as ActivityIcon } from 'lucide-react';
+import { ArrowLeft, Save, LogIn, User as UserIcon, CreditCard, Folder, Ticket, Shield, Activity as ActivityIcon, Coins } from 'lucide-react';
 import OverviewTab from './AdminUserTabs/OverviewTab';
 import TransactionsTab from './AdminUserTabs/TransactionsTab';
 import ProjectsTab from './AdminUserTabs/ProjectsTab';
@@ -9,6 +9,7 @@ import TicketsTab from './AdminUserTabs/TicketsTab';
 import SecurityTab from './AdminUserTabs/SecurityTab';
 import ActivityTab from './AdminUserTabs/ActivityTab';
 import ProfileTab from './AdminUserTabs/ProfileTab';
+import CreditsTab from './AdminUserTabs/CreditsTab';
 
 interface AdminEditUserProps {
     userId: string;
@@ -19,6 +20,7 @@ interface AdminEditUserProps {
 const tabs = [
     { id: 'overview', label: 'Overview', icon: <UserIcon size={16} /> },
     { id: 'profile', label: 'Profile', icon: <UserIcon size={16} /> },
+    { id: 'credits', label: 'Credits', icon: <Coins size={16} /> },
     { id: 'transactions', label: 'Transactions', icon: <CreditCard size={16} /> },
     { id: 'projects', label: 'Projects', icon: <Folder size={16} /> },
     { id: 'tickets', label: 'Tickets', icon: <Ticket size={16} /> },
@@ -153,6 +155,9 @@ const AdminEditUser: React.FC<AdminEditUserProps> = ({ userId, onBack, onUpdate 
                                 loadUser();
                                 onUpdate();
                             }} />
+                        )}
+                        {activeTab === 'credits' && (
+                            <CreditsTab userId={userId} onUpdate={onUpdate} />
                         )}
                         {activeTab === 'transactions' && (
                             <TransactionsTab userId={userId} />

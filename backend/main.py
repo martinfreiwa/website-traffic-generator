@@ -4844,9 +4844,9 @@ def get_user_sessions_admin(
     sessions = (
         db.query(models.UserSession)
         .filter(
-            models.UserSession.user_id == user_id, models.UserSession.is_active == True
+            models.UserSession.user_id == user_id, models.UserSession.status == "active"
         )
-        .order_by(models.UserSession.last_activity.desc())
+        .order_by(models.UserSession.last_active.desc())
         .all()
     )
 
@@ -4856,12 +4856,12 @@ def get_user_sessions_admin(
             user_id=s.user_id,
             ip_address=s.ip_address,
             user_agent=s.user_agent,
-            device_info=s.device_info or {},
-            location=s.location,
+            device_info={"device": s.device, "browser": s.browser},
+            location=None,
             created_at=s.created_at,
-            last_activity=s.last_activity,
+            last_activity=s.last_active,
             expires_at=s.expires_at,
-            is_active=s.is_active,
+            is_active=s.status == "active",
         )
         for s in sessions
     ]
@@ -5016,6 +5016,7 @@ def adjust_user_balance(
         hits=adjustment.hits,
         reason=adjustment.reason,
         notes=adjustment.notes,
+        db=db,
     )
 
     # Log email notification
@@ -5025,6 +5026,7 @@ def adjust_user_balance(
         to_email=db_user.email,
         subject="Your balance has been adjusted",
         status="sent",
+        db=db,
     )
 
     db.commit()
@@ -5081,6 +5083,7 @@ def add_bonus_hits(
         hits=request.hits,
         reason=request.reason,
         notes="Bonus hits",
+        db=db,
     )
 
     # Log email
@@ -5090,6 +5093,7 @@ def add_bonus_hits(
         to_email=db_user.email,
         subject=f"You've received {request.hits} bonus {request.tier} hits!",
         status="sent",
+        db=db,
     )
 
     db.commit()

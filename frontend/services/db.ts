@@ -1829,7 +1829,14 @@ export const db = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(adjustment)
         });
-        if (!response.ok) throw new Error('Failed to adjust balance');
+        if (!response.ok) {
+            let errorMsg = 'Failed to adjust balance';
+            try {
+                const errorData = await response.json();
+                errorMsg = errorData.detail || errorMsg;
+            } catch {}
+            throw new Error(errorMsg);
+        }
     },
 
     addBonusHits: async (userId: string, request: {
@@ -1842,7 +1849,14 @@ export const db = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(request)
         });
-        if (!response.ok) throw new Error('Failed to add bonus hits');
+        if (!response.ok) {
+            let errorMsg = 'Failed to add bonus hits';
+            try {
+                const errorData = await response.json();
+                errorMsg = errorData.detail || errorMsg;
+            } catch {}
+            throw new Error(errorMsg);
+        }
     },
 
     getUserEmails: async (userId: string, limit = 50): Promise<EmailLog[]> => {

@@ -1,8 +1,11 @@
 import logging
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TYPE_CHECKING
 from database import SessionLocal
 import models
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -265,11 +268,14 @@ def log_balance_adjustment(
     hits: Optional[int],
     reason: str,
     notes: Optional[str] = None,
+    db: Optional["Session"] = None,
 ) -> models.BalanceAdjustmentLog:
     """
     Log a balance adjustment made by an admin.
     """
-    db = SessionLocal()
+    own_session = db is None
+    if own_session:
+        db = SessionLocal()
     try:
         log = models.BalanceAdjustmentLog(
             user_id=user_id,
@@ -283,15 +289,18 @@ def log_balance_adjustment(
             created_at=datetime.utcnow(),
         )
         db.add(log)
-        db.commit()
-        db.refresh(log)
+        if own_session:
+            db.commit()
+            db.refresh(log)
         return log
     except Exception as e:
         logger.error(f"Failed to log balance adjustment: {e}")
-        db.rollback()
+        if own_session:
+            db.rollback()
         return None
     finally:
-        db.close()
+        if own_session:
+            db.close()
 
 
 def log_email(
@@ -301,11 +310,14 @@ def log_email(
     subject: Optional[str] = None,
     status: str = "sent",
     error_message: Optional[str] = None,
+    db: Optional["Session"] = None,
 ) -> models.EmailLog:
     """
     Log an email sent to a user.
     """
-    db = SessionLocal()
+    own_session = db is None
+    if own_session:
+        db = SessionLocal()
     try:
         log = models.EmailLog(
             user_id=user_id,
@@ -317,15 +329,18 @@ def log_email(
             sent_at=datetime.utcnow(),
         )
         db.add(log)
-        db.commit()
-        db.refresh(log)
+        if own_session:
+            db.commit()
+            db.refresh(log)
         return log
     except Exception as e:
         logger.error(f"Failed to log email: {e}")
-        db.rollback()
+        if own_session:
+            db.rollback()
         return None
     finally:
-        db.close()
+        if own_session:
+            db.close()
 
 
 def get_or_create_notification_prefs(user_id: str) -> models.UserNotificationPrefs:

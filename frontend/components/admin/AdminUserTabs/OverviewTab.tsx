@@ -65,8 +65,8 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ userId, onNavigateToProject, 
             setBonusHitsReason('');
             loadData();
             onUpdate();
-        } catch (e) {
-            alert('Failed to add bonus hits');
+        } catch (e: any) {
+            alert(e.message || 'Failed to add bonus hits');
         }
     };
 
