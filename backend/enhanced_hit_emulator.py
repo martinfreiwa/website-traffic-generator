@@ -348,6 +348,37 @@ class GAEmuEngine:
             "CN": "zh-CN,zh;q=0.9",
             "RU": "ru-RU,ru;q=0.9",
             "VN": "vi-VN,vi;q=0.9",
+            "AF": "fa-AF,ps;q=0.9,en;q=0.5",  # Afghanistan - Pashto/Dari
+            "IR": "fa-IR,fa;q=0.9",
+            "PK": "ur-PK,ur;q=0.9,en;q=0.5",
+            "IN": "en-IN,en;q=0.9,hi;q=0.5",
+            "SA": "ar-SA,ar;q=0.9",
+            "AE": "ar-AE,ar;q=0.9,en;q=0.5",
+            "TR": "tr-TR,tr;q=0.9",
+            "TH": "th-TH,th;q=0.9",
+            "ID": "id-ID,id;q=0.9",
+            "PH": "en-PH,en;q=0.9,fil;q=0.5",
+            "MX": "es-MX,es;q=0.9",
+            "AR": "es-AR,es;q=0.9",
+            "CA": "en-CA,en;q=0.9,fr;q=0.5",
+            "AU": "en-AU,en;q=0.9",
+            "EG": "ar-EG,ar;q=0.9",
+            "NG": "en-NG,en;q=0.9",
+            "ZA": "en-ZA,en;q=0.9",
+            "PL": "pl-PL,pl;q=0.9",
+            "UA": "uk-UA,uk;q=0.9",
+            "CZ": "cs-CZ,cs;q=0.9",
+            "SE": "sv-SE,sv;q=0.9",
+            "NO": "nb-NO,nb;q=0.9",
+            "FI": "fi-FI,fi;q=0.9",
+            "DK": "da-DK,da;q=0.9",
+            "GR": "el-GR,el;q=0.9",
+            "RO": "ro-RO,ro;q=0.9",
+            "HU": "hu-HU,hu;q=0.9",
+            "IL": "he-IL,he;q=0.9",
+            "MY": "ms-MY,ms;q=0.9,en;q=0.5",
+            "BD": "bn-BD,bn;q=0.9",
+            "MM": "my-MM,my;q=0.9",
         }
         return country_lang_map.get(country_code, random.choice(LANGUAGES))
 
@@ -656,6 +687,12 @@ class GAEmuEngine:
             ul = ",".join(config_langs)
         else:
             ul = self._get_language_for_geo(selected_country)
+
+        # Log geo targeting for every request (for debugging)
+        if selected_country:
+            logger.info(
+                f"Geo targeting: country={selected_country}, state={selected_state}, city={selected_city}, language={ul}, using_proxy={proxy_url is not None}, config_langs={config_langs}"
+            )
 
         fingerprint = {"ua": ua, "sr": res, "ul": ul}
 

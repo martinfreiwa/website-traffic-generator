@@ -320,8 +320,10 @@ class TrafficScheduler:
 
         # Log project processing every 60 seconds
         if now.second == 0:
+            settings = project.settings or {}
+            geo_targets = settings.get("geoTargets", [])
             logger.info(
-                f"Processing project {project.id}: status={project.status}, daily_limit={project.daily_limit}, hits_today={project.hits_today}, total_target={project.total_target}, total_hits={project.total_hits}"
+                f"Processing project {project.id}: status={project.status}, daily_limit={project.daily_limit}, hits_today={project.hits_today}, total_target={project.total_target}, total_hits={project.total_hits}, geoTargets={geo_targets}"
             )
 
         # 0. Check Sitemap Crawling
