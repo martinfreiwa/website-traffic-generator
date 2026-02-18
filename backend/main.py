@@ -84,6 +84,45 @@ def run_column_migrations():
             ).fetchone()
             return result is not None
 
+        def add_column_if_missing(table: str, col_name: str, col_type: str):
+            if not column_exists(table, col_name):
+                try:
+                    db.execute(
+                        text(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_type}")
+                    )
+                    db.commit()
+                    logger.info(f"Added column {table}.{col_name}")
+                except Exception as e:
+                    db.rollback()
+                    logger.warning(f"Could not add {table}.{col_name}: {e}")
+
+        def create_table_if_missing(table_name: str, columns: str):
+            if not table_exists(table_name):
+                try:
+                    db.execute(text(f"CREATE TABLE {table_name} ({columns})"))
+                    db.commit()
+                    logger.info(f"Created table {table_name}")
+                except Exception as e:
+                    db.rollback()
+                    logger.warning(f"Could not create {table_name}: {e}")
+
+        users_cols = [
+            ("name", "VARCHAR(255)"),
+            ("balance_economy", "FLOAT DEFAULT 0.0"),
+            ("balance_professional", "FLOAT DEFAULT 0.0"),
+            ("balance_expert", "FLOAT DEFAULT 0.0"),
+            ("shadow_banned", "BOOLEAN DEFAULT FALSE"),
+            ("is_verified", "BOOLEAN DEFAULT FALSE"),
+            ("notes", "TEXT"),
+            ("tags", "JSONB"),
+            ("ban_reason", "VARCHAR(255)"),
+            ("last_ip", "VARCHAR(100)"),
+            ("last_active", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in users_cols:
+            add_column_if_missing("users", col_name, col_type)
+
         user_sessions_cols = [
             ("session_token", "VARCHAR(255)"),
             ("ip_address", "VARCHAR(100)"),
@@ -98,102 +137,99 @@ def run_column_migrations():
         ]
 
         for col_name, col_type in user_sessions_cols:
-            if not column_exists("user_sessions", col_name):
-                try:
-                    db.execute(
-                        text(
-                            f"ALTER TABLE user_sessions ADD COLUMN {col_name} {col_type}"
-                        )
-                    )
-                    db.commit()
-                    logger.info(f"Added column user_sessions.{col_name}")
-                except Exception as e:
-                    db.rollback()
-                    logger.warning(f"Could not add user_sessions.{col_name}: {e}")
+            add_column_if_missing("user_sessions", col_name, col_type)
 
         tables_to_create = [
             (
                 "user_notification_prefs",
-                """id VARCHAR(255) PRIMARY KEY, 
-                   user_id VARCHAR(255) UNIQUE, 
-                   email_marketing BOOLEAN DEFAULT TRUE, 
-                   email_transactional BOOLEAN DEFAULT TRUE, 
-                   email_alerts BOOLEAN DEFAULT TRUE, 
-                   browser_notifications BOOLEAN DEFAULT TRUE, 
-                   newsletter_sub BOOLEAN DEFAULT FALSE, 
-                   email_frequency VARCHAR(50) DEFAULT 'instant', 
-                   updated_at TIMESTAMP""",
+                """id VARCHAR(255) PRIMARY KEY, user_id VARCHAR(255) UNIQUE, email_marketing BOOLEAN DEFAULT TRUE, email_transactional BOOLEAN DEFAULT TRUE, email_alerts BOOLEAN DEFAULT TRUE, browser_notifications BOOLEAN DEFAULT TRUE, newsletter_sub BOOLEAN DEFAULT FALSE, email_frequency VARCHAR(50) DEFAULT 'instant', updated_at TIMESTAMP""",
             ),
             (
                 "activity_logs",
-                """id VARCHAR(255) PRIMARY KEY, 
-                   user_id VARCHAR(255), 
-                   action VARCHAR(255), 
-                   details JSONB, 
-                   ip_address VARCHAR(100), 
-                   user_agent TEXT, 
-                   created_at TIMESTAMP""",
+                """id VARCHAR(255) PRIMARY KEY, user_id VARCHAR(255), action VARCHAR(255), details JSONB, ip_address VARCHAR(100), user_agent TEXT, created_at TIMESTAMP""",
             ),
             (
                 "token_blacklist",
-                """id VARCHAR(255) PRIMARY KEY, 
-                   token VARCHAR(500), 
-                   revoked_at TIMESTAMP, 
-                   expires_at TIMESTAMP""",
+                """id VARCHAR(255) PRIMARY KEY, token VARCHAR(500), revoked_at TIMESTAMP, expires_at TIMESTAMP""",
             ),
             (
                 "impersonation_logs",
-                """id VARCHAR(255) PRIMARY KEY, 
-                   admin_id VARCHAR(255), 
-                   target_user_id VARCHAR(255), 
-                   started_at TIMESTAMP, 
-                   ended_at TIMESTAMP, 
-                   actions JSONB""",
+                """id VARCHAR(255) PRIMARY KEY, admin_id VARCHAR(255), target_user_id VARCHAR(255), started_at TIMESTAMP, ended_at TIMESTAMP, actions JSONB""",
             ),
             (
                 "balance_adjustment_logs",
-                """id VARCHAR(255) PRIMARY KEY, 
-                   user_id VARCHAR(255), 
-                   admin_id VARCHAR(255), 
-                   amount INTEGER, 
-                   tier VARCHAR(50), 
-                   reason TEXT, 
-                   created_at TIMESTAMP""",
+                """id VARCHAR(255) PRIMARY KEY, user_id VARCHAR(255), admin_id VARCHAR(255), amount INTEGER, tier VARCHAR(50), reason TEXT, created_at TIMESTAMP""",
             ),
             (
                 "email_logs",
-                """id VARCHAR(255) PRIMARY KEY, 
-                   user_id VARCHAR(255), 
-                   email_type VARCHAR(100), 
-                   recipient VARCHAR(255), 
-                   subject TEXT, 
-                   status VARCHAR(50), 
-                   error TEXT, 
-                   sent_at TIMESTAMP""",
+                """id VARCHAR(255) PRIMARY KEY, user_id VARCHAR(255), email_type VARCHAR(100), recipient VARCHAR(255), subject TEXT, status VARCHAR(50), error TEXT, sent_at TIMESTAMP""",
+            ),
+            (
+                "affiliate_relations",
+                """id VARCHAR(255) PRIMARY KEY, referrer_id VARCHAR(255), referred_id VARCHAR(255), level INTEGER DEFAULT 1, created_at TIMESTAMP""",
+            ),
+            (
+                "affiliate_earnings",
+                """id VARCHAR(255) PRIMARY KEY, referrer_id VARCHAR(255), referred_id VARCHAR(255), amount FLOAT, tier VARCHAR(50), status VARCHAR(50) DEFAULT 'pending', created_at TIMESTAMP""",
+            ),
+            (
+                "benefit_requests",
+                """id VARCHAR(255) PRIMARY KEY, user_id VARCHAR(255), benefit_type_id VARCHAR(255), claimed_value FLOAT DEFAULT 0.0, approved_value FLOAT, status VARCHAR(50) DEFAULT 'pending', admin_notes TEXT, fraud_flagged BOOLEAN DEFAULT FALSE, fraud_reason VARCHAR(255), submitted_at TIMESTAMP, reviewed_at TIMESTAMP, reviewed_by VARCHAR(255)""",
+            ),
+            (
+                "payout_requests",
+                """id VARCHAR(255) PRIMARY KEY, user_id VARCHAR(255), amount FLOAT, method VARCHAR(50), payout_details JSONB, status VARCHAR(50) DEFAULT 'pending', admin_notes TEXT, requested_at TIMESTAMP, processed_at TIMESTAMP, processed_by VARCHAR(255), transaction_hash VARCHAR(255)""",
+            ),
+            (
+                "benefit_types",
+                """id VARCHAR(255) PRIMARY KEY, name VARCHAR(255), description TEXT, value FLOAT, is_active BOOLEAN DEFAULT TRUE, created_at TIMESTAMP""",
+            ),
+            (
+                "affiliate_tiers",
+                """id VARCHAR(255) PRIMARY KEY, user_id VARCHAR(255), tier VARCHAR(50), commission_rate FLOAT DEFAULT 0.1, referrals_count INTEGER DEFAULT 0, earnings_total FLOAT DEFAULT 0.0, created_at TIMESTAMP, updated_at TIMESTAMP""",
+            ),
+            (
+                "conversion_settings",
+                """id VARCHAR(255) PRIMARY KEY DEFAULT 'global', social_proof_enabled BOOLEAN DEFAULT FALSE, social_proof_position VARCHAR(50), social_proof_delay INTEGER, social_proof_show_simulated BOOLEAN, exit_intent_enabled BOOLEAN DEFAULT FALSE, exit_intent_headline TEXT, exit_intent_subtext TEXT, exit_intent_coupon_code VARCHAR(50), promo_bar_enabled BOOLEAN DEFAULT FALSE, promo_bar_message TEXT, promo_bar_button_text VARCHAR(100), promo_bar_button_url VARCHAR(255), promo_bar_background_color VARCHAR(20), promo_bar_text_color VARCHAR(20), promo_bar_countdown_end TIMESTAMP, updated_at TIMESTAMP""",
+            ),
+            (
+                "loyalty_settings",
+                """id VARCHAR(255) PRIMARY KEY DEFAULT 'global', enabled BOOLEAN DEFAULT FALSE, points_per_dollar FLOAT DEFAULT 1.0, points_for_signup INTEGER DEFAULT 0, points_for_referral INTEGER DEFAULT 0, minimum_redemption INTEGER DEFAULT 100, redemptions JSONB, updated_at TIMESTAMP""",
+            ),
+            (
+                "referral_settings",
+                """id VARCHAR(255) PRIMARY KEY DEFAULT 'global', enabled BOOLEAN DEFAULT FALSE, referrer_reward_type VARCHAR(50), referrer_reward_value FLOAT DEFAULT 0.0, referee_reward_type VARCHAR(50), referee_reward_value FLOAT DEFAULT 0.0, minimum_payout FLOAT DEFAULT 10.0, updated_at TIMESTAMP""",
+            ),
+            (
+                "faqs",
+                """id VARCHAR(255) PRIMARY KEY, question TEXT, answer TEXT, category VARCHAR(100), order_index INTEGER DEFAULT 0, is_active BOOLEAN DEFAULT TRUE, created_at TIMESTAMP, updated_at TIMESTAMP""",
+            ),
+            (
+                "coupons",
+                """id VARCHAR(255) PRIMARY KEY, code VARCHAR(50) UNIQUE, discount_type VARCHAR(20), discount_value FLOAT, min_purchase FLOAT, max_uses INTEGER, used_count INTEGER DEFAULT 0, valid_from TIMESTAMP, valid_until TIMESTAMP, is_active BOOLEAN DEFAULT TRUE, created_at TIMESTAMP""",
+            ),
+            (
+                "marketing_campaigns",
+                """id VARCHAR(255) PRIMARY KEY, name VARCHAR(255), source VARCHAR(100), medium VARCHAR(100), campaign VARCHAR(255), term VARCHAR(255), content VARCHAR(255), clicks INTEGER DEFAULT 0, conversions INTEGER DEFAULT 0, created_at TIMESTAMP""",
+            ),
+            (
+                "broadcasts",
+                """id VARCHAR(255) PRIMARY KEY, title VARCHAR(255), message TEXT, type VARCHAR(50), link VARCHAR(255), is_active BOOLEAN DEFAULT FALSE, start_date TIMESTAMP, end_date TIMESTAMP, created_at TIMESTAMP""",
             ),
         ]
 
         for table_name, columns in tables_to_create:
-            if not table_exists(table_name):
-                try:
-                    db.execute(text(f"CREATE TABLE {table_name} ({columns})"))
-                    db.commit()
-                    logger.info(f"Created table {table_name}")
-                except Exception as e:
-                    db.rollback()
-                    logger.warning(f"Could not create {table_name}: {e}")
+            create_table_if_missing(table_name, columns)
 
-        if column_exists("user_sessions", "session_token"):
-            try:
-                db.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS ix_user_sessions_session_token ON user_sessions(session_token)"
-                    )
+        try:
+            db.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_user_sessions_session_token ON user_sessions(session_token)"
                 )
-                db.commit()
-            except Exception as e:
-                db.rollback()
-                logger.warning(f"Index creation skipped: {e}")
+            )
+            db.commit()
+        except Exception as e:
+            db.rollback()
 
     except Exception as e:
         logger.error(f"Migration error: {e}")
