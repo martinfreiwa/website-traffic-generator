@@ -104,6 +104,11 @@ export interface ProjectSettings {
     adminPriority?: number;
     adminWeight?: number;
     forceStopReason?: string;
+
+    scheduleStart?: string;
+    scheduleEnd?: string;
+    scheduleTrafficAmount?: number;
+    schedulePattern?: 'even' | 'realistic';
 }
 
 export interface ProjectStats {
@@ -177,18 +182,23 @@ export interface TicketMessage {
 
 export interface Ticket {
   id: string;
-  type: 'ticket' | 'chat'; // Differentiate standard tickets from live chat
+  type: 'ticket' | 'chat';
   userId: string;
   userName: string;
-  guestEmail?: string; // For landing page visitors
-  guestPhone?: string; // For landing page visitors
+  guestEmail?: string;
+  guestPhone?: string;
   subject: string;
   status: 'open' | 'closed' | 'in-progress';
   priority: 'low' | 'medium' | 'high';
+  category?: 'general' | 'billing' | 'technical' | 'sales';
+  projectId?: string;
+  projectName?: string;
+  attachmentUrls?: string[];
   date: string;
   lastMessage: string;
   messages?: TicketMessage[];
-  unread: boolean; // Indicates unread messages for the viewer
+  unread: boolean;
+  updatedAt?: string;
 }
 
 export interface PaymentMethod {
@@ -379,14 +389,16 @@ export interface Coupon {
   discountValue: number;
   expiryDate?: string;
   maxUses?: number;
-  maxUsesPerUser?: number; // New: Limit per user
-  allowedPlans?: string[]; // New: Restrict to specific plans
-  bulkBatchId?: string; // New: Group ID for bulk generation
-  duration?: 'once' | 'forever' | 'repeating'; // New: SaaS field
-  durationInMonths?: number; // New: For repeating coupons
+  maxUsesPerUser?: number;
+  allowedPlans?: string[];
+  bulkBatchId?: string;
+  duration?: 'once' | 'forever' | 'repeating';
+  durationInMonths?: number;
   usedCount: number;
   active: boolean;
   boundToUser?: string;
+  minPurchase?: number;
+  planRestriction?: string;
 }
 
 export interface LoyaltySettings {
@@ -400,7 +412,7 @@ export interface ReferralSettings {
   enabled: boolean;
   referrerReward: number;
   refereeReward: number;
-  rewardType: 'credit' | 'cash';
+  rewardType: 'credit' | 'cash' | 'percentage';
 }
 
 export interface BenefitType {

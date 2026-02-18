@@ -279,7 +279,6 @@ class GAEmuEngine:
             )
             db.add(log)
 
-            # Increment project counters if successful hit
             if status == "success" and event_type == "session_start":
                 project = (
                     db.query(models.Project)
@@ -289,6 +288,15 @@ class GAEmuEngine:
                 if project:
                     project.hits_today += 1
                     project.total_hits += 1
+
+                    tier = (
+                        (project.tier or "economy").lower()
+                        if project.tier
+                        else "economy"
+                    )
+                    from scheduler import record_hit_in_buffer
+
+                    record_hit_in_buffer(str(project.id), tier)
 
             db.commit()
             db.close()

@@ -31,7 +31,7 @@ const AdminBenefits: React.FC = () => {
     try {
       const [pending, types, history] = await Promise.all([
         db.getPendingBenefits().catch(() => []),
-        fetch(`${window.location.origin}/api/benefits/types`).then(r => r.json()).catch(() => []),
+        fetch(`${window.location.origin}/benefits/types`).then(r => r.json()).catch(() => []),
         db.getBenefitsHistory().catch(() => [])
       ]);
       setPendingBenefits(pending);

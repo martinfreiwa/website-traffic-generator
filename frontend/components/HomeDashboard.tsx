@@ -368,7 +368,7 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ projects, balance, onNavi
                         <CreditCard size={64} className="text-[#ff4d00]" />
                     </div>
                     <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Wallet Balance</div>
-                    <div className="text-4xl font-black text-gray-900 mb-2">€{balance.toFixed(2)}</div>
+                    <div className="text-4xl font-black text-gray-900 mb-2">€{(balance ?? 0).toFixed(2)}</div>
                     <div className="text-[10px] font-black text-[#ff4d00] flex items-center gap-1 uppercase tracking-wider">
                         Add Credits <Plus size={10} className="group-hover:rotate-90 transition-transform" />
                     </div>
@@ -573,16 +573,16 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ projects, balance, onNavi
                             {transactions.length > 0 ? transactions.slice(0, 3).map(t => (
                                 <div key={t.id} className="p-4 flex justify-between items-center bg-white hover:bg-gray-50 transition-colors group">
                                     <div className="flex items-center gap-3">
-                                        <div className={`p-1.5 rounded-sm ${t.type === 'credit' ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-[#ff4d00]'}`}>
-                                            {t.type === 'credit' ? <Plus size={10} /> : <ArrowRight size={10} className="rotate-45" />}
+                                        <div className={`p-1.5 rounded-sm ${t.type === 'debit' ? 'bg-orange-50 text-[#ff4d00]' : 'bg-green-50 text-green-600'}`}>
+                                            {t.type === 'debit' ? <ArrowRight size={10} className="rotate-45" /> : <Plus size={10} />}
                                         </div>
                                         <div>
                                             <div className="text-[10px] font-black text-gray-700 uppercase tracking-tight truncate w-32">{t.desc}</div>
                                             <div className="text-[9px] text-gray-400 font-bold uppercase">{t.date}</div>
                                         </div>
                                     </div>
-                                    <div className={`text-xs font-black ${t.type === 'credit' ? 'text-green-600' : 'text-gray-900'}`}>
-                                        {t.type === 'credit' ? '+' : '-'}€{t.amount.toFixed(0)}
+                                    <div className={`text-xs font-black ${t.type === 'debit' ? 'text-gray-900' : 'text-green-600'}`}>
+                                        {t.type === 'debit' ? '-' : '+'}€{t.amount.toFixed(0)}
                                     </div>
                                 </div>
                             )) : (

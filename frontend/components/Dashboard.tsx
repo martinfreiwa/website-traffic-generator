@@ -17,6 +17,7 @@ import Support from './Support';
 import PricingPage from './PricingPage';
 import Billing from './Billing';
 import Gamification from './Gamification';
+import PaymentSuccess from './PaymentSuccess';
 import { MenuSection, Project } from '../types';
 import { MessageSquare, TrendingUp, Users, CreditCard, Activity, Construction, LayoutDashboard, Layers, User, Banknote, Share2, HelpCircle, Receipt, Star } from 'lucide-react';
 import { db } from '../services/db';
@@ -104,6 +105,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     if (currentPath === 'balance') return 'Balance';
     if (currentPath === 'affiliate') return 'Affiliate Program';
     if (currentPath === 'support') return 'Support Helpdesk';
+    if (currentPath === 'payment-success') return 'Payment Successful';
     return currentPath.replace(/-/g, ' ');
   };
 
@@ -179,7 +181,16 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
         <BroadcastBanner />
         
         {!db.getCurrentUser()?.isVerified && db.getCurrentUser()?.email && (
-          <VerificationBanner email={db.getCurrentUser()!.email} />
+          <VerificationBanner 
+            email={db.getCurrentUser()!.email}
+            onVerified={() => {
+              const user = db.getCurrentUser();
+              if (user) {
+                user.isVerified = true;
+                localStorage.setItem('modus_current_user', JSON.stringify(user));
+              }
+            }}
+          />
         )}
 
         {/* Impersonation Banner */}
@@ -249,6 +260,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
               <Route path="/pricing" element={<PricingPage />} />
               <Route path="/affiliate" element={<Affiliate />} />
               <Route path="/support" element={<Support />} />
+              <Route path="/payment-success" element={<PaymentSuccess />} />
 
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>

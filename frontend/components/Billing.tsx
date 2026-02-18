@@ -266,15 +266,15 @@ const Billing: React.FC = () => {
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-sm ${
-                                                t.type === 'credit' ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-[#ff4d00]'
+                                                t.type === 'debit' ? 'bg-orange-50 text-[#ff4d00]' : 'bg-green-50 text-green-700'
                                             }`}>
-                                                {t.type === 'credit' ? <ArrowDownLeft size={10} /> : <ArrowUpRight size={10} />}
+                                                {t.type === 'debit' ? <ArrowUpRight size={10} /> : <ArrowDownLeft size={10} />}
                                                 {t.type}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <span className={`text-sm font-black ${t.type === 'credit' ? 'text-green-600' : 'text-gray-900'}`}>
-                                                {t.type === 'credit' ? '+' : '-'}{formatCurrency(t.amount)}
+                                            <span className={`text-sm font-black ${t.type === 'debit' ? 'text-gray-900' : 'text-green-600'}`}>
+                                                {t.type === 'debit' ? '-' : '+'}{formatCurrency(t.amount)}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-center">
@@ -311,7 +311,7 @@ const Billing: React.FC = () => {
                 <div className="bg-white border border-gray-200 p-6 shadow-sm">
                     <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Total Top-ups</div>
                     <div className="text-2xl font-black text-green-600">
-                        {formatCurrency(transactions.filter(t => t.type === 'credit').reduce((sum, t) => sum + t.amount, 0))}
+                        {formatCurrency(transactions.filter(t => t.type !== 'debit').reduce((sum, t) => sum + t.amount, 0))}
                     </div>
                 </div>
                 <div className="bg-white border border-gray-200 p-6 shadow-sm">

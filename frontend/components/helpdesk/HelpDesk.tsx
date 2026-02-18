@@ -1,16 +1,31 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import SEO from '../SEO';
 import { ArrowLeft, Search, ChevronDown, ChevronUp, MessageSquare, Mail, CreditCard, Wrench, Globe, Shield } from 'lucide-react';
+import { db } from '../../services/db';
 
 interface HelpDeskProps {
     onBack: () => void;
+}
+
+interface FAQ {
+    id: string;
+    question: string;
+    answer: string;
+    category: string;
+    displayOrder?: number;
+    isActive?: boolean;
 }
 
 const HelpDesk: React.FC<HelpDeskProps> = ({ onBack }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [activeCategory, setActiveCategory] = useState('all');
     const [openFaq, setOpenFaq] = useState<number | null>(null);
+    const [faqs, setFaqs] = useState<FAQ[]>([]);
+
+    useEffect(() => {
+        db.getFAQs().then(setFaqs).catch(() => setFaqs([]));
+    }, []);
 
     const categories = [
         { id: 'all', label: 'All Topics' },
@@ -19,40 +34,18 @@ const HelpDesk: React.FC<HelpDeskProps> = ({ onBack }) => {
         { id: 'general', label: 'General Account', icon: <Globe size={14} /> },
     ];
 
-    const faqs = [
-        {
-            question: "How long does it take for traffic to start?",
-            answer: "Campaigns typically start delivering traffic within 5-15 minutes after creation. However, depending on the complexity of your targeting (specific cities, devices), it may take up to an hour for the first hits to register.",
-            category: 'general'
-        },
-        {
-            question: "Can I upgrade my plan later?",
-            answer: "Yes, you can upgrade your plan at any time. Simply add funds to your wallet and create a new campaign with the desired higher tier. We recommend the 'Agency' plan for maximum volume.",
-            category: 'billing'
-        },
-        {
-            question: "Why is my traffic not showing in Google Analytics?",
-            answer: "Ensure you are looking at 'Realtime' reports. Also, verify that your GA4 ID is correct in the project settings. Some traffic filters in GA4 may exclude bot traffic by default; our 'Growth' plan is designed to bypass standard bot filters.",
-            category: 'technical'
-        },
-        {
-            question: "Is this traffic safe for AdSense?",
-            answer: "Our 'Growth' and 'Agency' traffic tiers are safe for AdSense as they utilize high-quality residential IPs. However, we always recommend monitoring your CTR (Click-Through Rate) and adjusting your campaign speed accordingly.",
-            category: 'technical'
-        },
-        {
-            question: "What payment methods do you accept?",
-            answer: "We accept Visa, Mastercard, American Express via Stripe. We also support PayPal and various Cryptocurrencies (BTC, ETH, USDT).",
-            category: 'billing'
-        },
-        {
-            question: "How do I reset my API key?",
-            answer: "Navigate to your Profile settings in the dashboard. Under the 'Developer Settings' section, click the refresh icon to invalidate your old key and generate a new one.",
-            category: 'general'
-        }
+    const defaultFaqs: FAQ[] = [
+        { id: '1', question: "How long does it take for traffic to start?", answer: "Campaigns typically start delivering traffic within 5-15 minutes after creation. However, depending on the complexity of your targeting (specific cities, devices), it may take up to an hour for the first hits to register.", category: 'general' },
+        { id: '2', question: "Can I upgrade my plan later?", answer: "Yes, you can upgrade your plan at any time. Simply add funds to your wallet and create a new campaign with the desired higher tier. We recommend the 'Agency' plan for maximum volume.", category: 'billing' },
+        { id: '3', question: "Why is my traffic not showing in Google Analytics?", answer: "Ensure you are looking at 'Realtime' reports. Also, verify that your GA4 ID is correct in the project settings. Some traffic filters in GA4 may exclude bot traffic by default; our 'Growth' plan is designed to bypass standard bot filters.", category: 'technical' },
+        { id: '4', question: "Is this traffic safe for AdSense?", answer: "Our 'Growth' and 'Agency' traffic tiers are safe for AdSense as they utilize high-quality residential IPs. However, we always recommend monitoring your CTR (Click-Through Rate) and adjusting your campaign speed accordingly.", category: 'technical' },
+        { id: '5', question: "What payment methods do you accept?", answer: "We accept Visa, Mastercard, American Express via Stripe. We also support PayPal and various Cryptocurrencies (BTC, ETH, USDT).", category: 'billing' },
+        { id: '6', question: "How do I reset my API key?", answer: "Navigate to your Profile settings in the dashboard. Under the 'Developer Settings' section, click the refresh icon to invalidate your old key and generate a new one.", category: 'general' }
     ];
 
-    const filteredFaqs = faqs.filter(f =>
+    const displayFaqs = faqs.length > 0 ? faqs : defaultFaqs;
+
+    const filteredFaqs = displayFaqs.filter(f =>
         (activeCategory === 'all' || f.category === activeCategory) &&
         (f.question.toLowerCase().includes(searchTerm.toLowerCase()) || f.answer.toLowerCase().includes(searchTerm.toLowerCase()))
     );

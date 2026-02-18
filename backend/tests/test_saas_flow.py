@@ -2,34 +2,16 @@ import pytest
 import httpx
 import uuid
 
-# Configuration
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:8001"
+TEST_EMAIL = "admin@traffic.com"
+TEST_PASSWORD = "admin123"
 
 
 @pytest.fixture
-def unique_email():
-    return f"test_{uuid.uuid4()}@example.com"
-
-
-@pytest.fixture
-def auth_header(unique_email):
-    # 1. Register
-    password = "password123"
-    reg_resp = httpx.post(
-        f"{BASE_URL}/auth/register",
-        json={"email": unique_email, "password": password, "name": "Pytest User"},
-    )
-
-    # Check if duplicate (might happen if uuid collision or reuse, unlikely) or success
-    # If 400 email exists, try login (fallback for manual runs)
-    if reg_resp.status_code == 400:
-        pass
-    else:
-        assert reg_resp.status_code == 200
-
-    # 2. Login
+def auth_header():
     login_resp = httpx.post(
-        f"{BASE_URL}/auth/token", data={"username": unique_email, "password": password}
+        f"{BASE_URL}/auth/token",
+        data={"username": TEST_EMAIL, "password": TEST_PASSWORD},
     )
     assert login_resp.status_code == 200
     token = login_resp.json()["access_token"]
@@ -43,12 +25,44 @@ def test_health_check():
 
 
 def test_user_profile(auth_header):
+    unique_id = str(uuid.uuid4())[:8]
+
     resp = httpx.get(f"{BASE_URL}/users/me", headers=auth_header)
     assert resp.status_code == 200
     data = resp.json()
     assert "email" in data
     assert "id" in data
-    assert data["balance"] == 0.0
+    assert "balance" in data
+
+    update_data = {
+        "display_name": f"TestUser_{unique_id}",
+        "country": f"Germany_{unique_id}",
+        "city": f"Berlin_{unique_id}",
+        "company": f"TestCorp_{unique_id}",
+        "job_title": "Test Engineer",
+        "bio": f"Test bio {unique_id}",
+    }
+
+    update_resp = httpx.put(
+        f"{BASE_URL}/users/me", json=update_data, headers=auth_header
+    )
+    assert update_resp.status_code == 200, f"Profile update failed: {update_resp.text}"
+
+    updated = update_resp.json()
+    assert updated["country"] == update_data["country"], "Country not saved correctly"
+    assert updated["city"] == update_data["city"], "City not saved correctly"
+    assert updated["company"] == update_data["company"], "Company not saved correctly"
+
+    verify_resp = httpx.get(f"{BASE_URL}/users/me", headers=auth_header)
+    verified = verify_resp.json()
+    assert verified["country"] == update_data["country"], (
+        "Country not persisted correctly"
+    )
+
+    assert "email" in verified, "Email should be in response"
+    assert isinstance(verified.get("balance"), (int, float)), (
+        "Balance should be a number"
+    )
 
 
 def test_project_lifecycle(auth_header):

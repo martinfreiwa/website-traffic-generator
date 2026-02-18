@@ -4,6 +4,7 @@ import SEO from '../SEO';
 import { Link } from 'react-router-dom';
 import { ArrowRight, BarChart3, Globe, ShieldCheck, ChevronDown, ChevronUp, Target, Clock, Code, TrendingUp, BarChart2, Bitcoin, Briefcase, Search, Zap, AlertTriangle, Cpu, Activity, Moon, Radio, MapPin, Link2, Check, Star, Sparkles, Users, Calculator } from 'lucide-react';
 import QuickCampaign from './QuickCampaign';
+import { TIERS, PRICING_MATRIX, formatPrice, formatCPM, getCPM, TierId } from '../../constants/pricing';
 
 interface LandingPageProps {
   onLogin: () => void;
@@ -13,6 +14,7 @@ interface LandingPageProps {
 const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [pricingMode, setPricingMode] = useState<'business' | 'agency'>('business');
+  const [selectedTier, setSelectedTier] = useState<TierId>('professional');
 
   const toggleFaq = (index: number) => {
     setOpenFaq(openFaq === index ? null : index);
@@ -454,51 +456,73 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
 
           {pricingMode === 'business' ? (
             <div className="space-y-16">
+              <div className="flex justify-center gap-2 mb-8">
+                {TIERS.map((tier) => (
+                  <button
+                    key={tier.id}
+                    onClick={() => setSelectedTier(tier.id)}
+                    className={`px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all ${
+                      selectedTier === tier.id
+                        ? 'bg-[#ff4d00] text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    } ${tier.popular ? 'ring-2 ring-[#ff4d00]/30' : ''}`}
+                  >
+                    {tier.name}
+                    {tier.popular && <span className="ml-2 text-[10px]">★</span>}
+                  </button>
+                ))}
+              </div>
+
               <div className="grid md:grid-cols-4 gap-4">
                 {[
-                  { name: "Starter", traffic: "60,000", price: "€29", cpm: "€0.48", desc: "Test new landing pages", highlight: false, badge: null },
-                  { name: "Growth", traffic: "500,000", price: "€129", cpm: "€0.26", desc: "Small business baseline", highlight: false, badge: "Most Popular", badgeColor: "bg-[#ff4d00]" },
-                  { name: "Business", traffic: "1,000,000", price: "€299", cpm: "€0.30", desc: "Impact domain authority", highlight: true, badge: "Best Value", badgeColor: "bg-green-500" },
-                  { name: "Enterprise", traffic: "10,000,000+", price: "€2,099", cpm: "€0.21", desc: "Competitive niches", highlight: false, badge: null },
-                ].map((p, i) => (
-                  <div key={i} className={`relative group transition-all duration-500 ${p.highlight ? 'md:-mt-4 md:mb-4' : ''}`}>
-                    <div className={`h-full flex flex-col bg-white transition-all duration-300 rounded-2xl ${p.highlight ? 'border-2 border-[#ff4d00] shadow-2xl shadow-[#ff4d00]/20 scale-105 z-10' : 'border border-gray-100 hover:border-[#ff4d00]/50 hover:shadow-xl'} p-6`}>
-                      {p.badge && (
-                        <div className={`absolute -top-3 left-1/2 -translate-x-1/2 ${p.badgeColor} text-white px-4 py-1 text-[9px] font-bold uppercase tracking-widest shadow-lg rounded-full whitespace-nowrap`}>
-                          {p.badge}
+                  { volume: 60000, name: "Starter", desc: "Test new landing pages" },
+                  { volume: 500000, name: "Growth", desc: "Small business baseline", badge: "Most Popular", badgeColor: "bg-[#ff4d00]" },
+                  { volume: 1000000, name: "Business", desc: "Impact domain authority", highlight: true, badge: "Best Value", badgeColor: "bg-green-500" },
+                  { volume: 10000000, name: "Enterprise", desc: "Competitive niches" },
+                ].map((p, i) => {
+                  const price = PRICING_MATRIX[selectedTier][p.volume]?.[1] || 0;
+                  const cpm = getCPM(selectedTier, p.volume, 1);
+                  const tier = TIERS.find(t => t.id === selectedTier);
+                  return (
+                    <div key={i} className={`relative group transition-all duration-500 ${p.highlight ? 'md:-mt-4 md:mb-4' : ''}`}>
+                      <div className={`h-full flex flex-col bg-white transition-all duration-300 rounded-2xl ${p.highlight ? 'border-2 border-[#ff4d00] shadow-2xl shadow-[#ff4d00]/20 scale-105 z-10' : 'border border-gray-100 hover:border-[#ff4d00]/50 hover:shadow-xl'} p-6`}>
+                        {p.badge && (
+                          <div className={`absolute -top-3 left-1/2 -translate-x-1/2 ${p.badgeColor} text-white px-4 py-1 text-[9px] font-bold uppercase tracking-widest shadow-lg rounded-full whitespace-nowrap`}>
+                            {p.badge}
+                          </div>
+                        )}
+                        
+                        <div className="mb-4">
+                          <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">{p.name}</h3>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-4xl font-black text-gray-900">{formatPrice(price)}</span>
+                            <span className="text-gray-400 text-xs font-medium">one-time</span>
+                          </div>
                         </div>
-                      )}
-                      
-                      <div className="mb-4">
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">{p.name}</h3>
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-4xl font-black text-gray-900">{p.price}</span>
-                          <span className="text-gray-400 text-xs font-medium">one-time</span>
+
+                        <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 mb-4 text-center border border-gray-100">
+                          <div className="text-2xl font-black text-gray-900">{p.volume >= 1000000 ? `${p.volume / 1000000}M` : `${p.volume / 1000}k`}</div>
+                          <div className="text-[10px] uppercase text-gray-500 font-bold tracking-wide">Visitors</div>
+                          <div className="text-[10px] text-[#ff4d00] font-bold mt-1">~{formatCPM(cpm)}/1k</div>
                         </div>
+
+                        <p className="text-xs text-gray-500 font-medium mb-4 min-h-[32px]">
+                          {p.desc}
+                        </p>
+
+                        <ul className="space-y-2 mb-6 flex-1 text-[11px]">
+                          {tier?.features.slice(0, 3).map((f, idx) => (
+                            <li key={idx} className="text-gray-600 flex items-center gap-2 font-medium"><Check size={12} className="text-green-500 flex-shrink-0" /> {f}</li>
+                          ))}
+                        </ul>
+
+                        <Link to="/signup" className={`w-full py-3 text-xs font-bold uppercase tracking-widest transition-all text-center rounded-xl ${p.highlight ? 'bg-[#ff4d00] text-white hover:bg-black shadow-lg' : 'bg-gray-900 text-white hover:bg-[#ff4d00]'}`}>
+                          Get Started
+                        </Link>
                       </div>
-
-                      <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 mb-4 text-center border border-gray-100">
-                        <div className="text-2xl font-black text-gray-900">{p.traffic}</div>
-                        <div className="text-[10px] uppercase text-gray-500 font-bold tracking-wide">Visitors</div>
-                        <div className="text-[10px] text-[#ff4d00] font-bold mt-1">~{p.cpm}/1k</div>
-                      </div>
-
-                      <p className="text-xs text-gray-500 font-medium mb-4 min-h-[32px]">
-                        {p.desc}
-                      </p>
-
-                      <ul className="space-y-2 mb-6 flex-1 text-[11px]">
-                        <li className="text-gray-600 flex items-center gap-2 font-medium"><Check size={12} className="text-green-500 flex-shrink-0" /> Geo Targeting</li>
-                        <li className="text-gray-600 flex items-center gap-2 font-medium"><Check size={12} className="text-green-500 flex-shrink-0" /> Device Split</li>
-                        <li className="text-gray-600 flex items-center gap-2 font-medium"><Check size={12} className="text-green-500 flex-shrink-0" /> All Traffic Sources</li>
-                      </ul>
-
-                      <Link to="/signup" className={`w-full py-3 text-xs font-bold uppercase tracking-widest transition-all text-center rounded-xl ${p.highlight ? 'bg-[#ff4d00] text-white hover:bg-black shadow-lg' : 'bg-gray-900 text-white hover:bg-[#ff4d00]'}`}>
-                        Get Started
-                      </Link>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 rounded-3xl p-8 md:p-12 relative overflow-hidden">

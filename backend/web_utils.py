@@ -2,14 +2,9 @@ import httpx
 import re
 import logging
 import asyncio
-import ssl
 import certifi
 
 logger = logging.getLogger(__name__)
-
-# Create SSL context with certifi certificates for macOS compatibility
-_ssl_context = ssl.create_default_context()
-_ssl_context.load_verify_locations(certifi.where())
 
 # Simple in-memory cache for page titles
 # {url: title}
@@ -26,7 +21,7 @@ async def fetch_page_title(url: str, timeout: float = 5.0) -> str:
 
     try:
         async with httpx.AsyncClient(
-            timeout=timeout, follow_redirects=True, verify=_ssl_context
+            timeout=timeout, follow_redirects=True, verify=certifi.where()
         ) as client:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -68,7 +63,7 @@ async def find_ga4_tid(url: str, timeout: float = 10.0) -> str:
     """
     try:
         async with httpx.AsyncClient(
-            timeout=timeout, follow_redirects=True, verify=_ssl_context
+            timeout=timeout, follow_redirects=True, verify=certifi.where()
         ) as client:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",

@@ -30,19 +30,19 @@ const AdminCoupons: React.FC<AdminCouponsProps> = ({ onRefresh }) => {
         loadCoupons();
     }, []);
 
-    const loadCoupons = () => {
-        const data = db.getCoupons();
+    const loadCoupons = async () => {
+        const data = await db.getCoupons();
         setCoupons(data);
     };
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (confirm('Are you sure you want to delete this coupon?')) {
-            db.deleteCoupon(id);
+            await db.deleteCoupon(id);
             loadCoupons();
         }
     };
 
-    const handleCreate = () => {
+    const handleCreate = async () => {
         if (!newCoupon.code || !newCoupon.discountValue) return;
 
         const coupon: Coupon = {
@@ -58,34 +58,29 @@ const AdminCoupons: React.FC<AdminCouponsProps> = ({ onRefresh }) => {
             allowedPlans: newCoupon.allowedPlans
         };
 
-        db.saveCoupon(coupon);
+        await db.saveCoupon(coupon);
         setIsCreating(false);
         setNewCoupon({ code: '', discountType: 'percent', discountValue: 0, active: true, usedCount: 0, allowedPlans: [], maxUsesPerUser: 1 });
         loadCoupons();
         onRefresh();
     };
 
-    const handleBulkGenerate = () => {
-        const batchId = Date.now().toString();
-        const newCoupons: Coupon[] = [];
-
+    const handleBulkGenerate = async () => {
         for (let i = 0; i < bulkCount; i++) {
             const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
-            newCoupons.push({
-                id: `${batchId}-${i}`,
+            const coupon: Coupon = {
+                id: `${Date.now()}-${i}`,
                 code: `${bulkPrefix}${randomStr}`,
                 discountType: newCoupon.discountType as 'percent' | 'fixed',
                 discountValue: Number(newCoupon.discountValue),
                 active: true,
                 usedCount: 0,
                 expiryDate: newCoupon.expiryDate,
-                maxUses: 1, // Usually single use for bulk
-                maxUsesPerUser: 1,
-                bulkBatchId: batchId
-            });
+                maxUses: 1,
+                maxUsesPerUser: 1
+            };
+            await db.saveCoupon(coupon);
         }
-
-        newCoupons.forEach(c => db.saveCoupon(c));
         setIsCreating(false);
         setIsBulkMode(false);
         loadCoupons();

@@ -48,13 +48,13 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
 
     const calculateAvailableHits = (tier: string): number => {
         const purchasedHits = transactions
-            .filter(t => t.type === 'credit' && t.tier === tier && t.hits)
+            .filter(t => t.type !== 'debit' && t.tier === tier && t.hits)
             .reduce((sum, t) => sum + (t.hits || 0), 0);
-        
+
         const usedHits = transactions
             .filter(t => t.type === 'debit' && t.tier === tier && t.hits)
             .reduce((sum, t) => sum + (t.hits || 0), 0);
-        
+
         return purchasedHits - usedHits;
     };
 

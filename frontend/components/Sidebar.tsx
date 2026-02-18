@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { MenuSection } from '../types';
 import { LogOut, ChevronRight, User } from 'lucide-react';
 import { db } from '../services/db';
@@ -12,7 +12,14 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ menuSections, currentView, onNavigate, onLogout }) => {
-  const user = db.getCurrentUser();
+  const [user, setUser] = useState(() => db.getCurrentUser());
+
+  useEffect(() => {
+    const storedUser = db.getCurrentUser();
+    if (storedUser) {
+      setUser(storedUser);
+    }
+  }, []);
 
   return (
     <aside className="w-64 bg-[#111111] text-white flex flex-col h-screen fixed left-0 top-0 z-20 hidden md:flex border-r border-gray-800 shadow-xl">
@@ -72,7 +79,7 @@ const Sidebar: React.FC<SidebarProps> = ({ menuSections, currentView, onNavigate
               </span>
             </div>
             <div className="text-[9px] font-mono text-gray-500 truncate" title={user.id}>
-              ID: {user.id.substring(0, 8).toUpperCase()}
+              ID: {user.id?.substring(0, 8).toUpperCase() || 'N/A'}
             </div>
           </div>
         )}

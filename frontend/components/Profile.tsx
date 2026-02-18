@@ -1,20 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-    User, Lock, Bell, Save, Camera, Mail, Terminal, Eye, EyeOff,
-    RefreshCw, Copy, Phone, MapPin, Building2, Globe, Hash,
-    CreditCard, Trash2, Plus, Home, Shield, Settings, Monitor,
-    Download, LogOut, ChevronRight, CheckCircle2, AlertTriangle, Languages, Clock
+    User, Lock, Bell, Save, Camera, Mail, Phone, MapPin, Building2, Globe, Hash,
+    Shield, CheckCircle2, AlertTriangle, Clock
 } from 'lucide-react';
 import { db } from '../services/db';
 import { User as UserType, PaymentMethod } from '../types';
 
-type ProfileTab = 'contact' | 'security' | 'notifications' | 'developer' | 'accessibility';
+type ProfileTab = 'contact' | 'security' | 'notifications';
 
 const Profile: React.FC = () => {
     const [activeTab, setActiveTab] = useState<ProfileTab>('contact');
     const [isLoading, setIsLoading] = useState(false);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
-    const [showApiKey, setShowApiKey] = useState(false);
     const [user, setUser] = useState<UserType | undefined>(undefined);
 
     // New Card State
@@ -70,9 +67,7 @@ const Profile: React.FC = () => {
         setIsLoading(true);
         setSaveStatus('idle');
         try {
-            await db.updateUserProfile(user);
-            // Re-fetch to ensure sync
-            const freshUser = await db.login(user.email, ''); // Hacky refresh or use a fetchUser
+            const freshUser = await db.updateUserProfile(user);
             if (freshUser) setUser(freshUser);
 
             setSaveStatus('success');
@@ -91,18 +86,6 @@ const Profile: React.FC = () => {
             setUser({ ...user, [field]: value });
         }
     };
-
-    const handleRegenerateKey = async () => {
-        if (user && confirm('Are you sure? This will invalidate your old key.')) {
-            try {
-                const newKey = await db.regenerateApiKey();
-                setUser({ ...user, apiKey: newKey });
-                alert('API Key regenerated successfully.');
-            } catch (e: any) {
-                alert('Failed to regenerate key: ' + e.message);
-            }
-        }
-    }
 
     const handlePasswordChange = async () => {
         setPasswordError('');
@@ -130,30 +113,6 @@ const Profile: React.FC = () => {
             }
         }
     };
-
-    const handleExportData = async () => {
-        try {
-            const data = await db.exportUserData();
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `user_data_${user?.id}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        } catch (e: any) {
-            alert('Export failed: ' + e.message);
-        }
-    };
-
-    const handleCopyKey = () => {
-        if (user?.apiKey) {
-            navigator.clipboard.writeText(user.apiKey);
-            alert('API Key copied to clipboard');
-        }
-    }
 
     // Payment Method Handlers
     const handleAddCard = () => {
@@ -284,53 +243,6 @@ const Profile: React.FC = () => {
                         >
                             <Bell size={16} /> Notifications
                         </button>
-                        <button
-                            onClick={() => setActiveTab('developer')}
-                            className={`w-full text-left px-6 py-4 text-xs font-bold uppercase tracking-wider flex items-center gap-3 border-l-4 transition-colors ${activeTab === 'developer' ? 'border-[#ff4d00] bg-gray-50 text-[#ff4d00]' : 'border-transparent text-gray-500 hover:bg-gray-50'
-                                }`}
-                        >
-                            <Terminal size={16} /> Developer Mode
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('accessibility')}
-                            className={`w-full text-left px-6 py-4 text-xs font-bold uppercase tracking-wider flex items-center gap-3 border-l-4 transition-colors ${activeTab === 'accessibility' ? 'border-[#ff4d00] bg-gray-50 text-[#ff4d00]' : 'border-transparent text-gray-500 hover:bg-gray-50'
-                                }`}
-                        >
-                            <Monitor size={16} /> Accessibility
-                        </button>
-                    </div>
-
-                    {/* Developer Settings (Always visible) */}
-                    <div className="bg-white border border-gray-200 p-8 shadow-sm relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-gray-50 rounded-full -mt-16 -mr-16 z-0"></div>
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-6 flex items-center gap-2 relative z-10">
-                            <Terminal size={14} /> Developer Settings
-                        </h3>
-                        <div className="relative z-10">
-                            <p className="text-sm text-gray-500 mb-4">Use this key to access the Modus Traffic API for programmatic campaign management.</p>
-                            <div className="flex gap-2 items-center">
-                                <div className="flex-1 bg-[#f9fafb] border border-gray-200 p-3 flex justify-between items-center font-mono text-sm">
-                                    <span className="text-gray-800 font-bold">
-                                        {showApiKey ? user.apiKey : '••••••••••••••••••••••••••••••'}
-                                    </span>
-                                    <button onClick={() => setShowApiKey(!showApiKey)} className="text-gray-400 hover:text-black">
-                                        {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                                    </button>
-                                </div>
-                                <button
-                                    onClick={handleCopyKey}
-                                    className="bg-gray-100 hover:bg-gray-200 text-gray-900 p-3 border border-gray-200" title="Copy Key"
-                                >
-                                    <Copy size={16} />
-                                </button>
-                                <button
-                                    onClick={handleRegenerateKey}
-                                    className="bg-black hover:bg-[#ff4d00] text-white p-3 shadow-sm transition-colors" title="Regenerate Key"
-                                >
-                                    <RefreshCw size={16} />
-                                </button>
-                            </div>
-                        </div>
                     </div>
                 </div>
 
@@ -455,19 +367,11 @@ const Profile: React.FC = () => {
                                     </div>
                                     <div>
                                         <Label>Country</Label>
-                                        <select
+                                        <Input
                                             value={user.country || ''}
-                                            onChange={(e) => handleInputChange('country', e.target.value)}
-                                            className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 focus:border-[#ff4d00] outline-none appearance-none"
-                                        >
-                                            <option value="">Select Country</option>
-                                            <option value="Germany">Germany</option>
-                                            <option value="United States">United States</option>
-                                            <option value="United Kingdom">United Kingdom</option>
-                                            <option value="Canada">Canada</option>
-                                            <option value="France">France</option>
-                                            <option value="Australia">Australia</option>
-                                        </select>
+                                            onChange={(v) => handleInputChange('country', v)}
+                                            placeholder="e.g. Germany"
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -622,145 +526,7 @@ const Profile: React.FC = () => {
                                 </div>
                             </div>
                         </>
-                    ) : activeTab === 'developer' ? (
-                        <>
-                            {/* API Keys & Whitelist */}
-                            <div className="bg-white border border-gray-200 p-8 shadow-sm">
-                                <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-6 flex items-center gap-2">
-                                    <Terminal size={14} /> Developer Configuration
-                                </h3>
-                                <div className="space-y-6">
-                                    <div>
-                                        <Label>IP Whitelist (One per line)</Label>
-                                        <textarea
-                                            value={user.apiWhitelist?.join('\n') || ''}
-                                            onChange={(e) => handleInputChange('apiWhitelist', e.target.value)}
-                                            className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 focus:border-[#ff4d00] outline-none min-h-[80px]"
-                                            placeholder="127.0.0.1"
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label>Webhook Signing Secret</Label>
-                                        <div className="flex gap-2">
-                                            <div className="flex-1 bg-[#f9fafb] border border-gray-200 p-3 font-mono text-sm">
-                                                {user.webhookSecret || 'whsec_••••••••••••••••'}
-                                            </div>
-                                            <button className="bg-black hover:bg-[#ff4d00] text-white p-3 transition-colors">
-                                                <RefreshCw size={16} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div className="pt-4">
-                                        <Toggle
-                                            label="Developer Mode (Show raw API responses)"
-                                            checked={user.developerMode || false}
-                                            onChange={(v) => handleInputChange('developerMode', v.toString())}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        </>
-                    ) : (
-                        <>
-                            <div className="bg-white border border-gray-200 p-8 shadow-sm">
-                                <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-6 flex items-center gap-2">
-                                    <Monitor size={14} /> Accessibility & Appearance
-                                </h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <div className="space-y-6">
-                                        <Toggle
-                                            label="Color Blind Mode"
-                                            checked={user.accessibility?.colorBlindMode || false}
-                                            onChange={(v) => setUser({ ...user, accessibility: { ...(user.accessibility || { fontSize: 'medium', compactMode: false, reduceMotion: false, colorBlindMode: false }), colorBlindMode: v } })}
-                                        />
-                                        <Toggle
-                                            label="Compact Mode (Reduced Padding)"
-                                            checked={user.accessibility?.compactMode || false}
-                                            onChange={(v) => setUser({ ...user, accessibility: { ...(user.accessibility || { fontSize: 'medium', compactMode: false, reduceMotion: false, colorBlindMode: false }), compactMode: v } })}
-                                        />
-                                    </div>
-                                    <div className="space-y-6">
-                                        <Toggle
-                                            label="Reduce Motion"
-                                            checked={user.accessibility?.reduceMotion || false}
-                                            onChange={(v) => setUser({ ...user, accessibility: { ...(user.accessibility || { fontSize: 'medium', compactMode: false, reduceMotion: false, colorBlindMode: false }), reduceMotion: v } })}
-                                        />
-                                        <div className="flex flex-col gap-2">
-                                            <Label>Font Size</Label>
-                                            <div className="flex gap-2">
-                                                {['small', 'medium', 'large']?.map((size: any) => (
-                                                    <button
-                                                        key={size}
-                                                        onClick={() => setUser({ ...user, accessibility: { ...(user.accessibility || { fontSize: 'medium', compactMode: false, reduceMotion: false, colorBlindMode: false }), fontSize: size } })}
-                                                        className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest border transition-colors ${user.accessibility?.fontSize === size ? 'bg-black text-white border-black' : 'bg-gray-50 text-gray-400 border-gray-200 hover:border-gray-300'}`}
-                                                    >
-                                                        {size}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Data Management */}
-                            <div className="bg-white border border-gray-200 p-8 shadow-sm">
-                                <h3 className="text-xs font-bold uppercase tracking-widest text-black mb-6 flex items-center gap-2">
-                                    <Download size={14} /> Data Management
-                                </h3>
-                                <div className="flex items-center justify-between p-4 bg-gray-50 border border-gray-100">
-                                    <div>
-                                        <h4 className="text-sm font-bold text-gray-900">GDPR Data Portability</h4>
-                                        <p className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">Download a full archive of your account data.</p>
-                                    </div>
-                                    <button onClick={handleExportData} className="bg-black text-white px-4 py-2 text-xs font-bold uppercase tracking-widest hover:bg-[#ff4d00] transition-colors flex items-center gap-2">
-                                        <Download size={12} /> Export JSON
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Miscellaneous Preferences */}
-                            <div className="bg-white border border-gray-200 p-8 shadow-sm">
-                                <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-6 flex items-center gap-2">
-                                    <Settings size={14} /> Misc Preferences
-                                </h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div>
-                                        <Label>Timezone</Label>
-                                        <select className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 outline-none">
-                                            <option>UTC (London)</option>
-                                            <option>GMT+1 (Berlin)</option>
-                                            <option>EST (New York)</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <Label>UI Language</Label>
-                                        <select className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 outline-none">
-                                            <option>English</option>
-                                            <option>Deutsch</option>
-                                            <option>Français</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Danger Zone */}
-                            <div className="bg-white border border-red-100 p-8 shadow-sm">
-                                <h3 className="text-xs font-bold uppercase tracking-widest text-red-500 mb-6 flex items-center gap-2">
-                                    <AlertTriangle size={14} /> Danger Zone
-                                </h3>
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <h4 className="text-sm font-bold text-gray-900">Delete Account</h4>
-                                        <p className="text-xs text-gray-500 mt-1">Once deleted, all your campaign data and credits will be lost forever.</p>
-                                    </div>
-                                    <button className="bg-red-50 text-red-600 px-4 py-2 text-xs font-bold uppercase tracking-wider hover:bg-red-600 hover:text-white transition-colors border border-red-200">
-                                        Delete Forever
-                                    </button>
-                                </div>
-                            </div>
-                        </>
-                    )}
+                    ) : null}
 
                 </div>
             </div>

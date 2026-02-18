@@ -59,6 +59,49 @@ stripe.api_key = STRIPE_SECRET_KEY
 # Create Tables
 models.Base.metadata.create_all(bind=engine)
 
+
+# Run column migrations for existing tables
+def run_column_migrations():
+    db = SessionLocal()
+    try:
+        from sqlalchemy import text
+
+        migrations = [
+            "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS session_token VARCHAR(255)",
+            "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS ip_address VARCHAR(100)",
+            "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS user_agent TEXT",
+            "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS device VARCHAR(50)",
+            "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS browser VARCHAR(50)",
+            "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS current_page VARCHAR(255)",
+            "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS total_visits INTEGER DEFAULT 1",
+            "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active'",
+            "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS last_active TIMESTAMP",
+            "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP",
+            "CREATE INDEX IF NOT EXISTS ix_user_sessions_session_token ON user_sessions(session_token)",
+            "CREATE TABLE IF NOT EXISTS user_notification_prefs (id VARCHAR(255) PRIMARY KEY, user_id VARCHAR(255) UNIQUE, email_marketing BOOLEAN DEFAULT TRUE, email_transactional BOOLEAN DEFAULT TRUE, email_alerts BOOLEAN DEFAULT TRUE, browser_notifications BOOLEAN DEFAULT TRUE, newsletter_sub BOOLEAN DEFAULT FALSE, email_frequency VARCHAR(50) DEFAULT 'instant', updated_at TIMESTAMP)",
+            "CREATE TABLE IF NOT EXISTS activity_logs (id VARCHAR(255) PRIMARY KEY, user_id VARCHAR(255), action VARCHAR(255), details JSONB, ip_address VARCHAR(100), user_agent TEXT, created_at TIMESTAMP)",
+            "CREATE TABLE IF NOT EXISTS token_blacklist (id VARCHAR(255) PRIMARY KEY, token VARCHAR(500), revoked_at TIMESTAMP, expires_at TIMESTAMP)",
+            "CREATE TABLE IF NOT EXISTS impersonation_logs (id VARCHAR(255) PRIMARY KEY, admin_id VARCHAR(255), target_user_id VARCHAR(255), started_at TIMESTAMP, ended_at TIMESTAMP, actions JSONB)",
+            "CREATE TABLE IF NOT EXISTS balance_adjustment_logs (id VARCHAR(255) PRIMARY KEY, user_id VARCHAR(255), admin_id VARCHAR(255), amount INTEGER, tier VARCHAR(50), reason TEXT, created_at TIMESTAMP)",
+            "CREATE TABLE IF NOT EXISTS email_logs (id VARCHAR(255) PRIMARY KEY, user_id VARCHAR(255), email_type VARCHAR(100), recipient VARCHAR(255), subject TEXT, status VARCHAR(50), error TEXT, sent_at TIMESTAMP)",
+        ]
+        for sql in migrations:
+            try:
+                db.execute(text(sql))
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                if (
+                    "already exists" not in str(e).lower()
+                    and "duplicate" not in str(e).lower()
+                ):
+                    logger.warning(f"Migration skipped: {e}")
+    finally:
+        db.close()
+
+
+run_column_migrations()
+
 app = FastAPI(title="TrafficGen Pro SaaS API")
 
 # Rate Limiter Configuration

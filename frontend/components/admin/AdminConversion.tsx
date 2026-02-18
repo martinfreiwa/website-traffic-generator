@@ -10,14 +10,13 @@ const AdminConversion: React.FC = () => {
     const [saveSuccess, setSaveSuccess] = useState(false);
 
     useEffect(() => {
-        const data = db.getConversionSettings();
-        setSettings(data);
+        db.getConversionSettings().then(data => setSettings(data));
     }, []);
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!settings) return;
         setIsSaving(true);
-        db.saveConversionSettings(settings);
+        await db.saveConversionSettings(settings);
 
         setTimeout(() => {
             setIsSaving(false);

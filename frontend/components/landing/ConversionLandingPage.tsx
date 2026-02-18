@@ -10,6 +10,7 @@ import {
 import AuthModal from './AuthModal';
 import TrafficTestWidget from './TrafficTestWidget';
 import LiveCounter from './LiveCounter';
+import { TIERS, PRICING_MATRIX, formatPrice, formatCPM, getCPM, TierId } from '../../constants/pricing';
 
 interface ConversionLandingPageProps {
     onLogin: () => void;
@@ -23,6 +24,7 @@ const ConversionLandingPage: React.FC<ConversionLandingPageProps> = ({ onLogin, 
     const [authMessage, setAuthMessage] = useState('');
     const [pendingUrl, setPendingUrl] = useState('');
     const [openFaq, setOpenFaq] = useState<number | null>(0);
+    const [selectedTier, setSelectedTier] = useState<TierId>('professional');
 
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -144,10 +146,10 @@ const ConversionLandingPage: React.FC<ConversionLandingPageProps> = ({ onLogin, 
         }
     ];
 
-    const pricingPlans = [
-        { name: "Starter", traffic: "60,000", price: "€29", cpm: "€0.48", desc: "Perfect for testing", highlight: false },
-        { name: "Growth", traffic: "500,000", price: "€129", cpm: "€0.26", desc: "Most popular choice", highlight: true, badge: "Most Popular" },
-        { name: "Business", traffic: "1,000,000", price: "€299", cpm: "€0.30", desc: "Serious growth", highlight: false, badge: "Best Value", badgeColor: "bg-green-500" },
+    const pricingPacks = [
+        { volume: 60000, name: "Starter", desc: "Perfect for testing" },
+        { volume: 500000, name: "Growth", desc: "Most popular choice", highlight: true, badge: "Most Popular" },
+        { volume: 1000000, name: "Business", desc: "Serious growth", badge: "Best Value", badgeColor: "bg-green-500" },
     ];
 
     const problems = [
@@ -333,51 +335,73 @@ const ConversionLandingPage: React.FC<ConversionLandingPageProps> = ({ onLogin, 
                         <p className="text-gray-500 max-w-xl mx-auto">No hidden fees. No monthly contracts. Choose your package and start immediately.</p>
                     </div>
 
-                    <div className="grid md:grid-cols-3 gap-6">
-                        {pricingPlans.map((plan, i) => (
-                            <div
-                                key={i}
-                                className={`relative bg-white rounded-2xl p-8 border transition-all ${plan.highlight ? 'border-2 border-[#ff4d00] shadow-2xl shadow-[#ff4d00]/20 scale-105 z-10' : 'border-gray-100 hover:border-[#ff4d00]/30 hover:shadow-xl'}`}
+                    <div className="flex justify-center gap-2 mb-8">
+                        {TIERS.map((tier) => (
+                            <button
+                                key={tier.id}
+                                onClick={() => setSelectedTier(tier.id)}
+                                className={`px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all ${
+                                    selectedTier === tier.id
+                                        ? 'bg-[#ff4d00] text-white'
+                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                } ${tier.popular ? 'ring-2 ring-[#ff4d00]/30' : ''}`}
                             >
-                                {plan.badge && (
-                                    <div className={`absolute -top-3 left-1/2 -translate-x-1/2 ${plan.badgeColor || 'bg-[#ff4d00]'} text-white px-4 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full whitespace-nowrap shadow-lg`}>
-                                        {plan.badge}
-                                    </div>
-                                )}
-
-                                <div className="mb-6">
-                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">{plan.name}</h3>
-                                    <div className="flex items-baseline gap-1">
-                                        <span className="text-4xl font-black text-gray-900">{plan.price}</span>
-                                        <span className="text-gray-400 text-sm font-medium">one-time</span>
-                                    </div>
-                                </div>
-
-                                <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 mb-6 text-center border border-gray-100">
-                                    <div className="text-2xl font-black text-gray-900">{plan.traffic}</div>
-                                    <div className="text-xs text-gray-500 font-bold uppercase tracking-wide">Visitors</div>
-                                    <div className="text-xs text-[#ff4d00] font-bold mt-1">~{plan.cpm}/1k</div>
-                                </div>
-
-                                <p className="text-sm text-gray-500 mb-6">{plan.desc}</p>
-
-                                <ul className="space-y-3 mb-8">
-                                    {['Geo Targeting', 'Device Split', 'All Traffic Sources', 'GA4 Compatible'].map((feature, idx) => (
-                                        <li key={idx} className="flex items-center gap-2 text-sm text-gray-600">
-                                            <Check size={16} className="text-green-500 shrink-0" />
-                                            {feature}
-                                        </li>
-                                    ))}
-                                </ul>
-
-                                <button
-                                    onClick={() => handleOpenAuth('signup')}
-                                    className={`w-full py-4 rounded-xl text-sm font-bold uppercase tracking-wide transition-all ${plan.highlight ? 'bg-[#ff4d00] text-white hover:bg-black shadow-lg' : 'bg-gray-900 text-white hover:bg-[#ff4d00]'}`}
-                                >
-                                    Get Started
-                                </button>
-                            </div>
+                                {tier.name}
+                                {tier.popular && <span className="ml-2 text-[10px]">★</span>}
+                            </button>
                         ))}
+                    </div>
+
+                    <div className="grid md:grid-cols-3 gap-6">
+                        {pricingPacks.map((pack, i) => {
+                            const price = PRICING_MATRIX[selectedTier][pack.volume]?.[1] || 0;
+                            const cpm = getCPM(selectedTier, pack.volume, 1);
+                            const tier = TIERS.find(t => t.id === selectedTier);
+                            return (
+                                <div
+                                    key={i}
+                                    className={`relative bg-white rounded-2xl p-8 border transition-all ${pack.highlight ? 'border-2 border-[#ff4d00] shadow-2xl shadow-[#ff4d00]/20 scale-105 z-10' : 'border-gray-100 hover:border-[#ff4d00]/30 hover:shadow-xl'}`}
+                                >
+                                    {pack.badge && (
+                                        <div className={`absolute -top-3 left-1/2 -translate-x-1/2 ${pack.badgeColor || 'bg-[#ff4d00]'} text-white px-4 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full whitespace-nowrap shadow-lg`}>
+                                            {pack.badge}
+                                        </div>
+                                    )}
+
+                                    <div className="mb-6">
+                                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">{pack.name}</h3>
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="text-4xl font-black text-gray-900">{formatPrice(price)}</span>
+                                            <span className="text-gray-400 text-sm font-medium">one-time</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 mb-6 text-center border border-gray-100">
+                                        <div className="text-2xl font-black text-gray-900">{pack.volume >= 1000000 ? `${pack.volume / 1000000}M` : `${pack.volume / 1000}k`}</div>
+                                        <div className="text-xs text-gray-500 font-bold uppercase tracking-wide">Visitors</div>
+                                        <div className="text-xs text-[#ff4d00] font-bold mt-1">~{formatCPM(cpm)}/1k</div>
+                                    </div>
+
+                                    <p className="text-sm text-gray-500 mb-6">{pack.desc}</p>
+
+                                    <ul className="space-y-3 mb-8">
+                                        {tier?.features.slice(0, 4).map((feature, idx) => (
+                                            <li key={idx} className="flex items-center gap-2 text-sm text-gray-600">
+                                                <Check size={16} className="text-green-500 shrink-0" />
+                                                {feature}
+                                            </li>
+                                        ))}
+                                    </ul>
+
+                                    <button
+                                        onClick={() => handleOpenAuth('signup')}
+                                        className={`w-full py-4 rounded-xl text-sm font-bold uppercase tracking-wide transition-all ${pack.highlight ? 'bg-[#ff4d00] text-white hover:bg-black shadow-lg' : 'bg-gray-900 text-white hover:bg-[#ff4d00]'}`}
+                                    >
+                                        Get Started
+                                    </button>
+                                </div>
+                            );
+                        })}
                     </div>
 
                     <div className="mt-12 flex flex-wrap justify-center gap-6 text-sm text-gray-500">

@@ -14,12 +14,14 @@ The backend is located in the `backend/` directory.
 
 - **Setup:** `pip install -r backend/requirements.txt`
 - **Development Server:** `uvicorn main:app --reload --port 8000` (run from `backend/`)
-- **Run All Tests:** `pytest backend/`
+- **Run All Tests:** `pytest backend/tests/`
 - **Run Specific Test File:** `pytest backend/tests/test_saas_flow.py`
 - **Run Single Test Case:** `pytest backend/tests/test_saas_flow.py::test_health_check`
 - **Run with Verbose Output:** `pytest backend/tests/test_saas_flow.py -v`
+- **Run Single Test with Full Details:** `pytest backend/tests/test_api_internal.py::TestAPIs::test_health -vv`
 - **Database Migrations:** Tables are auto-created via `models.Base.metadata.create_all(bind=engine)` in `main.py`.
 - **Database Path:** Defaults to `backend/traffic_nexus.db` (SQLite) unless `DATABASE_URL` is set.
+- **Create Tables Only:** `python3 -c "import models; from database import engine; models.Base.metadata.create_all(bind=engine)"`
 
 ### Frontend (React/TypeScript/Vite)
 The frontend is located in the `frontend/` directory.
@@ -45,6 +47,7 @@ The frontend is located in the `frontend/` directory.
 - **Explicitness:** Prefer explicit types (`string`, `number`, `User`) over `any`.
 - **Modularity:** Keep components and functions focused on a single responsibility.
 - **Comments:** Avoid comments unless explaining complex logic; prefer self-documenting code.
+- **Async/Await:** Use async/await consistently. Frontend db functions should return Promises when calling APIs.
 
 ### Backend (Python)
 - **Framework:** FastAPI with Pydantic v2 for request/response validation.
@@ -69,6 +72,8 @@ The frontend is located in the `frontend/` directory.
         # use db here
     ```
 - **UUIDs:** Primary keys are string UUIDs via `str(uuid.uuid4())`.
+- **Admin Endpoints:** Always check `current_user.role != "admin"` and raise 403 if not authorized.
+- **Response Models:** Use Pydantic models with `response_model=ModelName` for type-safe responses.
 
 ### Frontend (React/TypeScript)
 - **Framework:** React 19 with Vite and React Router DOM v7.
@@ -76,6 +81,7 @@ The frontend is located in the `frontend/` directory.
     ```tsx
     const MyComponent: React.FC<Props> = ({ prop }) => { ... }
     ```
+- **API Calls:** Always use `await` and make db functions async when calling backend APIs.
 - **Naming:**
     - Component Files: `PascalCase.tsx` (e.g., `Dashboard.tsx`)
     - Service Files: `camelCase.ts` (e.g., `db.ts`, `firebase.ts`)
@@ -108,10 +114,12 @@ backend/
 ├── enhanced_hit_emulator.py  # Traffic simulation logic
 ├── web_utils.py         # GA4 TID extraction utilities
 ├── sitemap_crawler.py   # Sitemap parsing
-├── email_service.py     # Email sending utilities
+├── email_service.py     # Email sending (Resend)
 └── tests/               # Pytest suite
     ├── test_saas_flow.py
-    └── test_api_internal.py
+    ├── test_api_internal.py
+    ├── test_chat.py
+    └── test_profile_db_persistence.py
 
 frontend/
 ├── App.tsx              # Root component with routing
@@ -144,6 +152,18 @@ frontend/
 - **Rate Limiting:** Uses `slowapi` with `Limiter` middleware. Handler at `@app.exception_handler(RateLimitExceeded)`.
 - **Static Files:** Served from `static/avatars` and `static/assets` directories.
 - **Stripe Integration:** Uses `stripe` Python SDK with `STRIPE_SECRET_KEY` environment variable.
+- **Email Service:** Uses Resend (`resend` package) via `email_service.py`. Configure with `RESEND_API_KEY`.
+- **Database:** SQLAlchemy with SQLite (default) or PostgreSQL (via `DATABASE_URL` env var).
+
+### Database Models
+Recent additions to `models.py`:
+- `UserSession` - Track active user sessions for real-time monitoring
+- `ConversionSettings` - Social proof, exit intent, promo bar settings
+- `LoyaltySettings` - Loyalty program configuration
+- `ReferralSettings` - Referral program configuration
+- `FAQ` - Help desk FAQs
+- `Coupon` - Discount codes
+- `MarketingCampaign` - Ad tracking campaigns
 
 ### Environment Variables
 | Variable | Purpose |
@@ -152,6 +172,7 @@ frontend/
 | `DATABASE_URL` | Postgres URL; defaults to SQLite if unset |
 | `ALLOWED_ORIGINS` | CORS origins (comma-separated) |
 | `STRIPE_SECRET_KEY` | Stripe API key for payments |
+| `RESEND_API_KEY` | Email sending via Resend |
 | `SECRET_KEY` | FastAPI secret key (hardcoded in main.py as fallback) |
 
 ---
@@ -164,7 +185,9 @@ frontend/
 - **Test Verification:** After changes, run `pytest backend/tests/` and `npx tsc --noEmit` to verify.
 - **Pydantic Models:** Use `BaseModel` for request/response schemas. Use `model_validator` for cross-field validation.
 - **API Response Patterns:** Always return JSON-serializable data. Use Pydantic models for type safety.
+- **New Features:** When adding new settings tables, use the pattern: GET creates default if not exists, PUT updates only provided fields.
+- **Frontend Async:** Always convert localStorage-only functions to async API calls when backend endpoints are available.
 
 ---
 
-*Revision: 2026-02-16 | Target: Agentic Coding Assistants*
+*Revision: 2026-02-18 | Target: Agentic Coding Assistants*

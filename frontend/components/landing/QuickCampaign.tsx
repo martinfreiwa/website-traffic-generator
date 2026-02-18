@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Globe, Clock, ArrowRight, AlertCircle, CheckCircle, Zap, Users, Globe2, MousePointer, Timer, TrendingUp, Eye, MapPin, Target, BarChart3, Shield } from 'lucide-react';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin;
+
 interface QuickCampaignProps {
   onSuccess?: () => void;
 }
@@ -56,7 +58,7 @@ const QuickCampaign: React.FC<QuickCampaignProps> = ({ onSuccess }) => {
       const timeOnPageLabel = timeOptions.find(t => t.value === timeOnPage)?.label || '30 seconds';
       const deviceSplit = { desktop: 60, mobile: 30, tablet: 10 };
 
-      const response = await fetch('http://127.0.0.1:8001/quick-campaign', {
+      const response = await fetch(`${API_BASE_URL}/quick-campaign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -7,14 +7,15 @@
 
 
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Project, ProjectSettings, TrafficLog, GeoTarget, PayloadTemplate } from '../types';
 import { db } from '../services/db';
 import {
     ArrowLeft, Calendar, Save, Copy, RefreshCw, Layers,
     HelpCircle, Globe, Activity, Smartphone, Monitor, CheckCircle2, Zap, Radio, Lock, ToggleLeft, ToggleRight,
-    Plus, Trash2, Download, Upload, AlertCircle, FileCode, Search, MapPin, X, Target, BarChart2, Star, Play, Pause
+    Plus, Trash2, Download, Upload, AlertCircle, FileCode, Search, MapPin, X, Target, BarChart2, Star, Play, Pause,
+    Pencil, ChevronDown, ChevronUp
 } from 'lucide-react';
 import CustomSelect from './CustomSelect';
 import { COUNTRY_MAP, COUNTRIES_LIST, ALL_LANGUAGES, TRAFFIC_SOURCES, TIME_ON_PAGE_OPTS, TIMEZONES } from '../constants';
@@ -25,39 +26,24 @@ interface ProjectDetailsProps {
     onUpdate?: () => void;
 }
 
-// --- DEVICE / OS LIST ---
-const DEVICE_OS_LIST = [
-    { value: "All", label: "All Devices (Use Slider)" },
-    { value: "Desktop, Windows", label: "Desktop - Windows" },
-    { value: "Desktop, MacOS", label: "Desktop - MacOS" },
-    { value: "Desktop, Linux", label: "Desktop - Linux" },
-    { value: "Mobile, iPhone", label: "Mobile - iPhone" },
-    { value: "Mobile, Android", label: "Mobile - Android" }
-];
-
-const BROWSERS = [
-    { value: "Random", label: "Random (Default)" },
-    { value: "Chrome", label: "Chrome" },
-    { value: "Firefox", label: "Firefox" },
-    { value: "Safari", label: "Safari" },
-    { value: "Edge", label: "Microsoft Edge" }
-];
-
-const PROXY_MODES = [
-    { value: "auto", label: "Auto-Rotate by Location" },
-    { value: "sticky", label: "Sticky Session (Keep IP)" },
-    { value: "custom", label: "Custom Proxy List" }
-];
-
-const SCHEDULE_MODES = [
-    { value: "continuous", label: "Continuous (Daily Limits)" },
-    { value: "burst", label: "Scheduled Burst" }
-];
-
 const URL_ORDER_MODES = [
     { value: "random", label: "Random Selection" },
     { value: "sequential", label: "Sequential Funnel" }
 ];
+
+const fillMissingDays = (stats: { date: string; visitors: number; pageviews: number }[], days: number = 30): { date: string; visitors: number; pageviews: number }[] => {
+    const result: { date: string; visitors: number; pageviews: number }[] = [];
+    const statsMap = new Map(stats.map(s => [s.date, s]));
+    
+    for (let i = days - 1; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toISOString().split('T')[0];
+        const existing = statsMap.get(dateStr);
+        result.push(existing || { date: dateStr, visitors: 0, pageviews: 0 });
+    }
+    return result;
+};
 
 const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUpdate }) => {
     const navigate = useNavigate();
@@ -69,10 +55,6 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
     const [projectStats, setProjectStats] = useState<{ date: string; visitors: number; pageviews: number }[]>([]);
     const [hourlyStats, setHourlyStats] = useState<{ hour: string; visitors: number; pageviews: number }[]>([]);
 
-    // Real-time traffic state
-    const [activeVisitors, setActiveVisitors] = useState(0);
-    const [lastHitTime, setLastHitTime] = useState<string | null>(null);
-
     // Template State
     const [showSaveTemplate, setShowSaveTemplate] = useState(false);
     const [showLoadTemplate, setShowLoadTemplate] = useState(false);
@@ -80,9 +62,27 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
     const [systemTemplates, setSystemTemplates] = useState<PayloadTemplate[]>([]);
 
     // Chart State
-    const [chartMode, setChartMode] = useState<'visitors' | 'pageviews'>('visitors');
-    const [chartView, setChartView] = useState<'daily' | 'hourly'>('daily');
+    const [chartMode, setChartMode] = useState<'visitors' | 'pageviews'>('pageviews');
+    const [chartView, setChartView] = useState<'daily' | 'hourly' | 'live'>('daily');
     const [statsLoading, setStatsLoading] = useState(false);
+    const [liveStats, setLiveStats] = useState<{ time: string; visitors: number; pageviews: number }[]>([]);
+    const liveIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Name Edit State
+    const [isEditingName, setIsEditingName] = useState(false);
+    const [editedName, setEditedName] = useState('');
+
+    // Schedule State
+    const [isScheduleExpanded, setIsScheduleExpanded] = useState(false);
+
+    // Calculated Expiry State
+    const [calculatedExpiry, setCalculatedExpiry] = useState<{
+        daysRemaining: number | null;
+        expiresDate: string | null;
+        balance: number;
+        totalDailyConsumption: number;
+        message: string | null;
+    } | null>(null);
 
     // GA Scanner State
     const [isScanningGA, setIsScanningGA] = useState(false);
@@ -142,6 +142,11 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                 currentSettings.languages = [currentSettings.language || 'en-US'];
             }
 
+            // Migration: Map daily_limit from customTarget to scheduleTrafficAmount in settings
+            if (!currentSettings.scheduleTrafficAmount && p.customTarget?.dailyLimit) {
+                currentSettings.scheduleTrafficAmount = p.customTarget.dailyLimit;
+            }
+
             setSettings(currentSettings);
         }
 
@@ -152,12 +157,21 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
         setLoading(false);
     }, [projectId]);
 
+    // Fetch calculated expiry
+    useEffect(() => {
+        const fetchExpiry = async () => {
+            const expiry = await db.getCalculatedExpiry(projectId);
+            setCalculatedExpiry(expiry);
+        };
+        fetchExpiry();
+    }, [projectId]);
+
     // Fetch project stats
     useEffect(() => {
         const fetchStats = async () => {
             setStatsLoading(true);
             const stats = await db.syncProjectStats(projectId, 30);
-            setProjectStats(stats);
+            setProjectStats(fillMissingDays(stats, 30));
             setStatsLoading(false);
         };
         fetchStats();
@@ -176,38 +190,29 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
         fetchHourlyStats();
     }, [projectId, chartView]);
 
-    // Real-time traffic polling
+    // Live stats polling
     useEffect(() => {
-        const fetchActiveNow = async () => {
-            try {
-                const data = await db.getActiveNow();
-                const projectData = data.projects[projectId];
-                if (projectData) {
-                    setActiveVisitors(projectData.active);
-                    setLastHitTime(projectData.lastHit || null);
-                } else {
-                    setActiveVisitors(0);
-                }
-            } catch (e) {
-                console.error('Failed to fetch active visitors:', e);
+        const fetchLiveStats = async () => {
+            if (chartView === 'live') {
+                setStatsLoading(true);
+                const stats = await db.syncProjectStatsLive(projectId);
+                setLiveStats(stats);
+                setStatsLoading(false);
             }
         };
 
-        fetchActiveNow();
-        const interval = setInterval(fetchActiveNow, 5000);
-        return () => clearInterval(interval);
-    }, [projectId]);
+        if (chartView === 'live') {
+            fetchLiveStats();
+            liveIntervalRef.current = setInterval(fetchLiveStats, 5 * 60 * 1000);
+        }
 
-    // Format time ago
-    const formatTimeAgo = (isoString: string | null) => {
-        if (!isoString) return null;
-        const date = new Date(isoString);
-        const now = new Date();
-        const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-        if (seconds < 60) return `${seconds}s ago`;
-        if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-        return `${Math.floor(seconds / 3600)}h ago`;
-    };
+        return () => {
+            if (liveIntervalRef.current) {
+                clearInterval(liveIntervalRef.current);
+                liveIntervalRef.current = null;
+            }
+        };
+    }, [projectId, chartView]);
 
     // Click Outside Handler for Dropdowns
     useEffect(() => {
@@ -225,22 +230,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
 
     const handleChange = (key: keyof ProjectSettings, value: any) => {
         if (isFreeTrial) return;
-
-        let updates: Partial<ProjectSettings> = { [key]: value };
-
-        // Device Logic: If specific mobile OS selected, force split to 0 (100% Mobile)
-        if (key === 'deviceSpecific') {
-            const val = value as string;
-            if (val.includes('Mobile')) {
-                updates.deviceSplit = 0;
-                updates.tabletSplit = 0;
-            } else if (val.includes('Desktop')) {
-                updates.deviceSplit = 100;
-                updates.tabletSplit = 0;
-            }
-        }
-
-        setSettings(prev => prev ? ({ ...prev, ...updates }) : undefined);
+        setSettings(prev => prev ? ({ ...prev, [key]: value }) : undefined);
     };
 
     const handleSave = async () => {
@@ -450,18 +440,64 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                                 {project.plan} Plan
                             </span>
                         </div>
-                        <h2 className="text-2xl font-black text-gray-900">{project.name}</h2>
+                        {isEditingName ? (
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="text"
+                                    value={editedName}
+                                    onChange={(e) => setEditedName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && editedName.trim()) {
+                                            setProject({ ...project, name: editedName.trim() });
+                                            setIsEditingName(false);
+                                        }
+                                        if (e.key === 'Escape') {
+                                            setIsEditingName(false);
+                                            setEditedName(project.name);
+                                        }
+                                    }}
+                                    onBlur={() => {
+                                        if (editedName.trim()) {
+                                            setProject({ ...project, name: editedName.trim() });
+                                        }
+                                        setIsEditingName(false);
+                                    }}
+                                    className="text-2xl font-black text-gray-900 bg-gray-100 px-2 py-1 outline-none focus:ring-2 focus:ring-[#ff4d00]"
+                                    autoFocus
+                                />
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2 group">
+                                <h2 className="text-2xl font-black text-gray-900">{project.name}</h2>
+                                <button
+                                    onClick={() => {
+                                        setEditedName(project.name);
+                                        setIsEditingName(true);
+                                    }}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-100 rounded"
+                                    title="Edit project name"
+                                >
+                                    <Pencil size={16} className="text-[#ff4d00]" />
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
                 <div className="flex flex-wrap gap-2 items-center">
 
                     {/* Template Controls */}
-                    <div className="flex items-center gap-1 mr-4 border-r border-gray-200 pr-4">
-                        <button onClick={() => setShowSaveTemplate(true)} className="p-2 text-gray-500 hover:text-black hover:bg-gray-100 rounded-sm" title="Save as Template">
-                            <Save size={16} />
+                    <div className="flex items-center gap-2 mr-4 border-r border-gray-200 pr-4">
+                        <button
+                            onClick={() => setShowSaveTemplate(true)}
+                            className="flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider text-gray-600 hover:text-[#ff4d00] hover:bg-orange-50 border border-gray-200 hover:border-[#ff4d00] transition-colors"
+                        >
+                            <Save size={14} className="text-[#ff4d00]" /> Save Template
                         </button>
-                        <button onClick={() => setShowLoadTemplate(true)} className="p-2 text-gray-500 hover:text-black hover:bg-gray-100 rounded-sm" title="Load Template">
-                            <Upload size={16} />
+                        <button
+                            onClick={() => setShowLoadTemplate(true)}
+                            className="flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider text-gray-600 hover:text-[#ff4d00] hover:bg-orange-50 border border-gray-200 hover:border-[#ff4d00] transition-colors"
+                        >
+                            <Upload size={14} className="text-[#ff4d00]" /> Load Template
                         </button>
                     </div>
 
@@ -565,39 +601,119 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                 </div>
                 <div className="bg-white p-5 border border-gray-200 shadow-sm flex flex-col justify-between">
                     <div className="text-xs font-bold uppercase text-gray-400 mb-2 flex items-center gap-2"><Radio size={14} /> Status</div>
-                    <div className={`text-sm font-black uppercase tracking-wide ${project.status === 'active' ? 'text-green-600' : project.status === 'stopped' ? 'text-yellow-600' : 'text-gray-500'}`}>
+                    <div className={`text-sm font-black uppercase tracking-wide ${project.status === 'active' ? 'text-green-600' : project.status === 'stopped' ? 'text-red-600' : 'text-gray-500'}`}>
                         {project.status === 'completed' ? 'Expired' : project.status}
                     </div>
                 </div>
                 <div className="bg-white p-5 border border-gray-200 shadow-sm flex flex-col justify-between">
                     <div className="text-xs font-bold uppercase text-gray-400 mb-2 flex items-center gap-2"><Calendar size={14} /> Expires</div>
-                    <div className="text-sm font-bold text-gray-900">{project.expires}</div>
+                    {calculatedExpiry ? (
+                        <div>
+                            {calculatedExpiry.message ? (
+                                <div className="text-sm font-bold text-orange-500">{calculatedExpiry.message}</div>
+                            ) : calculatedExpiry.daysRemaining !== null ? (
+                                <div>
+                                    <div className="text-sm font-bold text-gray-900">{calculatedExpiry.expiresDate}</div>
+                                    <div className="text-[10px] text-gray-500 mt-1">
+                                        {calculatedExpiry.daysRemaining.toFixed(1)} days remaining
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="text-sm font-bold text-gray-900">{project.expires}</div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="text-sm font-bold text-gray-900">{project.expires}</div>
+                    )}
                 </div>
+            </div>
+
+            {/* --- TRAFFIC SCHEDULE --- */}
+            <div className="bg-white border border-gray-200 shadow-sm overflow-hidden">
+                <button
+                    onClick={() => setIsScheduleExpanded(!isScheduleExpanded)}
+                    className="w-full flex items-center justify-between p-6 hover:bg-gray-50 transition-colors"
+                >
+                    <div className="flex items-center gap-3">
+                        <Calendar size={18} className="text-[#ff4d00]" />
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00]">Traffic Schedule</h3>
+                    </div>
+                    {isScheduleExpanded ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+                </button>
+                
+                {isScheduleExpanded && (
+                    <div className="p-6 pt-0 border-t border-gray-100 animate-in fade-in slide-in-from-top-2">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-4">
+                            <div>
+                                <Label>Start Date</Label>
+                                <input
+                                    type="date"
+                                    value={settings.scheduleStart || ''}
+                                    onChange={(e) => handleChange('scheduleStart', e.target.value)}
+                                    className="w-full bg-[#f9fafb] border-b-2 border-transparent focus:border-[#ff4d00] p-3 outline-none text-sm font-medium"
+                                    disabled={isFreeTrial}
+                                />
+                            </div>
+                            <div>
+                                <Label>End Date</Label>
+                                <input
+                                    type="date"
+                                    value={settings.scheduleEnd || ''}
+                                    onChange={(e) => handleChange('scheduleEnd', e.target.value)}
+                                    className="w-full bg-[#f9fafb] border-b-2 border-transparent focus:border-[#ff4d00] p-3 outline-none text-sm font-medium"
+                                    disabled={isFreeTrial}
+                                />
+                            </div>
+                            <div>
+                                <Label>Daily Traffic (Hits per Day)</Label>
+                                <input
+                                    type="number"
+                                    value={settings.scheduleTrafficAmount || ''}
+                                    onChange={(e) => handleChange('scheduleTrafficAmount', parseInt(e.target.value) || 0)}
+                                    className="w-full bg-[#f9fafb] border-b-2 border-transparent focus:border-[#ff4d00] p-3 outline-none text-sm font-medium"
+                                    placeholder="Hits per day"
+                                    disabled={isFreeTrial}
+                                />
+                            </div>
+                            <div>
+                                <Label>Distribution Pattern</Label>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => handleChange('schedulePattern', 'even')}
+                                        className={`flex-1 px-3 py-3 text-xs font-bold uppercase tracking-wider border transition-colors ${
+                                            settings.schedulePattern === 'even' || !settings.schedulePattern
+                                                ? 'border-[#ff4d00] bg-orange-50 text-[#ff4d00]'
+                                                : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                                        }`}
+                                        disabled={isFreeTrial}
+                                    >
+                                        Even
+                                    </button>
+                                    <button
+                                        onClick={() => handleChange('schedulePattern', 'realistic')}
+                                        className={`flex-1 px-3 py-3 text-xs font-bold uppercase tracking-wider border transition-colors ${
+                                            settings.schedulePattern === 'realistic'
+                                                ? 'border-[#ff4d00] bg-orange-50 text-[#ff4d00]'
+                                                : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                                        }`}
+                                        disabled={isFreeTrial}
+                                    >
+                                        Realistic
+                                    </button>
+                                </div>
+                                {settings.schedulePattern === 'realistic' && (
+                                    <p className="text-[10px] text-gray-500 mt-2">
+                                        Traffic varies by time of day and day of week for natural patterns.
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* --- TRAFFIC CHART --- */}
             <div className="bg-white border border-gray-200 shadow-sm p-6">
-                {/* Real-time Traffic Widget */}
-                <div className="mb-6 p-4 rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="relative">
-                                <div className="w-4 h-4 bg-green-500 rounded-full animate-pulse"></div>
-                                <div className="absolute inset-0 w-4 h-4 bg-green-400 rounded-full animate-ping"></div>
-                            </div>
-                            <div>
-                                <div className="text-xs font-bold uppercase tracking-wider text-green-700">Live Traffic</div>
-                                <div className="text-2xl font-black text-green-800">{activeVisitors} <span className="text-sm font-medium text-green-600">active now</span></div>
-                            </div>
-                        </div>
-                        {lastHitTime && (
-                            <div className="text-xs text-green-600">
-                                Last hit: {formatTimeAgo(lastHitTime)}
-                            </div>
-                        )}
-                    </div>
-                </div>
-
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                     <div className="flex items-center gap-4">
                         <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00]">Traffic Statistics</h3>
@@ -608,34 +724,44 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                         <div className="flex bg-gray-100 rounded-sm p-1">
                             <button onClick={() => setChartView('daily')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm transition-all ${chartView === 'daily' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-700'}`}>30 Days</button>
                             <button onClick={() => setChartView('hourly')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm transition-all ${chartView === 'hourly' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-700'}`}>24 Hours</button>
+                            <button onClick={() => setChartView('live')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm transition-all ${chartView === 'live' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-700'}`}>Live</button>
                         </div>
                     </div>
                     <div className="text-xs text-gray-500 font-bold">
                         Total {chartMode === 'visitors' ? 'Visits' : 'Views'}: 
                         <span className="text-gray-900 ml-1">
-                            {(chartView === 'daily' ? stats : hourlyStats).reduce((a, b) => a + (chartMode === 'visitors' ? b.visitors : (b.pageviews || b.visitors)), 0).toLocaleString()}
+                            {(chartView === 'daily' ? stats : chartView === 'hourly' ? hourlyStats : liveStats).reduce((a, b) => a + (chartMode === 'visitors' ? b.visitors : (b.pageviews || b.visitors)), 0).toLocaleString()}
                         </span>
                     </div>
                 </div>
 
+                {chartView === 'live' && (
+                    <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-sm flex items-center gap-2">
+                        <div className="w-2 h-2 bg-[#ff4d00] rounded-full animate-pulse"></div>
+                        <span className="text-xs font-bold text-orange-700 uppercase tracking-wide">Live Traffic - Updated every 5 minutes</span>
+                    </div>
+                )}
+
                 <div className="h-64 flex items-end justify-between gap-1 w-full px-4 border-b border-gray-100 pb-2">
                     {statsLoading ? (
                         <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm animate-pulse">Loading statistics...</div>
-                    ) : (chartView === 'daily' ? stats : hourlyStats).length === 0 ? (
-                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">No traffic data available.</div>
+                    ) : (chartView === 'daily' ? stats : chartView === 'hourly' ? hourlyStats : liveStats).length === 0 ? (
+                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
+                            {chartView === 'live' ? 'No live traffic data available.' : 'No traffic data available.'}
+                        </div>
                     ) : (
-                        (chartView === 'daily' ? stats : hourlyStats).map((stat, i) => {
+                        (chartView === 'daily' ? stats : chartView === 'hourly' ? hourlyStats : liveStats).map((stat, i) => {
                             const val = chartMode === 'visitors' ? stat.visitors : (stat.pageviews || stat.visitors);
-                            const dataStats = chartView === 'daily' ? stats : hourlyStats;
+                            const dataStats = chartView === 'daily' ? stats : chartView === 'hourly' ? hourlyStats : liveStats;
                             const localMax = Math.max(...dataStats.map(s => chartMode === 'visitors' ? s.visitors : (s.pageviews || s.visitors)), 1);
                             const heightPercent = localMax > 0 ? (val / localMax) * 100 : 0;
-                            const label = chartView === 'daily' ? (stat as any).date : (stat as any).hour;
+                            const label = chartView === 'daily' ? (stat as any).date : chartView === 'hourly' ? (stat as any).hour : (stat as any).time;
                             return (
                                 <div key={i} className="flex-1 flex flex-col justify-end group relative h-full">
                                     <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-black text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 whitespace-nowrap">
                                         {label}: {val.toLocaleString()}
                                     </div>
-                                    <div className="w-full bg-[#ff4d00] opacity-80 hover:opacity-100 transition-opacity rounded-t-sm min-w-[4px]" style={{ height: `${heightPercent}%`, minHeight: '4px' }}></div>
+                                    <div className={`w-full opacity-80 hover:opacity-100 transition-opacity rounded-t-sm min-w-[4px] ${chartView === 'live' ? 'bg-[#ff4d00]' : 'bg-[#ff4d00]'}`} style={{ height: `${heightPercent}%`, minHeight: '4px' }}></div>
                                 </div>
                             )
                         })
@@ -652,38 +778,10 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                     </h3>
 
                     <div className="space-y-8">
-                        <div>
-                            <Label>Project Name</Label>
-                            <input
-                                value={project.name}
-                                onChange={(e) => setProject({ ...project, name: e.target.value })}
-                                className="w-full bg-[#f9fafb] border-b-2 border-transparent focus:border-[#ff4d00] p-3 outline-none text-sm font-bold text-gray-900 transition-colors"
-                                disabled={isFreeTrial}
-                            />
-                        </div>
-
                         <RangeControl label="Bounce Rate" value={settings.bounceRate} onChange={(v) => handleChange('bounceRate', v)} suffix="%" />
                         <RangeControl label="Visitor Returning Rate" value={settings.returnRate} onChange={(v) => handleChange('returnRate', v)} suffix="%" />
 
                         <div className="space-y-6">
-                            <div className="flex justify-between items-end">
-                                <Label>Platform & Operating System</Label>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                                <CustomSelect
-                                    value={settings.deviceSpecific || 'All'}
-                                    onChange={(v) => handleChange('deviceSpecific', v)}
-                                    options={DEVICE_OS_LIST}
-                                    disabled={isFreeTrial}
-                                />
-                                <CustomSelect
-                                    value={settings.browser || 'Random'}
-                                    onChange={(v) => handleChange('browser', v)}
-                                    options={BROWSERS}
-                                    disabled={isFreeTrial}
-                                />
-                            </div>
-
                             <div className="flex justify-between items-end">
                                 <Label>Device Distribution</Label>
                                 <div className="flex gap-2">
@@ -693,61 +791,57 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                                 </div>
                             </div>
 
-                            {/* Improved Sliders for Desktop / Tablet / Mobile */}
-                            <div className={`space-y-4 pt-1 ${settings.deviceSpecific !== 'All' ? 'opacity-50 pointer-events-none' : ''}`}>
+                            {/* Visual Bar */}
+                            <div className="relative h-4 bg-gray-100 rounded-sm overflow-hidden flex text-[8px] font-bold text-white uppercase text-center leading-4 shadow-inner">
+                                <div className="h-full bg-[#ff4d00]" style={{ width: `${settings.deviceSplit}%` }}>{settings.deviceSplit > 10 && 'Desktop'}</div>
+                                <div className="h-full bg-gray-600" style={{ width: `${settings.tabletSplit || 0}%` }}>{(settings.tabletSplit || 0) > 10 && 'Tablet'}</div>
+                                <div className="h-full bg-black/80" style={{ width: `${100 - settings.deviceSplit - (settings.tabletSplit || 0)}%` }}>{(100 - settings.deviceSplit - (settings.tabletSplit || 0)) > 10 && 'Mobile'}</div>
+                            </div>
 
-                                {/* Visual Bar */}
-                                <div className="relative h-4 bg-gray-100 rounded-sm overflow-hidden flex text-[8px] font-bold text-white uppercase text-center leading-4 shadow-inner">
-                                    <div className="h-full bg-[#ff4d00]" style={{ width: `${settings.deviceSplit}%` }}>{settings.deviceSplit > 10 && 'Desktop'}</div>
-                                    <div className="h-full bg-gray-600" style={{ width: `${settings.tabletSplit || 0}%` }}>{(settings.tabletSplit || 0) > 10 && 'Tablet'}</div>
-                                    <div className="h-full bg-black/80" style={{ width: `${100 - settings.deviceSplit - (settings.tabletSplit || 0)}%` }}>{(100 - settings.deviceSplit - (settings.tabletSplit || 0)) > 10 && 'Mobile'}</div>
+                            {/* Desktop Slider */}
+                            <div className="relative">
+                                <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase mb-1">
+                                    <span className="flex items-center gap-1 text-[#ff4d00]"><Monitor size={12} /> Desktop</span>
+                                    <span>{settings.deviceSplit}%</span>
                                 </div>
+                                <input
+                                    type="range"
+                                    min="0" max="100"
+                                    value={settings.deviceSplit}
+                                    onChange={(e) => {
+                                        const v = parseInt(e.target.value);
+                                        const max = 100 - (settings.tabletSplit || 0);
+                                        handleChange('deviceSplit', Math.min(v, max));
+                                    }}
+                                    className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#ff4d00]"
+                                    disabled={isFreeTrial}
+                                />
+                            </div>
 
-                                {/* Desktop Slider */}
-                                <div className="relative">
-                                    <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase mb-1">
-                                        <span className="flex items-center gap-1 text-[#ff4d00]"><Monitor size={12} /> Desktop</span>
-                                        <span>{settings.deviceSplit}%</span>
-                                    </div>
-                                    <input
-                                        type="range"
-                                        min="0" max="100"
-                                        value={settings.deviceSplit}
-                                        onChange={(e) => {
-                                            const v = parseInt(e.target.value);
-                                            const max = 100 - (settings.tabletSplit || 0);
-                                            handleChange('deviceSplit', Math.min(v, max));
-                                        }}
-                                        className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#ff4d00]"
-                                        disabled={isFreeTrial}
-                                    />
+                            {/* Tablet Slider */}
+                            <div className="relative">
+                                <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase mb-1">
+                                    <span className="flex items-center gap-1 text-gray-600"><Monitor size={12} /> Tablet</span>
+                                    <span>{settings.tabletSplit || 0}%</span>
                                 </div>
+                                <input
+                                    type="range"
+                                    min="0" max="100"
+                                    value={settings.tabletSplit || 0}
+                                    onChange={(e) => {
+                                        const v = parseInt(e.target.value);
+                                        const max = 100 - settings.deviceSplit;
+                                        handleChange('tabletSplit', Math.min(v, max));
+                                    }}
+                                    className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-gray-600"
+                                    disabled={isFreeTrial}
+                                />
+                            </div>
 
-                                {/* Tablet Slider */}
-                                <div className="relative">
-                                    <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase mb-1">
-                                        <span className="flex items-center gap-1 text-gray-600"><Monitor size={12} /> Tablet</span>
-                                        <span>{settings.tabletSplit || 0}%</span>
-                                    </div>
-                                    <input
-                                        type="range"
-                                        min="0" max="100"
-                                        value={settings.tabletSplit || 0}
-                                        onChange={(e) => {
-                                            const v = parseInt(e.target.value);
-                                            const max = 100 - settings.deviceSplit;
-                                            handleChange('tabletSplit', Math.min(v, max));
-                                        }}
-                                        className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-gray-600"
-                                        disabled={isFreeTrial}
-                                    />
-                                </div>
-
-                                {/* Mobile Display */}
-                                <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase bg-gray-50 p-2 rounded-sm border border-gray-100">
-                                    <span className="flex items-center gap-1 text-black"><Smartphone size={12} /> Mobile Remainder</span>
-                                    <span className="text-black">{Math.max(0, 100 - settings.deviceSplit - (settings.tabletSplit || 0))}%</span>
-                                </div>
+                            {/* Mobile Display */}
+                            <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase bg-gray-50 p-2 rounded-sm border border-gray-100">
+                                <span className="flex items-center gap-1 text-black"><Smartphone size={12} /> Mobile Remainder</span>
+                                <span className="text-black">{Math.max(0, 100 - settings.deviceSplit - (settings.tabletSplit || 0))}%</span>
                             </div>
                         </div>
                     </div>
@@ -912,6 +1006,17 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                             onCheck={(v) => handleChange('autoCrawlExit', v)}
                             countLabel={`Total: ${totalUrlCount}/10`}
                         />
+
+                        <div className={project.plan === 'Economy' ? 'opacity-50 pointer-events-none' : ''}>
+                            <Label>Sitemap / RSS Feed</Label>
+                            <input
+                                value={settings.sitemap || ''}
+                                onChange={(e) => handleChange('sitemap', e.target.value)}
+                                className="w-full bg-[#f9fafb] border-b-2 border-transparent focus:border-[#ff4d00] p-3 outline-none text-sm font-medium"
+                                placeholder="https://example.com/sitemap.xml"
+                            />
+                            <p className="text-[10px] text-gray-400 mt-1">Automatically discover URLs from your sitemap</p>
+                        </div>
                     </div>
                 </div>
 
@@ -949,72 +1054,15 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                     </div>
                 </div>
 
-                {/* --- SCHEDULE SETTINGS --- */}
-                <div className="bg-white border border-gray-200 shadow-sm p-6 md:p-8 mt-6">
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-8 flex items-center gap-2">
-                        <Calendar size={16} /> Schedule & Duration
-                    </h3>
-                    <div className="space-y-6">
-                        <div>
-                            <Label>Operation Mode</Label>
-                            <CustomSelect
-                                value={settings.scheduleMode || 'continuous'}
-                                onChange={(v) => handleChange('scheduleMode', v)}
-                                options={SCHEDULE_MODES}
-                                disabled={isFreeTrial}
-                            />
-                        </div>
-                        {(settings.scheduleMode || '') === 'burst' && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-top-2">
-                                <div>
-                                    <Label>Start Time</Label>
-                                    <input type="datetime-local" value={settings.scheduleTime || ''} onChange={(e) => handleChange('scheduleTime', e.target.value)} className="w-full bg-[#f9fafb] border-b-2 border-transparent focus:border-[#ff4d00] p-3 outline-none text-sm font-medium" disabled={isFreeTrial} />
-                                </div>
-                                <RangeControl label="Run Duration (Minutes)" value={settings.scheduleDuration || 60} onChange={(v) => handleChange('scheduleDuration', v)} max={1440} />
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* --- PROXY SETTINGS --- */}
-                <div className="bg-white border border-gray-200 shadow-sm p-6 md:p-8 mt-6">
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-8 flex items-center gap-2">
-                        <Lock size={16} /> Proxy Configuration
-                    </h3>
-                    <div className="space-y-6">
-                        <div>
-                            <Label>Proxy Mode</Label>
-                            <CustomSelect
-                                value={settings.proxyMode || 'auto'}
-                                onChange={(v) => handleChange('proxyMode', v)}
-                                options={PROXY_MODES}
-                                disabled={isFreeTrial}
-                            />
-                        </div>
-                        {(settings.proxyMode || '') === 'custom' && (
-                            <div className="animate-in fade-in slide-in-from-top-2">
-                                <Label>Custom Proxies (ip:port:user:pass)</Label>
-                                <textarea
-                                    value={settings.customProxies || ''}
-                                    onChange={(e) => handleChange('customProxies', e.target.value)}
-                                    className="w-full bg-[#f9fafb] border-b-2 border-transparent focus:border-[#ff4d00] p-3 outline-none text-sm font-medium h-32 resize-none font-mono"
-                                    placeholder="192.168.1.1:8080:user:pass&#10;192.168.1.2:8080:user:pass"
-                                    disabled={isFreeTrial}
-                                />
-                            </div>
-                        )}
-                    </div>
-                </div>
-
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
                     {/* --- ADVANCED LOCATION --- */}
                     <div className="bg-white border border-gray-200 shadow-sm p-6 md:p-8" onClick={(e) => e.stopPropagation()}>
                         <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-8 flex items-center gap-2">
-                            <MapPin size={16} /> Advanced Location
+                            <MapPin size={16} /> Location Targeting
                         </h3>
 
-                        <div className="mb-6 relative">
-                            <Label>Add Country (Search)</Label>
+                        <div className="mb-4">
+                            <Label>Search Countries</Label>
                             <div className="relative">
                                 <input
                                     value={countrySearch}
@@ -1030,16 +1078,22 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                             </div>
                             {showCountryDropdown && countrySearch && (
-                                <div className="absolute top-full left-0 w-full bg-white border border-gray-200 shadow-xl max-h-60 overflow-y-auto z-50">
+                                <div className="absolute top-full left-0 w-full bg-white border border-gray-200 shadow-xl max-h-60 overflow-y-auto z-50 mt-1">
                                     {filteredCountries.map(c => (
                                         <div
                                             key={c.code}
-                                            className="p-3 text-sm hover:bg-orange-50 cursor-pointer font-medium"
+                                            className="p-3 text-sm hover:bg-orange-50 cursor-pointer font-medium flex items-center gap-2"
                                             onClick={() => {
                                                 handleAddCountry(c.code);
                                                 setShowCountryDropdown(false);
                                             }}
                                         >
+                                            <img 
+                                                src={`https://flagcdn.com/w20/${c.code.toLowerCase()}.png`} 
+                                                alt={c.code} 
+                                                className="w-4 h-auto rounded-sm"
+                                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                            />
                                             {c.name}
                                         </div>
                                     ))}
@@ -1047,62 +1101,62 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                             )}
                         </div>
 
-                        <div className="space-y-4">
-                            {(settings.geoTargets || []).map(target => (
-                                <div key={target.id} className="flex flex-col md:flex-row items-start md:items-center gap-3 bg-[#f9fafb] p-3 border border-gray-100">
-                                    <div className="flex-1 font-bold text-sm text-gray-800 flex items-center gap-2">
-                                        <span className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-[8px]">{target.country}</span>
-                                        {getCountryName(target.country)}
-                                    </div>
-
-                                    {/* City & State Inputs */}
-                                    <div className="flex gap-2 w-full md:w-auto">
-                                        <input
-                                            placeholder="State (Opt)"
-                                            value={target.state || ''}
-                                            onChange={(e) => {
-                                                const updated = (settings.geoTargets || []).map(t => t.id === target.id ? { ...t, state: e.target.value } : t);
-                                                handleChange('geoTargets', updated);
-                                            }}
-                                            className="w-24 bg-white border border-gray-200 p-1 text-xs outline-none focus:border-[#ff4d00]"
-                                        />
-                                        <input
-                                            placeholder="City (Opt)"
-                                            value={target.city || ''}
-                                            onChange={(e) => {
-                                                const updated = (settings.geoTargets || []).map(t => t.id === target.id ? { ...t, city: e.target.value } : t);
-                                                handleChange('geoTargets', updated);
-                                            }}
-                                            className="w-24 bg-white border border-gray-200 p-1 text-xs outline-none focus:border-[#ff4d00]"
-                                        />
-                                    </div>
-
-                                    <div className="flex items-center gap-2 w-full md:w-32 justify-end">
-                                        <input
-                                            type="number"
-                                            value={target.percent}
-                                            onChange={(e) => handleGeoPercentChange(target.id, parseInt(e.target.value) || 0)}
-                                            className="w-16 p-1 text-center font-bold border border-gray-300 outline-none focus:border-[#ff4d00] text-sm"
-                                            min="0" max="100"
-                                        />
-                                        <span className="text-xs text-gray-500 font-bold">%</span>
-                                    </div>
-                                    <button onClick={() => handleRemoveCountry(target.id)} className="text-gray-400 hover:text-red-500 ml-2">
-                                        <Trash2 size={16} />
-                                    </button>
+                        {/* Selected Countries - AddProject Style */}
+                        {(settings.geoTargets || []).length > 0 && (
+                            <div className="mb-4">
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className="text-xs font-bold text-gray-400 uppercase">Selected ({(settings.geoTargets || []).length})</span>
                                 </div>
-                            ))}
-                            {(settings.geoTargets || []).length === 0 && (
-                                <div className="text-center p-4 text-xs text-gray-400 bg-gray-50 border border-dashed border-gray-200">
-                                    No countries selected. Traffic will be global.
+                                <div className="space-y-2">
+                                    {(settings.geoTargets || []).map(target => {
+                                        const country = COUNTRIES_LIST.find(c => c.code === target.country);
+                                        const othersTotal = (settings.geoTargets || []).reduce((sum, t) => t.id !== target.id ? sum + t.percent : sum, 0);
+                                        const maxPercent = 100 - othersTotal;
+                                        
+                                        return (
+                                            <div key={target.id} className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-100">
+                                                <img 
+                                                    src={`https://flagcdn.com/w24/${target.country.toLowerCase()}.png`} 
+                                                    alt={target.country} 
+                                                    className="w-6 h-auto rounded-sm"
+                                                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                />
+                                                <span className="flex-1 font-bold text-sm text-gray-900">{country?.name || target.country}</span>
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max={maxPercent}
+                                                    value={target.percent}
+                                                    onChange={(e) => handleGeoPercentChange(target.id, parseInt(e.target.value))}
+                                                    className="w-24 accent-[#ff4d00]"
+                                                />
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    max={maxPercent}
+                                                    value={target.percent}
+                                                    onChange={(e) => handleGeoPercentChange(target.id, parseInt(e.target.value) || 0)}
+                                                    className="w-16 p-1 text-center text-sm font-bold border border-gray-200 outline-none focus:border-[#ff4d00]"
+                                                />
+                                                <span className="text-sm font-bold text-gray-400">%</span>
+                                                <button onClick={() => handleRemoveCountry(target.id)} className="text-gray-400 hover:text-red-500">
+                                                    <X size={14} />
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
-                            )}
-                            <div className="text-right text-[10px] font-black uppercase tracking-wide">
-                                Total: <span className={`${(settings.geoTargets || []).reduce((a, b) => a + b.percent, 0) === 100 ? 'text-green-600' : 'text-red-500'}`}>
-                                    {(settings.geoTargets || []).reduce((a, b) => a + b.percent, 0)}%
-                                </span>
+                                <div className={`text-right mt-2 text-sm font-bold ${(settings.geoTargets || []).reduce((a, b) => a + b.percent, 0) === 100 ? 'text-green-600' : 'text-orange-500'}`}>
+                                    Total: {(settings.geoTargets || []).reduce((a, b) => a + b.percent, 0)}%
+                                </div>
                             </div>
-                        </div>
+                        )}
+
+                        {(settings.geoTargets || []).length === 0 && (
+                            <div className="text-center p-4 text-xs text-gray-400 bg-gray-50 border border-dashed border-gray-200">
+                                No countries selected. Traffic will be global.
+                            </div>
+                        )}
                     </div>
 
                     {/* --- TRAFFIC SOURCE --- */}
@@ -1184,29 +1238,6 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Toggle
-                            label="Cache Website"
-                            checked={settings.cacheWebsite}
-                            onChange={(v) => handleChange('cacheWebsite', v)}
-                        />
-                        <Toggle
-                            label="Minimize CPU Load"
-                            checked={settings.minimizeCpu}
-                            onChange={(v) => handleChange('minimizeCpu', v)}
-                        />
-                        <Toggle
-                            label="Randomize Session"
-                            checked={settings.randomizeSession}
-                            onChange={(v) => handleChange('randomizeSession', v)}
-                        />
-                        <Toggle
-                            label="Anti-Fingerprint"
-                            checked={settings.antiFingerprint}
-                            onChange={(v) => handleChange('antiFingerprint', v)}
-                        />
-                    </div>
-
                     <div className="h-px bg-gray-100 my-8"></div>
 
                     <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-6 flex items-center gap-2">
@@ -1214,35 +1245,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                     </h3>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Professional + Expert Features */}
-                        <div className={`relative ${project.plan === 'Economy' ? 'opacity-50' : ''}`}>
-                            <Toggle
-                                label="Residential IP Network"
-                                checked={settings.residentialIps || false}
-                                onChange={(v) => project.plan !== 'Economy' && handleChange('residentialIps', v)}
-                            />
-                            {project.plan === 'Economy' && <div className="absolute inset-0 flex items-center justify-center bg-white/10 cursor-not-allowed pointer-events-auto" title="Professional Tier Required"></div>}
-                        </div>
-
-                        <div className={`relative ${project.plan === 'Economy' ? 'opacity-50' : ''}`}>
-                            <Toggle
-                                label="Cities Geo-Targeting"
-                                checked={settings.citiesGeoTargeting || false}
-                                onChange={(v) => project.plan !== 'Economy' && handleChange('citiesGeoTargeting', v)}
-                            />
-                            {project.plan === 'Economy' && <div className="absolute inset-0 flex items-center justify-center bg-white/10 cursor-not-allowed pointer-events-auto" title="Professional Tier Required"></div>}
-                        </div>
-
-                        {/* Expert ONLY Features */}
-                        <div className={`relative ${project.plan !== 'Expert' ? 'opacity-50' : ''}`}>
-                            <Toggle
-                                label="Night & Day Volume"
-                                checked={settings.nightDayVolume || false}
-                                onChange={(v) => project.plan === 'Expert' && handleChange('nightDayVolume', v)}
-                            />
-                            {project.plan !== 'Expert' && <div className="absolute inset-0 flex items-center justify-center bg-white/10 cursor-not-allowed pointer-events-auto" title="Expert Tier Required"></div>}
-                        </div>
-
+                        {/* Expert ONLY Feature */}
                         <div className={`relative ${project.plan !== 'Expert' ? 'opacity-50' : ''}`}>
                             <Toggle
                                 label="Automatic Website Crawler"
@@ -1250,48 +1253,6 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                                 onChange={(v) => project.plan === 'Expert' && handleChange('websiteCrawler', v)}
                             />
                             {project.plan !== 'Expert' && <div className="absolute inset-0 flex items-center justify-center bg-white/10 cursor-not-allowed pointer-events-auto" title="Expert Tier Required"></div>}
-                        </div>
-
-                        <div className={`relative ${project.plan !== 'Expert' ? 'opacity-50' : ''}`}>
-                            <Toggle
-                                label="GA4 Natural Events"
-                                checked={settings.ga4NaturalEvents || false}
-                                onChange={(v) => project.plan === 'Expert' && handleChange('ga4NaturalEvents', v)}
-                            />
-                            {project.plan !== 'Expert' && <div className="absolute inset-0 flex items-center justify-center bg-white/10 cursor-not-allowed pointer-events-auto" title="Expert Tier Required"></div>}
-                        </div>
-
-                        <div className={`relative ${project.plan !== 'Expert' ? 'opacity-50' : ''}`}>
-                            <Toggle
-                                label="Randomize Daily Volume"
-                                checked={settings.randomizeDailyVolume || false}
-                                onChange={(v) => project.plan === 'Expert' && handleChange('randomizeDailyVolume', v)}
-                            />
-                            {project.plan !== 'Expert' && <div className="absolute inset-0 flex items-center justify-center bg-white/10 cursor-not-allowed pointer-events-auto" title="Expert Tier Required"></div>}
-                        </div>
-
-                        <div className={project.plan === 'Economy' ? 'opacity-50 pointer-events-none' : ''}>
-                            <Label>Sitemap / RSS Feed</Label>
-                            <input
-                                value={settings.sitemap || ''}
-                                onChange={(e) => handleChange('sitemap', e.target.value)}
-                                className="w-full bg-[#f9fafb] border-b-2 border-transparent focus:border-[#ff4d00] p-3 outline-none text-sm font-medium"
-                                placeholder="https://example.com/sitemap.xml"
-                            />
-                        </div>
-
-                        <div className={project.plan === 'Economy' ? 'opacity-50 pointer-events-none' : ''}>
-                            <Label>URL Shortener</Label>
-                            <CustomSelect
-                                value={settings.shortener || 'None'}
-                                onChange={(v) => handleChange('shortener', v)}
-                                options={[
-                                    { value: 'None', label: 'None (Direct)' },
-                                    { value: 'bit.ly', label: 'Bit.ly' },
-                                    { value: 'cutt.ly', label: 'Cutt.ly' },
-                                    { value: 't.co', label: 'X/Twitter (t.co)' }
-                                ]}
-                            />
                         </div>
                     </div>
                 </div>

@@ -27,13 +27,13 @@ const Balance: React.FC = () => {
 
     const calculateAvailableHits = (tier: string): number => {
         const purchasedHits = transactions
-            .filter(t => t.type === 'credit' && t.tier === tier && t.hits)
+            .filter(t => t.type !== 'debit' && t.tier === tier && t.hits)
             .reduce((sum, t) => sum + (t.hits || 0), 0);
-        
+
         const usedHits = transactions
             .filter(t => t.type === 'debit' && t.tier === tier && t.hits)
             .reduce((sum, t) => sum + (t.hits || 0), 0);
-        
+
         return purchasedHits - usedHits;
     };
 
@@ -85,7 +85,7 @@ const Balance: React.FC = () => {
             t.amount.toFixed(2),
             t.status,
             getTierLabel(t.tier),
-            t.hits ? (t.type === 'credit' ? '+' : '-') + t.hits.toString() : '',
+            t.hits ? (t.type === 'debit' ? '-' : '+') + t.hits.toString() : '',
             t.reference || ''
         ]);
 
@@ -119,8 +119,8 @@ const Balance: React.FC = () => {
                     <div className="text-right">
                         <div className="text-xl font-bold text-gray-900 mb-1">€{trx.amount.toFixed(2)}</div>
                         {trx.hits && (
-                            <div className={`text-sm font-bold mb-1 ${trx.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>
-                                ({trx.type === 'credit' ? '+' : '-'}{trx.hits.toLocaleString()} hits)
+                            <div className={`text-sm font-bold mb-1 ${trx.type === 'debit' ? 'text-red-600' : 'text-green-600'}`}>
+                                ({trx.type === 'debit' ? '-' : '+'}{trx.hits.toLocaleString()} hits)
                             </div>
                         )}
                         <div className={`text-xs font-bold uppercase tracking-wide px-2 py-0.5 inline-block ${trx.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-gray-100'}`}>
@@ -142,7 +142,7 @@ const Balance: React.FC = () => {
                         </div>
                         <div>
                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-1">Type</label>
-                            <div className="text-sm font-bold text-gray-900 capitalize">{trx.type === 'credit' ? 'Deposit' : 'Purchase'}</div>
+                            <div className="text-sm font-bold text-gray-900 capitalize">{trx.type === 'debit' ? 'Purchase' : 'Deposit'}</div>
                         </div>
                         <div>
                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-1">Balance Tier</label>
@@ -293,8 +293,8 @@ const Balance: React.FC = () => {
                                         </td>
                                         <td className="px-6 py-4 text-xs font-bold text-gray-900">
                                             {trx.hits ? (
-                                                <span className={trx.type === 'credit' ? 'text-green-600' : 'text-red-600'}>
-                                                    {trx.type === 'credit' ? '+' : '-'}{trx.hits.toLocaleString()}
+                                                <span className={trx.type === 'debit' ? 'text-red-600' : 'text-green-600'}>
+                                                    {trx.type === 'debit' ? '-' : '+'}{trx.hits.toLocaleString()}
                                                 </span>
                                             ) : '-'}
                                         </td>
@@ -304,11 +304,11 @@ const Balance: React.FC = () => {
                                                 {trx.status}
                                             </span>
                                         </td>
-                                        <td className={`px-6 py-4 text-sm font-black text-right ${trx.type === 'credit' ? 'text-green-600' : 'text-gray-900'}`}>
+                                        <td className={`px-6 py-4 text-sm font-black text-right ${trx.type === 'debit' ? 'text-gray-900' : 'text-green-600'}`}>
                                             {trx.type === 'debit' ? '-' : '+'}€{trx.amount.toFixed(2)}
                                             {trx.hits ? (
-                                                <span className={`block text-[10px] ${trx.type === 'credit' ? 'text-green-500' : 'text-red-500'}`}>
-                                                    ({trx.type === 'credit' ? '+' : '-'}{trx.hits.toLocaleString()} hits)
+                                                <span className={`block text-[10px] ${trx.type === 'debit' ? 'text-red-500' : 'text-green-500'}`}>
+                                                    ({trx.type === 'debit' ? '-' : '+'}{trx.hits.toLocaleString()} hits)
                                                 </span>
                                             ) : null}
                                         </td>

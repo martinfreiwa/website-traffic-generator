@@ -540,6 +540,15 @@ class GAEmuEngine:
                     project.hits_today += 1
                     project.total_hits += 1
 
+                    tier = (
+                        (project.tier or "economy").lower()
+                        if project.tier
+                        else "economy"
+                    )
+                    from scheduler import record_hit_in_buffer
+
+                    record_hit_in_buffer(str(project.id), tier)
+
             db.commit()
             db.close()
         except Exception as e:
@@ -554,8 +563,10 @@ class GAEmuEngine:
         settings = project.settings
         targets_list = settings.get("targets", [])
         if not targets_list:
-            t_url = settings.get("targetUrl", "https://example.com")
-            t_tid = settings.get("ga4Tid", "G-XXXXXXXXXX")
+            t_url = settings.get("targetUrl") or settings.get(
+                "entryUrls", "https://example.com"
+            )
+            t_tid = settings.get("ga4Tid") or settings.get("gaId", "G-XXXXXXXXXX")
             targets_list = [
                 {"url": t_url, "tid": t_tid, "funnel": settings.get("funnel", [])}
             ]

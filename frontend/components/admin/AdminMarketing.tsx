@@ -20,27 +20,42 @@ const AdminMarketing: React.FC = () => {
 
     useEffect(() => {
         loadStats();
-        setLoyaltySettings(db.getLoyaltySettings());
-        setReferralSettings(db.getReferralSettings());
+        db.getLoyaltySettings().then(setLoyaltySettings);
+        db.getReferralSettings().then(setReferralSettings);
     }, []);
 
-    const loadStats = () => {
-        const data = db.getMarketingStats();
+    const loadStats = async () => {
+        const data = await db.getMarketingStats();
         setStats(data);
+    };
+
+    const handleSaveLoyalty = async () => {
+        if (loyaltySettings) {
+            await db.saveLoyaltySettings(loyaltySettings);
+        }
+    };
+
+    const handleSaveReferral = async () => {
+        if (referralSettings) {
+            await db.saveReferralSettings(referralSettings);
+        }
     };
 
     const handleSendTest = async () => {
         if (!emailSubject || !emailBody) return;
         setIsSending(true);
 
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        try {
+            await db.sendEmailBlast(emailSubject, emailBody, 'all');
+            alert('Email blast sent successfully!');
+        } catch (e) {
+            alert('Failed to send email blast');
+        }
 
         setIsSending(false);
         setLastSent(new Date().toLocaleTimeString());
         setEmailSubject('');
         setEmailBody('');
-        alert('Test email blast sent successfully (Simulated)!');
     };
 
     return (
@@ -344,9 +359,9 @@ const AdminMarketing: React.FC = () => {
                     </div>
                     <div className="lg:col-span-2 flex justify-end">
                         <button
-                            onClick={() => {
-                                if (loyaltySettings) db.saveLoyaltySettings(loyaltySettings);
-                                if (referralSettings) db.saveReferralSettings(referralSettings);
+                            onClick={async () => {
+                                await handleSaveLoyalty();
+                                await handleSaveReferral();
                                 alert('Settings Saved!');
                             }}
                             className="bg-black text-white px-6 py-2 rounded font-bold hover:bg-gray-800"
