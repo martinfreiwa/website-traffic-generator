@@ -545,3 +545,40 @@ class StripeProduct(Base):
     features = Column(JSON, nullable=True)
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class ActivityLog(Base):
+    __tablename__ = "activity_logs"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=True)
+    action_type = Column(String, nullable=False)
+    action_detail = Column(JSON, nullable=True)
+    ip_address = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class TokenBlacklist(Base):
+    __tablename__ = "token_blacklist"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    token = Column(String, nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=True)
+    reason = Column(String, nullable=True)
+    expires_at = Column(DateTime, nullable=True)
+    blacklisted_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class UserNotificationPrefs(Base):
+    __tablename__ = "user_notification_prefs"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, unique=True)
+    email_marketing = Column(Boolean, default=True)
+    email_transactional = Column(Boolean, default=True)
+    email_alerts = Column(Boolean, default=True)
+    browser_notifications = Column(Boolean, default=True)
+    newsletter_sub = Column(Boolean, default=False)
+    email_frequency = Column(String, default="instant")
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow)
