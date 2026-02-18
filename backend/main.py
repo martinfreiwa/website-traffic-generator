@@ -152,6 +152,17 @@ def run_column_migrations():
         for col_name, col_type in tickets_cols:
             add_column_if_missing("tickets", col_name, col_type)
 
+        traffic_log_cols = [
+            ("session_duration", "FLOAT"),
+            ("pages_viewed", "INTEGER DEFAULT 1"),
+            ("device_type", "VARCHAR(50)"),
+            ("traffic_source", "VARCHAR(100)"),
+            ("bounced", "BOOLEAN DEFAULT FALSE"),
+        ]
+
+        for col_name, col_type in traffic_log_cols:
+            add_column_if_missing("traffic_log", col_name, col_type)
+
         tables_to_create = [
             (
                 "user_notification_prefs",

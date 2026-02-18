@@ -122,9 +122,15 @@ class PrecisePacer:
         )
         visitors_per_minute = visitors_per_hour / 60
 
-        # Add variance and ensure at least 0
+        # Add variance and ensure at least 1 if we have any traffic
         variance = random.uniform(0.8, 1.2)
-        return max(0, int(visitors_per_minute * variance))
+        result = int(visitors_per_minute * variance)
+
+        # Ensure at least 1 visitor per minute during active hours if daily_limit > 0
+        if result == 0 and self.daily_limit > 0 and visitors_per_minute > 0:
+            result = 1
+
+        return result
 
 
 class TrafficScheduler:
@@ -133,13 +139,35 @@ class TrafficScheduler:
         self._task = None
         self.pacers: Dict[str, PrecisePacer] = {}  # project_id -> Pacer
         self.last_hit_time: Dict[str, datetime] = {}  # project_id -> last hit time
-        self.last_crawl_time: Dict[str, datetime] = {} # project_id -> last sitemap crawl time
+        self.last_crawl_time: Dict[
+            str, datetime
+        ] = {}  # project_id -> last sitemap crawl time
         self.is_globally_paused = False
 
     async def start(self):
         if self.is_running:
             return
         self.is_running = True
+
+        # Log startup status
+        db = SessionLocal()
+        try:
+            active_count = (
+                db.query(models.Project)
+                .filter(models.Project.status == "active")
+                .count()
+            )
+            proxy_count = (
+                db.query(models.Proxy).filter(models.Proxy.is_active == True).count()
+            )
+            logger.info(
+                f"Scheduler startup: {active_count} active projects, {proxy_count} active proxies"
+            )
+        except Exception as e:
+            logger.error(f"Failed to check startup status: {e}")
+        finally:
+            db.close()
+
         self._task = asyncio.create_task(self._loop())
         logger.info("Enhanced Traffic Scheduler started with Precise Pacing")
 
@@ -187,6 +215,7 @@ class TrafficScheduler:
     async def check_and_run(self):
         """Check all active projects and trigger hits based on precise pacing"""
         if self.is_globally_paused:
+            logger.debug("Scheduler globally paused")
             return
 
         db = SessionLocal()
@@ -209,6 +238,12 @@ class TrafficScheduler:
                 db.query(models.Project).filter(models.Project.status == "active").all()
             )
 
+            # Log every 60 seconds
+            if now.second == 0:
+                logger.info(
+                    f"Scheduler tick: Found {len(active_projects)} active projects, hour={current_hour}"
+                )
+
             for project in active_projects:
                 try:
                     await self._process_project(
@@ -222,7 +257,9 @@ class TrafficScheduler:
         finally:
             db.close()
 
-    async def _check_sitemap_crawling(self, db: Session, project: models.Project, now: datetime):
+    async def _check_sitemap_crawling(
+        self, db: Session, project: models.Project, now: datetime
+    ):
         """Check and run sitemap crawling if enabled and due"""
         settings = project.settings or {}
         if not settings.get("sitemapAutoCrawl"):
@@ -238,7 +275,7 @@ class TrafficScheduler:
             return
 
         logger.info(f"Crawling sitemap for project {project.id}: {sitemap_url}")
-        
+
         # Crawl
         try:
             urls = await crawl_sitemap(sitemap_url)
@@ -246,23 +283,28 @@ class TrafficScheduler:
                 # Update project settings with new URLs
                 # We'll store them in 'crawledUrls' to avoid overwriting user customSubpages
                 # But we need to update the JSON field in DB
-                
+
                 # IMPORTANT: Since project.settings is a JSON field, updating it requires careful handling
                 # Create a copy to ensure SQLAlchemy detects change
                 new_settings = dict(settings)
-                new_settings["crawledUrls"] = urls[:500] # Limit to 500 urls to prevent bloat
-                
+                new_settings["crawledUrls"] = urls[
+                    :500
+                ]  # Limit to 500 urls to prevent bloat
+
                 project.settings = new_settings
-                
+
                 # Mark modified for SQLAlchemy
                 from sqlalchemy.orm.attributes import flag_modified
+
                 flag_modified(project, "settings")
-                
+
                 db.commit()
-                logger.info(f"Updated project {project.id} with {len(urls)} crawled URLs")
-                
+                logger.info(
+                    f"Updated project {project.id} with {len(urls)} crawled URLs"
+                )
+
             self.last_crawl_time[project.id] = now
-            
+
         except Exception as e:
             logger.error(f"Failed to crawl sitemap for {project.id}: {e}")
 
@@ -276,11 +318,21 @@ class TrafficScheduler:
     ):
         """Process a single project - check quotas and trigger hits"""
 
+        # Log project processing every 60 seconds
+        if now.second == 0:
+            logger.info(
+                f"Processing project {project.id}: status={project.status}, daily_limit={project.daily_limit}, hits_today={project.hits_today}, total_target={project.total_target}, total_hits={project.total_hits}"
+            )
+
         # 0. Check Sitemap Crawling
         await self._check_sitemap_crawling(db, project, now)
 
         # Quota Check - Daily Limit
         if project.daily_limit > 0 and project.hits_today >= project.daily_limit:
+            if now.second == 0:
+                logger.info(
+                    f"Project {project.id}: Daily limit reached ({project.hits_today}/{project.daily_limit})"
+                )
             return
 
         # Quota Check - Total Target
@@ -303,6 +355,10 @@ class TrafficScheduler:
 
         # Check if it's an active hour
         if not pacer.is_active_hour(current_hour):
+            if now.second == 0:
+                logger.info(
+                    f"Project {project.id}: Outside active hours (hour={current_hour})"
+                )
             return
 
         # Check if enough time has passed since last hit
@@ -334,6 +390,12 @@ class TrafficScheduler:
         visitors_to_spawn = min(
             visitors_to_spawn, remaining_daily, remaining_total, max_burst
         )
+
+        # Debug logging
+        if now.second == 0:
+            logger.info(
+                f"Project {project.id}: visitors_to_spawn={visitors_to_spawn}, remaining_daily={remaining_daily}, remaining_total={remaining_total}, pacer_daily={pacer.daily_limit}"
+            )
 
         if visitors_to_spawn <= 0:
             return
