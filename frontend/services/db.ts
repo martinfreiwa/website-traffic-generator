@@ -40,8 +40,14 @@ export const db = {
     },
 
     getCurrentUser: (): User | undefined => {
-        const userData = localStorage.getItem('modus_current_user');
-        return userData ? JSON.parse(userData) : undefined;
+        try {
+            const userData = localStorage.getItem('modus_current_user');
+            return userData ? JSON.parse(userData) : undefined;
+        } catch (e) {
+            console.error('Failed to parse user data from localStorage:', e);
+            localStorage.removeItem('modus_current_user');
+            return undefined;
+        }
     },
 
     setCurrentUser: (user: User | null) => {
@@ -135,7 +141,13 @@ export const db = {
             supportPin: userData.support_pin,
             dateFormat: userData.date_format,
             numberFormat: userData.number_format,
-            requirePasswordReset: userData.require_password_reset
+            requirePasswordReset: userData.require_password_reset,
+            gamificationXp: userData.gamification_xp,
+            gamificationLevel: userData.gamification_level,
+            gamificationTotalSpent: userData.gamification_total_spent,
+            gamificationPermanentDiscount: userData.gamification_permanent_discount,
+            streakDays: userData.streak_days,
+            streakBest: userData.streak_best
         };
 
         db.setCurrentUser(mappedUser);
@@ -242,6 +254,7 @@ export const db = {
                 plan: p.plan_type || 'Custom',
                 tier: p.tier,
                 status: p.status,
+                startAt: p.start_at,
                 expires: p.expires_at || 'Never',
                 createdAt: p.created_at,
                 settings: p.settings,
@@ -346,7 +359,8 @@ export const db = {
             tier: project.tier,
             settings: project.settings,
             daily_limit: project.customTarget?.dailyLimit || 0,
-            total_target: project.customTarget?.totalVisitors || 0
+            total_target: project.customTarget?.totalVisitors || 0,
+            start_at: project.startAt || null
         };
 
         const response = await fetchWithAuth(`${API_BASE_URL}/projects`, {
@@ -354,9 +368,14 @@ export const db = {
             body: JSON.stringify(projectData)
         });
 
-        if (!response.ok) throw new Error("Failed to create project");
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.detail || "Failed to create project");
+        }
+        
+        const createdProject = await response.json();
         await db.syncProjects();
-        return db.getProjects();
+        return createdProject;
     },
 
     updateProject: async (project: Project) => {
@@ -1787,5 +1806,289 @@ export const db = {
             method: 'DELETE'
         });
         await db.syncAlerts();
+    },
+
+    // Benefits API
+    getBenefitTypes: async (): Promise<import('../types').BenefitType[]> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/benefits/types`);
+        if (!response.ok) return [];
+        const data = await response.json();
+        return data.map((b: any) => ({
+            id: b.id,
+            type: b.type,
+            category: b.category,
+            name: b.name,
+            value: b.value,
+            requirements: b.requirements,
+            active: b.active,
+            displayOrder: b.display_order
+        }));
+    },
+
+    getMyBenefitRequests: async (status?: string): Promise<import('../types').BenefitRequest[]> => {
+        const url = status ? `${API_BASE_URL}/benefits/my-requests?status=${status}` : `${API_BASE_URL}/benefits/my-requests`;
+        const response = await fetchWithAuth(url);
+        if (!response.ok) return [];
+        const data = await response.json();
+        return data.map((b: any) => ({
+            id: b.id,
+            userId: b.user_id,
+            benefitType: b.benefit_type,
+            benefitCategory: b.benefit_category,
+            url: b.url,
+            description: b.description,
+            screenshotUrl: b.screenshot_url,
+            claimedValue: b.claimed_value,
+            approvedValue: b.approved_value,
+            status: b.status,
+            adminNotes: b.admin_notes,
+            fraudFlagged: b.fraud_flagged,
+            fraudReason: b.fraud_reason,
+            submittedAt: b.submitted_at,
+            reviewedAt: b.reviewed_at,
+            reviewedBy: b.reviewed_by
+        }));
+    },
+
+    getBenefitBalance: async (): Promise<import('../types').BenefitBalance> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/benefits/balance`);
+        if (!response.ok) return { benefitBalance: 0, totalBenefitsClaimed: 0, pendingRequests: 0, approvedRequests: 0, rejectedRequests: 0 };
+        const data = await response.json();
+        return {
+            benefitBalance: data.benefit_balance,
+            totalBenefitsClaimed: data.total_benefits_claimed,
+            pendingRequests: data.pending_requests,
+            approvedRequests: data.approved_requests,
+            rejectedRequests: data.rejected_requests
+        };
+    },
+
+    submitBenefit: async (benefit: {
+        benefit_type: string;
+        benefit_category: string;
+        url: string;
+        description?: string;
+        screenshot_url?: string;
+        claimed_value: number;
+    }): Promise<import('../types').BenefitRequest> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/benefits/submit`, {
+            method: 'POST',
+            body: JSON.stringify(benefit)
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || "Failed to submit benefit");
+        }
+        const b = await response.json();
+        return {
+            id: b.id,
+            userId: b.user_id,
+            benefitType: b.benefit_type,
+            benefitCategory: b.benefit_category,
+            url: b.url,
+            description: b.description,
+            screenshotUrl: b.screenshot_url,
+            claimedValue: b.claimed_value,
+            approvedValue: b.approved_value,
+            status: b.status,
+            adminNotes: b.admin_notes,
+            fraudFlagged: b.fraud_flagged,
+            fraudReason: b.fraud_reason,
+            submittedAt: b.submitted_at,
+            reviewedAt: b.reviewed_at,
+            reviewedBy: b.reviewed_by
+        };
+    },
+
+    // Affiliate API
+    getAffiliateDashboard: async (): Promise<import('../types').AffiliateDashboard> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/affiliate/dashboard`);
+        if (!response.ok) throw new Error('Failed to fetch affiliate dashboard');
+        const data = await response.json();
+        return {
+            tier: {
+                id: data.tier.id,
+                userId: data.tier.user_id,
+                tierLevel: data.tier.tier_level,
+                tierName: data.tier.tier_name,
+                commissionRateL1: data.tier.commission_rate_l1,
+                commissionRateL2: data.tier.commission_rate_l2,
+                commissionRateL3: data.tier.commission_rate_l3,
+                totalReferralsL1: data.tier.total_referrals_l1,
+                totalReferralsL2: data.tier.total_referrals_l2,
+                totalReferralsL3: data.tier.total_referrals_l3,
+                totalEarnings: data.tier.total_earnings,
+                pendingPayout: data.tier.pending_payout,
+                lifetimePayout: data.tier.lifetime_payout,
+                lastTierUpdate: data.tier.last_tier_update
+            },
+            relations: data.relations.map((r: any) => ({
+                id: r.id,
+                userId: r.user_id,
+                referrerL1Id: r.referrer_l1_id,
+                referrerL2Id: r.referrer_l2_id,
+                referrerL3Id: r.referrer_l3_id
+            })),
+            referralLink: data.referral_link,
+            totalReferrals: data.total_referrals,
+            totalEarnings: data.total_earnings,
+            pendingPayout: data.pending_payout,
+            benefitBalance: data.benefit_balance
+        };
+    },
+
+    getAffiliateTier: async (): Promise<import('../types').AffiliateTier> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/affiliate/tier`);
+        if (!response.ok) throw new Error('Failed to fetch affiliate tier');
+        const data = await response.json();
+        return {
+            id: data.id,
+            userId: data.user_id,
+            tierLevel: data.tier_level,
+            tierName: data.tier_name,
+            commissionRateL1: data.commission_rate_l1,
+            commissionRateL2: data.commission_rate_l2,
+            commissionRateL3: data.commission_rate_l3,
+            totalReferralsL1: data.total_referrals_l1,
+            totalReferralsL2: data.total_referrals_l2,
+            totalReferralsL3: data.total_referrals_l3,
+            totalEarnings: data.total_earnings,
+            pendingPayout: data.pending_payout,
+            lifetimePayout: data.lifetime_payout,
+            lastTierUpdate: data.last_tier_update
+        };
+    },
+
+    getAffiliateReferrals: async (tier: number = 1): Promise<any[]> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/affiliate/referrals?tier=${tier}`);
+        if (!response.ok) return [];
+        return await response.json();
+    },
+
+    // Payout API
+    requestPayout: async (payout: {
+        amount: number;
+        method: string;
+        payout_details: Record<string, any>;
+    }): Promise<import('../types').PayoutRequest> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/affiliate/payouts/request`, {
+            method: 'POST',
+            body: JSON.stringify(payout)
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || "Failed to request payout");
+        }
+        const p = await response.json();
+        return {
+            id: p.id,
+            userId: p.user_id,
+            amount: p.amount,
+            method: p.method,
+            payoutDetails: p.payout_details,
+            status: p.status,
+            adminNotes: p.admin_notes,
+            requestedAt: p.requested_at,
+            processedAt: p.processed_at,
+            processedBy: p.processed_by,
+            transactionHash: p.transaction_hash
+        };
+    },
+
+    getMyPayouts: async (): Promise<import('../types').PayoutRequest[]> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/affiliate/payouts`);
+        if (!response.ok) return [];
+        const data = await response.json();
+        return data.map((p: any) => ({
+            id: p.id,
+            userId: p.user_id,
+            amount: p.amount,
+            method: p.method,
+            payoutDetails: p.payout_details,
+            status: p.status,
+            adminNotes: p.admin_notes,
+            requestedAt: p.requested_at,
+            processedAt: p.processed_at,
+            processedBy: p.processed_by,
+            transactionHash: p.transaction_hash
+        }));
+    },
+
+    // Admin Benefits
+    getPendingBenefits: async (): Promise<any[]> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/benefits/pending`);
+        if (!response.ok) return [];
+        return await response.json();
+    },
+
+    getBenefitsHistory: async (status?: string): Promise<any[]> => {
+        const url = status 
+            ? `${API_BASE_URL}/admin/benefits/history?status=${status}`
+            : `${API_BASE_URL}/admin/benefits/history`;
+        const response = await fetchWithAuth(url);
+        if (!response.ok) return [];
+        return await response.json();
+    },
+
+    approveBenefit: async (benefitId: string, approvedValue: number, adminNotes?: string): Promise<void> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/benefits/${benefitId}/approve`, {
+            method: 'POST',
+            body: JSON.stringify({ approved_value: approvedValue, status: 'approved', admin_notes: adminNotes })
+        });
+        if (!response.ok) throw new Error('Failed to approve benefit');
+    },
+
+    rejectBenefit: async (benefitId: string, adminNotes?: string, fraudFlagged: boolean = false, fraudReason?: string): Promise<void> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/benefits/${benefitId}/reject`, {
+            method: 'POST',
+            body: JSON.stringify({ status: 'rejected', admin_notes: adminNotes, fraud_flagged: fraudFlagged, fraud_reason: fraudReason })
+        });
+        if (!response.ok) throw new Error('Failed to reject benefit');
+    },
+
+    // Admin Payouts
+    getPendingPayouts: async (): Promise<any[]> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/payouts/pending`);
+        if (!response.ok) return [];
+        return await response.json();
+    },
+
+    approvePayout: async (payoutId: string, adminNotes?: string): Promise<void> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/payouts/${payoutId}/approve`, {
+            method: 'POST',
+            body: JSON.stringify({ status: 'approved', admin_notes: adminNotes })
+        });
+        if (!response.ok) throw new Error('Failed to approve payout');
+    },
+
+    rejectPayout: async (payoutId: string, adminNotes?: string): Promise<void> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/payouts/${payoutId}/reject`, {
+            method: 'POST',
+            body: JSON.stringify({ status: 'rejected', admin_notes: adminNotes })
+        });
+        if (!response.ok) throw new Error('Failed to reject payout');
+    },
+
+    markPayoutPaid: async (payoutId: string, transactionHash?: string, adminNotes?: string): Promise<void> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/payouts/${payoutId}/mark-paid`, {
+            method: 'POST',
+            body: JSON.stringify({ status: 'paid', transaction_hash: transactionHash, admin_notes: adminNotes })
+        });
+        if (!response.ok) throw new Error('Failed to mark payout as paid');
+    },
+
+    // Admin Affiliates
+    getAllAffiliates: async (): Promise<any[]> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/affiliates`);
+        if (!response.ok) return [];
+        return await response.json();
+    },
+
+    updateAffiliateTier: async (userId: string, tierLevel: number): Promise<void> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/affiliates/${userId}/tier-update`, {
+            method: 'POST',
+            body: JSON.stringify({ tier_level: tierLevel })
+        });
+        if (!response.ok) throw new Error('Failed to update affiliate tier');
     }
 };

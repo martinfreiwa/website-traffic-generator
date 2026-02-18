@@ -8,10 +8,10 @@ import {
 import { db } from '../services/db';
 import { User as UserType, PaymentMethod } from '../types';
 
-type ProfileTab = 'account' | 'security' | 'billing' | 'notifications' | 'developer' | 'accessibility';
+type ProfileTab = 'contact' | 'security' | 'notifications' | 'developer' | 'accessibility';
 
 const Profile: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<ProfileTab>('account');
+    const [activeTab, setActiveTab] = useState<ProfileTab>('contact');
     const [isLoading, setIsLoading] = useState(false);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [showApiKey, setShowApiKey] = useState(false);
@@ -264,11 +264,11 @@ const Profile: React.FC = () => {
                     {/* Navigation Tabs (Vertical for Desktop) */}
                     <div className="bg-white border border-gray-200 shadow-sm overflow-hidden">
                         <button
-                            onClick={() => setActiveTab('account')}
-                            className={`w-full text-left px-6 py-4 text-xs font-bold uppercase tracking-wider flex items-center gap-3 border-l-4 transition-colors ${activeTab === 'account' ? 'border-[#ff4d00] bg-gray-50 text-[#ff4d00]' : 'border-transparent text-gray-500 hover:bg-gray-50'
+                            onClick={() => setActiveTab('contact')}
+                            className={`w-full text-left px-6 py-4 text-xs font-bold uppercase tracking-wider flex items-center gap-3 border-l-4 transition-colors ${activeTab === 'contact' ? 'border-[#ff4d00] bg-gray-50 text-[#ff4d00]' : 'border-transparent text-gray-500 hover:bg-gray-50'
                                 }`}
                         >
-                            <User size={16} /> Account Details
+                            <User size={16} /> Contact Details
                         </button>
                         <button
                             onClick={() => setActiveTab('security')}
@@ -276,13 +276,6 @@ const Profile: React.FC = () => {
                                 }`}
                         >
                             <Shield size={16} /> Security & 2FA
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('billing')}
-                            className={`w-full text-left px-6 py-4 text-xs font-bold uppercase tracking-wider flex items-center gap-3 border-l-4 transition-colors ${activeTab === 'billing' ? 'border-[#ff4d00] bg-gray-50 text-[#ff4d00]' : 'border-transparent text-gray-500 hover:bg-gray-50'
-                                }`}
-                        >
-                            <CreditCard size={16} /> Billing & Payments
                         </button>
                         <button
                             onClick={() => setActiveTab('notifications')}
@@ -344,12 +337,12 @@ const Profile: React.FC = () => {
                 {/* Right Column: Forms based on Tab */}
                 <div className="lg:col-span-2 space-y-6">
 
-                    {activeTab === 'account' ? (
+                    {activeTab === 'contact' ? (
                         <>
                             {/* Contact & Identity */}
                             <div className="bg-white border border-gray-200 p-8 shadow-sm">
                                 <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-6 flex items-center gap-2">
-                                    <User size={14} /> Identity & Contact
+                                    <User size={14} /> Personal Information
                                 </h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div>
@@ -378,30 +371,21 @@ const Profile: React.FC = () => {
                                         />
                                     </div>
                                     <div>
-                                        <Label>Job Title</Label>
-                                        <Input
-                                            value={user.jobTitle || ''}
-                                            onChange={(v) => handleInputChange('jobTitle', v)}
-                                            icon={<Building2 size={16} />}
-                                            placeholder="SEO Manager"
-                                        />
-                                    </div>
-                                    <div className="md:col-span-2">
-                                        <Label>Personal Bio</Label>
-                                        <textarea
-                                            value={user.bio || ''}
-                                            onChange={(e) => handleInputChange('bio', e.target.value)}
-                                            className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 focus:border-[#ff4d00] outline-none min-h-[100px]"
-                                            placeholder="Tell us a bit about yourself..."
-                                        />
-                                    </div>
-                                    <div>
                                         <Label>Phone Number</Label>
                                         <Input
                                             value={user.phone || ''}
                                             onChange={(v) => handleInputChange('phone', v)}
                                             icon={<Phone size={16} />}
                                             placeholder="+1 (555) 000-0000"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>Job Title</Label>
+                                        <Input
+                                            value={user.jobTitle || ''}
+                                            onChange={(v) => handleInputChange('jobTitle', v)}
+                                            icon={<Building2 size={16} />}
+                                            placeholder="SEO Manager"
                                         />
                                     </div>
                                     <div>
@@ -413,15 +397,92 @@ const Profile: React.FC = () => {
                                             placeholder="https://yourpage.com"
                                         />
                                     </div>
+                                    <div className="md:col-span-2">
+                                        <Label>Personal Bio</Label>
+                                        <textarea
+                                            value={user.bio || ''}
+                                            onChange={(e) => handleInputChange('bio', e.target.value)}
+                                            className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 focus:border-[#ff4d00] outline-none min-h-[100px]"
+                                            placeholder="Tell us a bit about yourself..."
+                                        />
+                                    </div>
                                 </div>
-                                <div className="mt-8 pt-8 border-t border-gray-100">
-                                    <Toggle
-                                        label="Public Profile Visibility"
-                                        checked={user.publicProfile || false}
-                                        onChange={(v) => setUser({ ...user, publicProfile: v })}
-                                    />
-                                    <p className="text-[10px] text-gray-400 mt-2 lowercase">when enabled, other users can see your shared campaign stats and badges.</p>
+                            </div>
+
+                            {/* Company & Address */}
+                            <div className="bg-white border border-gray-200 p-8 shadow-sm">
+                                <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-6 flex items-center gap-2">
+                                    <Building2 size={14} /> Company & Address
+                                </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <Label>Company Name</Label>
+                                        <Input
+                                            value={user.company || ''}
+                                            onChange={(v) => handleInputChange('company', v)}
+                                            icon={<Building2 size={16} />}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>VAT ID / Tax ID</Label>
+                                        <Input
+                                            value={user.vatId || ''}
+                                            onChange={(v) => handleInputChange('vatId', v)}
+                                            icon={<Hash size={16} />}
+                                        />
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <Label>Street Address</Label>
+                                        <Input
+                                            value={user.address || ''}
+                                            onChange={(v) => handleInputChange('address', v)}
+                                            icon={<MapPin size={16} />}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>City</Label>
+                                        <Input
+                                            value={user.city || ''}
+                                            onChange={(v) => handleInputChange('city', v)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>Zip / Postal Code</Label>
+                                        <Input
+                                            value={user.zip || ''}
+                                            onChange={(v) => handleInputChange('zip', v)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>Country</Label>
+                                        <select
+                                            value={user.country || ''}
+                                            onChange={(e) => handleInputChange('country', e.target.value)}
+                                            className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 focus:border-[#ff4d00] outline-none appearance-none"
+                                        >
+                                            <option value="">Select Country</option>
+                                            <option value="Germany">Germany</option>
+                                            <option value="United States">United States</option>
+                                            <option value="United Kingdom">United Kingdom</option>
+                                            <option value="Canada">Canada</option>
+                                            <option value="France">France</option>
+                                            <option value="Australia">Australia</option>
+                                        </select>
+                                    </div>
                                 </div>
+                            </div>
+
+                            {/* Profile Visibility */}
+                            <div className="bg-white border border-gray-200 p-8 shadow-sm">
+                                <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-6 flex items-center gap-2">
+                                    <Globe size={14} /> Visibility
+                                </h3>
+                                <Toggle
+                                    label="Public Profile Visibility"
+                                    checked={user.publicProfile || false}
+                                    onChange={(v) => setUser({ ...user, publicProfile: v })}
+                                />
+                                <p className="text-[10px] text-gray-400 mt-2">When enabled, other users can see your shared campaign stats and badges.</p>
                             </div>
                         </>
                     ) : activeTab === 'security' ? (
@@ -557,133 +618,6 @@ const Profile: React.FC = () => {
                                         <Toggle label="Marketing & Product Updates" checked={user.newsletterSub || false} onChange={(v) => handleInputChange('newsletterSub', v.toString())} />
                                         <Toggle label="Weekly Performance Reports" checked={true} />
                                         <Toggle label="Sound Effects (UI)" checked={user.soundEffects || false} onChange={(v) => handleInputChange('soundEffects', v.toString())} />
-                                    </div>
-                                </div>
-                            </div>
-                        </>
-                    ) : activeTab === 'billing' ? (
-                        <>
-                            {/* Payment Methods */}
-                            <div className="bg-white border border-gray-200 p-8 shadow-sm">
-                                <div className="flex justify-between items-center mb-6">
-                                    <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] flex items-center gap-2">
-                                        <CreditCard size={14} /> Saved Payment Methods
-                                    </h3>
-                                    <button
-                                        onClick={() => setShowAddCard(!showAddCard)}
-                                        className="text-[#ff4d00] text-[10px] font-bold uppercase tracking-widest hover:text-black flex items-center gap-1"
-                                    >
-                                        <Plus size={12} /> Add New
-                                    </button>
-                                </div>
-
-                                {showAddCard && (
-                                    <div className="mb-6 p-6 bg-gray-50 border border-gray-200 animate-in fade-in slide-in-from-top-2">
-                                        <div className="grid grid-cols-2 gap-4 mb-4">
-                                            <div>
-                                                <Label>Card Number</Label>
-                                                <Input value={newCardNumber} onChange={setNewCardNumber} placeholder="0000 0000 0000 0000" />
-                                            </div>
-                                            <div>
-                                                <Label>Expiry</Label>
-                                                <Input value={newCardExpiry} onChange={setNewCardExpiry} placeholder="MM/YY" />
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={handleAddCard}
-                                            className="bg-black text-white px-4 py-2 text-xs font-bold uppercase tracking-wider hover:bg-[#ff4d00] transition-colors"
-                                        >
-                                            Save Card
-                                        </button>
-                                    </div>
-                                )}
-
-                                <div className="grid grid-cols-1 gap-4">
-                                    {(user.paymentMethods && user.paymentMethods.length > 0) ? (
-                                        user.paymentMethods.map(pm => (
-                                            <div key={pm.id} className="border border-gray-200 p-6 flex justify-between items-center bg-[#f9fafb]">
-                                                <div className="flex items-center gap-4">
-                                                    <div className={`w-12 h-8 rounded-sm flex items-center justify-center text-white text-[10px] font-bold ${pm.type === 'visa' ? 'bg-[#1a1f71]' : 'bg-[#eb001b]'}`}>
-                                                        {pm.type === 'visa' ? 'VISA' : 'MC'}
-                                                    </div>
-                                                    <div>
-                                                        <div className="text-sm font-bold text-gray-900">•••• •••• •••• {pm.last4}</div>
-                                                        <div className="text-xs text-gray-400 font-medium">Expires {pm.expiry}</div>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-3">
-                                                    {pm.isDefault && <span className="bg-green-100 text-green-700 text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-sm">Default</span>}
-                                                    <button onClick={() => handleDeleteCard(pm.id)} className="text-gray-400 hover:text-red-500 transition-colors">
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))
-                                    ) : (
-                                        <div className="text-center p-8 text-gray-400 text-sm">No payment methods saved.</div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Billing Address */}
-                            <div className="bg-white border border-gray-200 p-8 shadow-sm">
-                                <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-6 flex items-center gap-2">
-                                    <Home size={14} /> Billing Address
-                                </h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div>
-                                        <Label>Company Name</Label>
-                                        <Input
-                                            value={user.company || ''}
-                                            onChange={(v) => handleInputChange('company', v)}
-                                            icon={<Building2 size={16} />}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label>VAT ID / Tax ID</Label>
-                                        <Input
-                                            value={user.vatId || ''}
-                                            onChange={(v) => handleInputChange('vatId', v)}
-                                            icon={<Hash size={16} />}
-                                        />
-                                    </div>
-                                    <div className="md:col-span-2">
-                                        <Label>Street Address</Label>
-                                        <Input
-                                            value={user.address || ''}
-                                            onChange={(v) => handleInputChange('address', v)}
-                                            icon={<MapPin size={16} />}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label>City</Label>
-                                        <Input
-                                            value={user.city || ''}
-                                            onChange={(v) => handleInputChange('city', v)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label>Zip / Postal Code</Label>
-                                        <Input
-                                            value={user.zip || ''}
-                                            onChange={(v) => handleInputChange('zip', v)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label>Country</Label>
-                                        <select
-                                            value={user.country || ''}
-                                            onChange={(e) => handleInputChange('country', e.target.value)}
-                                            className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 focus:border-[#ff4d00] outline-none appearance-none"
-                                        >
-                                            <option value="">Select Country</option>
-                                            <option value="United States">United States</option>
-                                            <option value="United Kingdom">United Kingdom</option>
-                                            <option value="Germany">Germany</option>
-                                            <option value="Canada">Canada</option>
-                                            <option value="France">France</option>
-                                            <option value="Australia">Australia</option>
-                                        </select>
                                     </div>
                                 </div>
                             </div>

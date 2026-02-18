@@ -18,3 +18,6 @@ stripe
 itsdangerous
 bcrypt
 cryptography
+reportlab
+sentry-sdk[fastapi]
+certifi

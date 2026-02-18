@@ -1,5 +1,5 @@
 
-import React, { useEffect } from 'react';
+import React, { useEffect, ReactNode, useState } from 'react';
 import { Routes, Route, useNavigate, useLocation, Navigate, useParams } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import LandingPage from './components/landing/LandingPage';
@@ -17,6 +17,50 @@ import CookieConsent from './components/CookieConsent';
 import VerifyEmail from './components/VerifyEmail';
 import ResetPassword from './components/ResetPassword';
 import { db } from './services/db';
+
+interface ErrorBoundaryProps {
+    children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+    hasError: boolean;
+    error: Error | null;
+}
+
+const ErrorBoundary: React.FC<ErrorBoundaryProps> = ({ children }) => {
+    const [state, setState] = useState<ErrorBoundaryState>({ hasError: false, error: null });
+
+    const handleError = (error: Error) => {
+        setState({ hasError: true, error });
+    };
+
+    React.useEffect(() => {
+        const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+            handleError(event.reason);
+        };
+        window.addEventListener('unhandledrejection', handleUnhandledRejection);
+        return () => window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    }, []);
+
+    if (state.hasError) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                <div className="text-center p-8">
+                    <h1 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h1>
+                    <p className="text-gray-600 mb-4">{state.error?.message}</p>
+                    <button
+                        onClick={() => window.location.href = '/login'}
+                        className="bg-[#ff4d00] text-white px-6 py-2 rounded font-bold"
+                    >
+                        Go to Login
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    return <>{children}</>;
+};
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; adminOnly?: boolean }> = ({ children, adminOnly }) => {
     const user = db.getCurrentUser();
@@ -87,7 +131,7 @@ const App: React.FC = () => {
     };
 
     return (
-        <>
+        <ErrorBoundary>
             <Routes>
                 <Route path="/" element={<LandingPage onLogin={() => navigate('/login')} onNavigate={(page) => navigate(`/${page}`)} />} />
 
@@ -136,7 +180,7 @@ const App: React.FC = () => {
             </Routes>
             <ChatWidget />
             <CookieConsent />
-        </>
+        </ErrorBoundary>
     );
 };
 

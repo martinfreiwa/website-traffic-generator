@@ -15,8 +15,10 @@ import Affiliate from './Affiliate';
 import HomeDashboard from './HomeDashboard';
 import Support from './Support';
 import PricingPage from './PricingPage';
+import Billing from './Billing';
+import Gamification from './Gamification';
 import { MenuSection, Project } from '../types';
-import { MessageSquare, TrendingUp, Users, CreditCard, Activity, Construction, LayoutDashboard, Layers, User, Banknote, Share2, HelpCircle } from 'lucide-react';
+import { MessageSquare, TrendingUp, Users, CreditCard, Activity, Construction, LayoutDashboard, Layers, User, Banknote, Share2, HelpCircle, Receipt, Star } from 'lucide-react';
 import { db } from '../services/db';
 
 interface DashboardProps {
@@ -76,15 +78,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     {
       title: 'Finance',
       items: [
+        { label: 'Billing', id: 'billing', path: '/dashboard/billing', icon: <Receipt size={18} /> },
         { label: 'Buy Credits', id: 'buy-credits', path: '/dashboard/buy-credits', icon: <CreditCard size={18} /> },
         { label: 'Balance', id: 'balance', path: '/dashboard/balance', icon: <Banknote size={18} /> },
       ]
     },
     {
-      title: 'User',
+      title: 'Account',
       items: [
+        { label: 'Gamification', id: 'gamification', path: '/dashboard/gamification', icon: <Star size={18} /> },
         { label: 'Support Tickets', id: 'support', path: '/dashboard/support', icon: <HelpCircle size={18} /> },
-        { label: 'Profile & Billing', id: 'profile', path: '/dashboard/profile', icon: <User size={18} /> },
+        { label: 'Profile', id: 'profile', path: '/dashboard/profile', icon: <User size={18} /> },
         { label: 'Affiliate', id: 'affiliate', path: '/dashboard/affiliate', icon: <Share2 size={18} /> },
       ]
     }
@@ -93,7 +97,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const getPageTitle = () => {
     if (currentPath === 'home' || currentPath === '') return 'Dashboard';
     if (currentPath.startsWith('campaigns')) return 'Campaigns';
+    if (currentPath === 'billing') return 'Billing & Payments';
     if (currentPath === 'buy-credits') return 'Wallet Top-Up';
+    if (currentPath === 'gamification') return 'Gamification';
     if (currentPath === 'profile') return 'My Profile';
     if (currentPath === 'balance') return 'Balance';
     if (currentPath === 'affiliate') return 'Affiliate Program';
@@ -213,6 +219,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                   balance={balance}
                   onNavigateToProject={handleNavigateToProject}
                   onNavigateToBuyCredits={() => navigate('/dashboard/buy-credits')}
+                  onNavigateToSupport={() => navigate('/dashboard/support')}
                 />
               } />
 
@@ -235,6 +242,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
               <Route path="/campaigns/:projectId" element={<ProjectDetailsWrapper onUpdate={handleDataChange} />} />
 
               <Route path="/buy-credits" element={<BuyCredits onBack={() => navigate('/dashboard')} onPurchase={handleDataChange} />} />
+              <Route path="/billing" element={<Billing />} />
+              <Route path="/gamification" element={<Gamification />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/balance" element={<Balance />} />
               <Route path="/pricing" element={<PricingPage />} />

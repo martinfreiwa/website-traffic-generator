@@ -18,8 +18,6 @@ Manages user account settings, security, and preferences.
 *   [x] **Data Export**: GDPR compliant full data download.
 *   [x] **Delete Account**: Self-serve account deletion flow (with confirmation).
 *   [x] **Timezone Setting**: Adjust all dashboard timestamps to user preference.
-*   [ ] **Linked Accounts**: View and Manage OAuth connections (Google/Github).
-*   [x] **Social Links**: Add Discord/Twitter/LinkedIn to profile (for community badges).
 *   [x] **Developer Mode**: Toggle to show raw JSON responses in dashboard.
 *   [x] **API Key Regeneration**: One-click rotate secret key (with warning).
 *   [x] **Theme Customizer**: Pick specific accent color for keyboard.
@@ -31,7 +29,6 @@ Manages user account settings, security, and preferences.
 *   [x] **Display Name**: "Show as [Nickname]" instead of real name.
 *   [x] **Recovery Email**: Secondary email for emergency account access.
 *   [x] **Session Kill**: "Log out everywhere else" button.
-*   [ ] **Sms Alerts**: Toggle for critical alerts via SMS.
 *   [ ] **Beta Tester**: Checkbox to opt-in to experimental features.
 *   [ ] **Keyboard Shortcuts**: View list of all available shortcuts.
 *   [x] **Referral Code**: Custom field to set vanity referral code.
@@ -42,12 +39,6 @@ Manages user account settings, security, and preferences.
 *   [x] **Font Size**: "Small / Medium / Large" text preference.
 *   [x] **API Whitelist**: Restrict API key usage to specific IPs.
 *   [x] **Sound Effects**: Toggle UI clicks/notifications sounds.
-*   [ ] **Browser Notify**: Request permission for browser push notifications.
-*   [ ] **Data Processing Agrmnt**: "Download DPA" pdf button.
-*   [ ] **Risk Score**: (Internal) display user's own fraud score if transparent.
-*   [ ] **Support Pin**: 4-digit pin to verify identity via phone support.
-*   [ ] **Date Format**: DD/MM/YYYY vs MM/DD/YYYY toggle.
-*   [ ] **Number Format**: 1.000,00 vs 1,000.00 toggle.
 *   [x] **Bio**: Short text bio for public profile.
 *   [x] **Job Title**: "SEO Manager at [Company]" field.
 *   [x] **Website**: Link to user's personal site.
@@ -57,9 +48,6 @@ Manages user account settings, security, and preferences.
 *   [ ] **API Logs**: link to "View API usage history".
 *   [x] **Webhook Secret**: View/Rotate webhook signing secret.
 *   [x] **Accessibility**: "Reduce Motion" preference sync.
-*   [ ] **Marketing Consent**: Granular checkboxes for "Sales calls", "Updates".
 *   [ ] **Password Age**: "Last changed 3 months ago".
-*   [ ] **TOTP Reset**: QR code for setting up Authenticator app if lost.
-*   [ ] **Emergency Codes**: Download list of one-time backup codes.
 *   [x] **Login Notification**: "Email me on new login" toggle.
 

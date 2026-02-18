@@ -2,6 +2,9 @@ from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from dotenv import load_dotenv
+import logging
+import time
+import traceback
 
 load_dotenv()
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,6 +24,17 @@ from database import SessionLocal, engine, get_db
 from enhanced_scheduler import scheduler
 from sse_starlette.sse import EventSourceResponse
 from web_utils import find_ga4_tid
+import error_logger
+from error_logger import (
+    init_error_tracking,
+    set_request_id,
+    set_user_context,
+    clear_user_context,
+    add_breadcrumb,
+    capture_exception,
+    log_request,
+    get_logger,
+)
 import json
 import asyncio
 import requests
@@ -34,6 +48,9 @@ import stripe
 import email_service
 import random
 import string
+import uuid
+
+logger = get_logger(__name__)
 
 # --- Stripe Configuration ---
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "sk_test_placeholder_if_not_set")
@@ -67,6 +84,91 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())[:8]
+    set_request_id(request_id)
+
+    start_time = time.time()
+
+    add_breadcrumb(
+        message=f"Request started: {request.method} {request.url.path}",
+        category="request",
+        data={"query": str(request.query_params)},
+    )
+
+    response = await call_next(request)
+
+    duration_ms = (time.time() - start_time) * 1000
+
+    response.headers["X-Request-ID"] = request_id
+
+    log_request(
+        method=request.method,
+        path=request.url.path,
+        status_code=response.status_code,
+        duration_ms=duration_ms,
+        ip_address=request.client.host if request.client else None,
+    )
+
+    return response
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    request_id = request.headers.get("X-Request-ID", "unknown")
+
+    if exc.status_code >= 500:
+        logger.error(
+            f"HTTP {exc.status_code} error on {request.method} {request.url.path}: {exc.detail}",
+            extra={"request_id": request_id, "status_code": exc.status_code},
+        )
+        capture_exception(exc)
+    elif exc.status_code >= 400:
+        logger.warning(
+            f"HTTP {exc.status_code} on {request.method} {request.url.path}: {exc.detail}",
+            extra={"request_id": request_id},
+        )
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail, "request_id": request_id},
+        headers={"X-Request-ID": request_id},
+    )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    request_id = request.headers.get("X-Request-ID", "unknown")
+
+    logger.exception(
+        f"Unhandled exception on {request.method} {request.url.path}: {type(exc).__name__}: {exc}",
+        extra={"request_id": request_id},
+    )
+
+    capture_exception(
+        exc,
+        context={
+            "request": {
+                "method": request.method,
+                "path": request.url.path,
+                "query": str(request.query_params),
+            }
+        },
+    )
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal server error",
+            "request_id": request_id,
+            "error_type": type(exc).__name__,
+        },
+        headers={"X-Request-ID": request_id},
+    )
+
+
 # Ensure static directory exists
 os.makedirs("static/avatars", exist_ok=True)
 os.makedirs("static/assets", exist_ok=True)
@@ -98,6 +200,10 @@ api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)
 
 @app.on_event("startup")
 async def startup_event():
+    environment = os.getenv("ENVIRONMENT", "development")
+    log_level = os.getenv("LOG_LEVEL", "INFO")
+    init_error_tracking(environment=environment, log_level=log_level)
+    logger.info(f"Starting TrafficGen Pro API in {environment} mode")
     await scheduler.start()
 
 
@@ -172,6 +278,14 @@ class UserResponse(BaseModel):
     number_format: str = "en-US"
     require_password_reset: bool = False
     avatar_url: Optional[str] = None
+
+    # Gamification & Streak Fields
+    gamification_xp: int = 0
+    gamification_level: int = 1
+    gamification_total_spent: float = 0.0
+    gamification_permanent_discount: int = 0
+    streak_days: int = 0
+    streak_best: int = 0
 
     class Config:
         from_attributes = True
@@ -556,6 +670,150 @@ class TrafficStart(BaseModel):
     total_visitor_count: Optional[int] = None
 
 
+# --- Benefit & Affiliate Schemas ---
+
+
+class BenefitTypeResponse(BaseModel):
+    id: str
+    type: str
+    category: str
+    name: str
+    value: float
+    requirements: Dict[str, Any]
+    active: bool
+    display_order: int
+
+    class Config:
+        from_attributes = True
+
+
+class BenefitTypeCreate(BaseModel):
+    type: str
+    category: str
+    name: str
+    value: float
+    requirements: Dict[str, Any] = {}
+    active: bool = True
+    display_order: int = 0
+
+
+class BenefitRequestCreate(BaseModel):
+    benefit_type: str
+    benefit_category: str
+    url: str
+    description: Optional[str] = None
+    screenshot_url: Optional[str] = None
+    claimed_value: float
+
+
+class BenefitRequestResponse(BaseModel):
+    id: str
+    user_id: str
+    benefit_type: str
+    benefit_category: str
+    url: str
+    description: Optional[str]
+    screenshot_url: Optional[str]
+    claimed_value: float
+    approved_value: Optional[float]
+    status: str
+    admin_notes: Optional[str]
+    fraud_flagged: bool
+    fraud_reason: Optional[str]
+    submitted_at: datetime
+    reviewed_at: Optional[datetime]
+    reviewed_by: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+
+class BenefitRequestReview(BaseModel):
+    approved_value: Optional[float] = None
+    status: str
+    admin_notes: Optional[str] = None
+    fraud_flagged: bool = False
+    fraud_reason: Optional[str] = None
+
+
+class AffiliateTierResponse(BaseModel):
+    id: str
+    user_id: str
+    tier_level: int
+    tier_name: str
+    commission_rate_l1: float
+    commission_rate_l2: float
+    commission_rate_l3: float
+    total_referrals_l1: int
+    total_referrals_l2: int
+    total_referrals_l3: int
+    total_earnings: float
+    pending_payout: float
+    lifetime_payout: float
+    last_tier_update: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AffiliateRelationResponse(BaseModel):
+    id: str
+    user_id: str
+    referrer_l1_id: Optional[str]
+    referrer_l2_id: Optional[str]
+    referrer_l3_id: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+
+class PayoutRequestCreate(BaseModel):
+    amount: float
+    method: str
+    payout_details: Dict[str, Any]
+
+
+class PayoutRequestResponse(BaseModel):
+    id: str
+    user_id: str
+    amount: float
+    method: str
+    payout_details: Dict[str, Any]
+    status: str
+    admin_notes: Optional[str]
+    requested_at: datetime
+    processed_at: Optional[datetime]
+    processed_by: Optional[str]
+    transaction_hash: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+
+class PayoutRequestReview(BaseModel):
+    status: str
+    admin_notes: Optional[str] = None
+    transaction_hash: Optional[str] = None
+
+
+class AffiliateDashboardResponse(BaseModel):
+    tier: AffiliateTierResponse
+    relations: List[AffiliateRelationResponse]
+    referral_link: str
+    total_referrals: int
+    total_earnings: float
+    pending_payout: float
+    benefit_balance: float
+
+
+class BenefitBalanceResponse(BaseModel):
+    benefit_balance: float
+    total_benefits_claimed: float
+    pending_requests: int
+    approved_requests: int
+    rejected_requests: int
+
+
 # --- Helpers ---
 
 
@@ -706,17 +964,17 @@ def register(request: Request, user: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
 
-    print(f"📧 Sending verification email to: {user.email}")
+    logger.info(f"Sending verification email to: {user.email}")
     try:
         result = email_service.send_verification_email(user.email, verification_code)
         if result.get("success"):
-            print(f"✅ Verification email sent to {user.email}")
+            logger.info(f"Verification email sent to {user.email}")
         else:
-            print(
-                f"❌ Failed to send verification email to {user.email}: {result.get('error')}"
+            logger.warning(
+                f"Failed to send verification email to {user.email}: {result.get('error')}"
             )
     except Exception as e:
-        print(f"❌ Error sending verification email: {e}")
+        logger.error(f"Error sending verification email: {e}")
 
     return new_user
 
@@ -755,7 +1013,7 @@ async def login_for_access_token(
         user.last_active = datetime.utcnow()
         db.commit()
     except Exception as e:
-        print(f"Error updating login history: {e}")
+        logger.error(f"Error updating login history: {e}")
 
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     # Use version-aware token creator
@@ -919,18 +1177,18 @@ def resend_verification(data: ResendVerificationRequest, db: Session = Depends(g
     user.verification_token_expires = datetime.utcnow() + timedelta(hours=24)
     db.commit()
 
-    print(f"🔐 Generated verification code for {user.email}: {verification_code}")
+    logger.info(f"Generated verification code for {user.email}")
 
     try:
         result = email_service.send_verification_email(user.email, verification_code)
         if result.get("success"):
-            print(f"✅ Verification email sent to {user.email}")
+            logger.info(f"Verification email sent to {user.email}")
         else:
-            print(
-                f"❌ Failed to send verification email to {user.email}: {result.get('error')}"
+            logger.warning(
+                f"Failed to send verification email to {user.email}: {result.get('error')}"
             )
     except Exception as e:
-        print(f"❌ Error sending verification email: {e}")
+        logger.error(f"Error sending verification email: {e}")
 
     return {
         "status": "sent",
@@ -999,7 +1257,7 @@ async def upload_avatar(
 
         return {"avatar_url": current_user.avatar_url}
     except Exception as e:
-        print(f"Error uploading avatar: {e}")
+        logger.error(f"Error uploading avatar: {e}")
         raise HTTPException(status_code=500, detail="Failed to upload avatar")
 
 
@@ -1016,9 +1274,537 @@ def delete_user_account(
         db.commit()
         return {"status": "account deleted", "message": "We are sorry to see you go."}
     except Exception as e:
-        print(f"Error deleting user: {e}")
+        logger.error(f"Error deleting user: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail="Failed to delete account")
+
+
+# ==================== GAMIFICATION & STREAK SYSTEM ====================
+
+GAMIFICATION_LEVELS = [
+    {
+        "level": 1,
+        "name": "Novice",
+        "xp_required": 0,
+        "spend_required": 0,
+        "bonus_hits": 0,
+        "discount": 0,
+    },
+    {
+        "level": 2,
+        "name": "Rookie",
+        "xp_required": 100,
+        "spend_required": 10,
+        "bonus_hits": 2000,
+        "discount": 0,
+    },
+    {
+        "level": 3,
+        "name": "Explorer",
+        "xp_required": 250,
+        "spend_required": 25,
+        "bonus_hits": 3000,
+        "discount": 0,
+    },
+    {
+        "level": 4,
+        "name": "Starter",
+        "xp_required": 500,
+        "spend_required": 50,
+        "bonus_hits": 5000,
+        "discount": 1,
+    },
+    {
+        "level": 5,
+        "name": "Builder",
+        "xp_required": 1000,
+        "spend_required": 100,
+        "bonus_hits": 8000,
+        "discount": 2,
+    },
+    {
+        "level": 6,
+        "name": "Achiever",
+        "xp_required": 2000,
+        "spend_required": 200,
+        "bonus_hits": 12000,
+        "discount": 2,
+    },
+    {
+        "level": 7,
+        "name": "Strategist",
+        "xp_required": 3500,
+        "spend_required": 350,
+        "bonus_hits": 15000,
+        "discount": 3,
+    },
+    {
+        "level": 8,
+        "name": "Professional",
+        "xp_required": 5000,
+        "spend_required": 500,
+        "bonus_hits": 20000,
+        "discount": 4,
+    },
+    {
+        "level": 9,
+        "name": "Expert",
+        "xp_required": 7500,
+        "spend_required": 750,
+        "bonus_hits": 30000,
+        "discount": 5,
+    },
+    {
+        "level": 10,
+        "name": "Master",
+        "xp_required": 10000,
+        "spend_required": 1000,
+        "bonus_hits": 40000,
+        "discount": 6,
+    },
+    {
+        "level": 11,
+        "name": "Veteran",
+        "xp_required": 15000,
+        "spend_required": 1500,
+        "bonus_hits": 50000,
+        "discount": 7,
+    },
+    {
+        "level": 12,
+        "name": "Champion",
+        "xp_required": 20000,
+        "spend_required": 2000,
+        "bonus_hits": 60000,
+        "discount": 8,
+    },
+    {
+        "level": 13,
+        "name": "Elite",
+        "xp_required": 30000,
+        "spend_required": 3000,
+        "bonus_hits": 80000,
+        "discount": 9,
+    },
+    {
+        "level": 14,
+        "name": "Premier",
+        "xp_required": 40000,
+        "spend_required": 4000,
+        "bonus_hits": 100000,
+        "discount": 10,
+    },
+    {
+        "level": 15,
+        "name": "Supreme",
+        "xp_required": 60000,
+        "spend_required": 6000,
+        "bonus_hits": 120000,
+        "discount": 11,
+    },
+    {
+        "level": 16,
+        "name": "Titan",
+        "xp_required": 80000,
+        "spend_required": 8000,
+        "bonus_hits": 150000,
+        "discount": 12,
+    },
+    {
+        "level": 17,
+        "name": "Legend",
+        "xp_required": 120000,
+        "spend_required": 12000,
+        "bonus_hits": 180000,
+        "discount": 13,
+    },
+    {
+        "level": 18,
+        "name": "Mythic",
+        "xp_required": 180000,
+        "spend_required": 18000,
+        "bonus_hits": 220000,
+        "discount": 14,
+    },
+    {
+        "level": 19,
+        "name": "Immortal",
+        "xp_required": 250000,
+        "spend_required": 25000,
+        "bonus_hits": 280000,
+        "discount": 15,
+    },
+    {
+        "level": 20,
+        "name": "Apex",
+        "xp_required": 500000,
+        "spend_required": 50000,
+        "bonus_hits": 500000,
+        "discount": 20,
+    },
+]
+
+
+def get_streak_bonus(streak_days: int) -> int:
+    """Calculate daily bonus based on streak"""
+    if streak_days >= 30:
+        return 20000
+    elif streak_days >= 14:
+        return 15000
+    elif streak_days >= 7:
+        return 10000
+    elif streak_days >= 5:
+        return 3000
+    elif streak_days >= 3:
+        return 2000
+    return 1000
+
+
+def calculate_level(xp: int, total_spent: float) -> int:
+    """Calculate user level based on XP and total spent"""
+    for i in range(len(GAMIFICATION_LEVELS) - 1, -1, -1):
+        level_data = GAMIFICATION_LEVELS[i]
+        if (
+            xp >= level_data["xp_required"]
+            or total_spent >= level_data["spend_required"]
+        ):
+            return level_data["level"]
+    return 1
+
+
+class DailyBonusResponse(BaseModel):
+    success: bool
+    hits: int
+    streak_days: int
+    streak_best: int
+    message: str
+    tier: str = "economy"
+
+
+class GamificationResponse(BaseModel):
+    level: int
+    level_name: str
+    xp: int
+    xp_to_next: int
+    total_spent: float
+    discount_percent: int
+    pending_bonus_hits: int
+    pending_bonus_claimed: bool
+    streak_days: int
+    streak_best: int
+    next_reward: str
+
+
+@app.post("/users/me/daily-bonus", response_model=DailyBonusResponse)
+def claim_daily_bonus(
+    current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    if current_user.last_daily_bonus and current_user.last_daily_bonus >= today_start:
+        return DailyBonusResponse(
+            success=False,
+            hits=0,
+            streak_days=current_user.streak_days,
+            streak_best=current_user.streak_best,
+            message="You already claimed your daily bonus today.",
+        )
+
+    # Calculate streak
+    if current_user.streak_last_date:
+        last_date = current_user.streak_last_date
+        yesterday = today_start - timedelta(days=1)
+
+        if last_date >= yesterday:
+            current_user.streak_days += 1
+        else:
+            current_user.streak_days = 1
+    else:
+        current_user.streak_days = 1
+
+    if current_user.streak_days > current_user.streak_best:
+        current_user.streak_best = current_user.streak_days
+
+    # Calculate bonus
+    bonus_hits = get_streak_bonus(current_user.streak_days)
+
+    # Apply bonus
+    current_user.balance_economy = (current_user.balance_economy or 0) + bonus_hits
+    current_user.last_daily_bonus = now
+    current_user.streak_last_date = now
+
+    # Add XP for daily login
+    current_user.gamification_xp = (current_user.gamification_xp or 0) + 5
+
+    db.commit()
+    db.refresh(current_user)
+
+    return DailyBonusResponse(
+        success=True,
+        hits=bonus_hits,
+        streak_days=current_user.streak_days,
+        streak_best=current_user.streak_best,
+        message=f"Congratulations! You received {bonus_hits:,} Economy hits!",
+        tier="economy",
+    )
+
+
+@app.get("/users/me/gamification", response_model=GamificationResponse)
+def get_gamification_status(
+    current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    xp = current_user.gamification_xp or 0
+    total_spent = current_user.gamification_total_spent or 0.0
+    current_level = calculate_level(xp, total_spent)
+
+    level_data = GAMIFICATION_LEVELS[current_level - 1]
+    next_level_data = GAMIFICATION_LEVELS[current_level] if current_level < 20 else None
+
+    claimed_levels = current_user.gamification_claimed_levels or []
+    pending_bonus = (
+        level_data["bonus_hits"] if current_level not in claimed_levels else 0
+    )
+
+    xp_to_next = 0
+    next_reward = ""
+    if next_level_data:
+        xp_to_next = next_level_data["xp_required"] - xp
+        next_reward = f"+{next_level_data['bonus_hits']:,} Hits, {next_level_data['discount']}% Discount"
+    else:
+        next_reward = "Max level reached!"
+
+    return GamificationResponse(
+        level=current_level,
+        level_name=level_data["name"],
+        xp=xp,
+        xp_to_next=max(0, xp_to_next),
+        total_spent=total_spent,
+        discount_percent=current_user.gamification_permanent_discount or 0,
+        pending_bonus_hits=pending_bonus,
+        pending_bonus_claimed=current_level in claimed_levels,
+        streak_days=current_user.streak_days or 0,
+        streak_best=current_user.streak_best or 0,
+        next_reward=next_reward,
+    )
+
+
+@app.post("/users/me/claim-level-bonus")
+def claim_level_bonus(
+    current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    xp = current_user.gamification_xp or 0
+    total_spent = current_user.gamification_total_spent or 0.0
+    current_level = calculate_level(xp, total_spent)
+
+    claimed_levels = current_user.gamification_claimed_levels or []
+
+    if current_level in claimed_levels:
+        raise HTTPException(status_code=400, detail="Level bonus already claimed")
+
+    level_data = GAMIFICATION_LEVELS[current_level - 1]
+    bonus_hits = level_data["bonus_hits"]
+    discount = level_data["discount"]
+
+    # Apply bonus
+    if bonus_hits > 0:
+        current_user.balance_economy = (current_user.balance_economy or 0) + (
+            bonus_hits / 1000 * 0.1
+        )
+
+    # Apply permanent discount
+    if discount > current_user.gamification_permanent_discount:
+        current_user.gamification_permanent_discount = discount
+
+    # Mark as claimed
+    claimed_levels.append(current_level)
+    current_user.gamification_claimed_levels = claimed_levels
+
+    db.commit()
+
+    return {
+        "success": True,
+        "level": current_level,
+        "bonus_hits": bonus_hits,
+        "discount_percent": discount,
+        "message": f"Level {current_level} bonus claimed! +{bonus_hits:,} Hits, {discount}% permanent discount",
+    }
+
+
+@app.get("/users/me/streak")
+def get_streak_status(current_user: models.User = Depends(get_current_user)):
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    can_claim = not (
+        current_user.last_daily_bonus and current_user.last_daily_bonus >= today_start
+    )
+
+    return {
+        "streak_days": current_user.streak_days or 0,
+        "streak_best": current_user.streak_best or 0,
+        "can_claim_today": can_claim,
+        "next_bonus": get_streak_bonus((current_user.streak_days or 0) + 1)
+        if can_claim
+        else 0,
+        "milestone_bonus": {"day_7": 10000, "day_14": 15000, "day_30": 20000},
+    }
+
+
+# ==================== END GAMIFICATION ====================
+
+
+# ==================== INVOICES ====================
+
+
+class InvoiceResponse(BaseModel):
+    id: str
+    transaction_id: str
+    date: str
+    amount: float
+    type: str
+    description: str
+    status: str
+
+
+@app.get("/users/me/invoices", response_model=List[InvoiceResponse])
+def get_user_invoices(
+    current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    transactions = (
+        db.query(models.Transaction)
+        .filter(models.Transaction.user_id == current_user.id)
+        .order_by(models.Transaction.created_at.desc())
+        .all()
+    )
+
+    return [
+        InvoiceResponse(
+            id=t.id,
+            transaction_id=t.id,
+            date=t.created_at.strftime("%Y-%m-%d") if t.created_at else "",
+            amount=t.amount,
+            type=t.type,
+            description=t.description or "",
+            status=t.status,
+        )
+        for t in transactions
+    ]
+
+
+@app.get("/users/me/invoices/{transaction_id}")
+def get_invoice_html(
+    transaction_id: str,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    transaction = (
+        db.query(models.Transaction)
+        .filter(
+            models.Transaction.id == transaction_id,
+            models.Transaction.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    invoice_number = f"INV-{transaction.id[:8].upper()}"
+    invoice_date = (
+        transaction.created_at.strftime("%B %d, %Y")
+        if transaction.created_at
+        else "N/A"
+    )
+
+    amount_str = f"€{transaction.amount:.2f}"
+    if transaction.type == "credit":
+        amount_str = f"+{amount_str}"
+    else:
+        amount_str = f"-{amount_str}"
+
+    company_info = f"<p>{current_user.company}</p>" if current_user.company else ""
+    address_info = f"<p>{current_user.address}</p>" if current_user.address else ""
+    city_info = (
+        f"<p>{current_user.zip} {current_user.city}</p>"
+        if current_user.zip and current_user.city
+        else ""
+    )
+    country_info = f"<p>{current_user.country}</p>" if current_user.country else ""
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Invoice {invoice_number}</title>
+        <style>
+            body {{ font-family: 'Helvetica', Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; color: #333; }}
+            .header {{ border-bottom: 3px solid #ff4d00; padding-bottom: 20px; margin-bottom: 40px; }}
+            .logo {{ font-size: 28px; font-weight: bold; color: #ff4d00; }}
+            .invoice-title {{ font-size: 36px; font-weight: bold; margin: 0; }}
+            .info-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 40px; }}
+            .info-box {{ background: #f9fafb; padding: 20px; border-radius: 4px; }}
+            .info-box h3 {{ margin: 0 0 10px 0; font-size: 12px; text-transform: uppercase; color: #666; }}
+            table {{ width: 100%; border-collapse: collapse; margin-bottom: 40px; }}
+            th {{ background: #f3f4f6; padding: 12px; text-align: left; font-size: 12px; text-transform: uppercase; }}
+            td {{ padding: 12px; border-bottom: 1px solid #e5e7eb; }}
+            .amount {{ text-align: right; font-weight: bold; }}
+            .credit {{ color: #22c55e; }}
+            .debit {{ color: #333; }}
+            .footer {{ margin-top: 60px; text-align: center; color: #999; font-size: 12px; }}
+            .status {{ display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: bold; text-transform: uppercase; }}
+            .status-completed {{ background: #dcfce7; color: #16a34a; }}
+            .status-pending {{ background: #fef3c7; color: #d97706; }}
+            @media print {{ body {{ margin: 0; }} .no-print {{ display: none; }} }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <div class="logo">TrafficGen Pro</div>
+        </div>
+        <h1 class="invoice-title">Invoice</h1>
+        <div class="info-grid">
+            <div class="info-box">
+                <h3>Invoice Details</h3>
+                <p><strong>Invoice Number:</strong> {invoice_number}</p>
+                <p><strong>Date:</strong> {invoice_date}</p>
+                <p><strong>Status:</strong> <span class="status status-{transaction.status}">{transaction.status.upper()}</span></p>
+            </div>
+            <div class="info-box">
+                <h3>Bill To</h3>
+                <p><strong>{current_user.email}</strong></p>
+                {company_info}{address_info}{city_info}{country_info}
+            </div>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Description</th>
+                    <th>Type</th>
+                    <th class="amount">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>{transaction.description or "N/A"}</td>
+                    <td>{transaction.type.upper()}</td>
+                    <td class="amount {transaction.type}">{amount_str}</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="footer">
+            <p>Thank you for your business!</p>
+            <p>TrafficGen Pro - modus-traffic.com</p>
+            <p class="no-print"><button onclick="window.print()" style="padding: 10px 20px; background: #ff4d00; color: white; border: none; cursor: pointer; font-weight: bold;">Print / Save as PDF</button></p>
+        </div>
+    </body>
+    </html>
+    """
+
+    return JSONResponse(content=html_content, media_type="text/html")
+
+
+# ==================== END INVOICES ====================
 
 
 @app.post("/quick-campaign", response_model=QuickCampaignResponse)
@@ -1119,18 +1905,9 @@ def create_quick_campaign(campaign: QuickCampaignCreate, db: Session = Depends(g
     db.commit()
     db.refresh(db_project)
 
-    print(f"\n{'=' * 60}")
-    print(f"QUICK CAMPAIGN CREATED")
-    print(f"{'=' * 60}")
-    print(f"Email: {campaign.email}")
-    print(f"Password: {generated_password}")
-    print(f"Project ID: {db_project.id}")
-    print(f"Project Name: {campaign.project_name}")
-    print(f"Target URL: {campaign.target_url}")
-    print(f"GA4 Tracking ID: {tid or 'Not found'}")
-    print(f"Visitors: {total_visitors}")
-    print(f"Expires: {expires_at}")
-    print(f"{'=' * 60}\n")
+    logger.info(
+        f"QUICK CAMPAIGN CREATED: email={campaign.email}, project_id={db_project.id}, project_name={campaign.project_name}, target_url={campaign.target_url}, ga4_tid={tid or 'Not found'}, visitors={total_visitors}, expires={expires_at}"
+    )
 
     return {
         "success": True,
@@ -1195,11 +1972,10 @@ def get_transactions(
 def get_affiliate_earnings(
     db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
 ):
-    # Join with User to get referee email
     earnings = (
-        db.query(models.AffiliateEarnings, models.User.email)
-        .join(models.User, models.AffiliateEarnings.referee_id == models.User.id)
-        .filter(models.AffiliateEarnings.referrer_id == current_user.id)
+        db.query(models.AffiliateEarning, models.User.email)
+        .join(models.User, models.AffiliateEarning.referee_id == models.User.id)
+        .filter(models.AffiliateEarning.affiliate_id == current_user.id)
         .all()
     )
 
@@ -1209,6 +1985,925 @@ def get_affiliate_earnings(
         data.referee_email = email
         result.append(data)
     return result
+
+
+@app.get("/affiliate/dashboard", response_model=AffiliateDashboardResponse)
+def get_affiliate_dashboard(
+    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
+):
+    tier = (
+        db.query(models.AffiliateTier)
+        .filter(models.AffiliateTier.user_id == current_user.id)
+        .first()
+    )
+    if not tier:
+        tier = models.AffiliateTier(
+            user_id=current_user.id,
+            tier_level=1,
+            tier_name="Bronze Starter",
+            commission_rate_l1=0.15,
+            commission_rate_l2=0.05,
+            commission_rate_l3=0.02,
+        )
+        db.add(tier)
+        db.commit()
+        db.refresh(tier)
+
+    relations = (
+        db.query(models.AffiliateRelation)
+        .filter(
+            (models.AffiliateRelation.referrer_l1_id == current_user.id)
+            | (models.AffiliateRelation.referrer_l2_id == current_user.id)
+            | (models.AffiliateRelation.referrer_l3_id == current_user.id)
+        )
+        .all()
+    )
+
+    total_referrals = (
+        tier.total_referrals_l1 + tier.total_referrals_l2 + tier.total_referrals_l3
+    )
+    referral_link = f"https://modus-traffic.com/ref/{current_user.affiliate_code}"
+
+    return AffiliateDashboardResponse(
+        tier=AffiliateTierResponse.from_orm(tier),
+        relations=[AffiliateRelationResponse.from_orm(r) for r in relations],
+        referral_link=referral_link,
+        total_referrals=total_referrals,
+        total_earnings=tier.total_earnings,
+        pending_payout=tier.pending_payout,
+        benefit_balance=current_user.benefit_balance or 0.0,
+    )
+
+
+@app.get("/affiliate/tier", response_model=AffiliateTierResponse)
+def get_affiliate_tier(
+    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
+):
+    tier = (
+        db.query(models.AffiliateTier)
+        .filter(models.AffiliateTier.user_id == current_user.id)
+        .first()
+    )
+    if not tier:
+        tier = models.AffiliateTier(
+            user_id=current_user.id,
+            tier_level=1,
+            tier_name="Bronze Starter",
+            commission_rate_l1=0.15,
+            commission_rate_l2=0.05,
+            commission_rate_l3=0.02,
+        )
+        db.add(tier)
+        db.commit()
+        db.refresh(tier)
+    return tier
+
+
+def update_affiliate_tier(db: Session, user_id: str):
+    tier = (
+        db.query(models.AffiliateTier)
+        .filter(models.AffiliateTier.user_id == user_id)
+        .first()
+    )
+    if not tier:
+        tier = models.AffiliateTier(user_id=user_id)
+        db.add(tier)
+
+    total_refs = (
+        tier.total_referrals_l1 + tier.total_referrals_l2 + tier.total_referrals_l3
+    )
+    lifetime = tier.total_earnings
+
+    if total_refs >= 100 or lifetime >= 50000:
+        tier.tier_level = 6
+        tier.tier_name = "Legende"
+        tier.commission_rate_l1 = 0.50
+    elif total_refs >= 51 or lifetime >= 15000:
+        tier.tier_level = 5
+        tier.tier_name = "Diamant VIP"
+        tier.commission_rate_l1 = 0.40
+    elif total_refs >= 26 or lifetime >= 5000:
+        tier.tier_level = 4
+        tier.tier_name = "Platin Elite"
+        tier.commission_rate_l1 = 0.30
+    elif total_refs >= 11 or lifetime >= 2000:
+        tier.tier_level = 3
+        tier.tier_name = "Gold Pro Partner"
+        tier.commission_rate_l1 = 0.25
+    elif total_refs >= 4 or lifetime >= 500:
+        tier.tier_level = 2
+        tier.tier_name = "Silber Partner"
+        tier.commission_rate_l1 = 0.20
+    else:
+        tier.tier_level = 1
+        tier.tier_name = "Bronze Starter"
+        tier.commission_rate_l1 = 0.15
+
+    tier.last_tier_update = datetime.utcnow()
+    db.commit()
+
+
+@app.get("/affiliate/referrals")
+def get_affiliate_referrals(
+    tier: int = 1,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if tier == 1:
+        relation_field = models.AffiliateRelation.referrer_l1_id
+    elif tier == 2:
+        relation_field = models.AffiliateRelation.referrer_l2_id
+    else:
+        relation_field = models.AffiliateRelation.referrer_l3_id
+
+    relations = (
+        db.query(models.AffiliateRelation)
+        .filter(relation_field == current_user.id)
+        .all()
+    )
+    user_ids = [r.user_id for r in relations]
+    users = (
+        db.query(models.User).filter(models.User.id.in_(user_ids)).all()
+        if user_ids
+        else []
+    )
+
+    return [
+        {
+            "id": u.id,
+            "email": u.email,
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+            "tier": tier,
+        }
+        for u in users
+    ]
+
+
+# --- Benefits API ---
+
+
+@app.get("/benefits/types", response_model=List[BenefitTypeResponse])
+def get_benefit_types(db: Session = Depends(get_db)):
+    types = (
+        db.query(models.BenefitType)
+        .filter(models.BenefitType.active == True)
+        .order_by(models.BenefitType.display_order)
+        .all()
+    )
+    if not types:
+        default_types = [
+            {
+                "type": "youtube",
+                "category": "micro",
+                "name": "YouTube Video (100-1.000 Views)",
+                "value": 25.0,
+                "requirements": {
+                    "min_views": 100,
+                    "max_views": 1000,
+                    "min_duration": 2,
+                },
+            },
+            {
+                "type": "youtube",
+                "category": "small",
+                "name": "YouTube Video (1.001-10.000 Views)",
+                "value": 50.0,
+                "requirements": {
+                    "min_views": 1001,
+                    "max_views": 10000,
+                    "min_duration": 2,
+                },
+            },
+            {
+                "type": "youtube",
+                "category": "medium",
+                "name": "YouTube Video (10.001-50.000 Views)",
+                "value": 100.0,
+                "requirements": {
+                    "min_views": 10001,
+                    "max_views": 50000,
+                    "min_duration": 3,
+                },
+            },
+            {
+                "type": "youtube",
+                "category": "large",
+                "name": "YouTube Video (50.001-100.000 Views)",
+                "value": 250.0,
+                "requirements": {
+                    "min_views": 50001,
+                    "max_views": 100000,
+                    "min_duration": 3,
+                },
+            },
+            {
+                "type": "youtube",
+                "category": "viral",
+                "name": "YouTube Video (100.000+ Views)",
+                "value": 500.0,
+                "requirements": {"min_views": 100000, "min_duration": 3},
+            },
+            {
+                "type": "blog",
+                "category": "guest",
+                "name": "Gastartikel (DA 10+)",
+                "value": 30.0,
+                "requirements": {"min_words": 500, "min_da": 10},
+            },
+            {
+                "type": "blog",
+                "category": "quality",
+                "name": "Qualitätsartikel (DA 30+)",
+                "value": 75.0,
+                "requirements": {"min_words": 1000, "min_da": 30},
+            },
+            {
+                "type": "blog",
+                "category": "premium",
+                "name": "Premium Backlink (DA 50+)",
+                "value": 150.0,
+                "requirements": {"min_da": 50},
+            },
+            {
+                "type": "blog",
+                "category": "authority",
+                "name": "Authority Backlink (DA 70+)",
+                "value": 300.0,
+                "requirements": {"min_da": 70},
+            },
+            {
+                "type": "facebook",
+                "category": "group",
+                "name": "Facebook Gruppen-Post",
+                "value": 15.0,
+                "requirements": {"min_members": 100},
+            },
+            {
+                "type": "facebook",
+                "category": "viral",
+                "name": "Facebook Viral Post",
+                "value": 50.0,
+                "requirements": {"min_reactions": 500},
+            },
+            {
+                "type": "reddit",
+                "category": "post",
+                "name": "Reddit Post",
+                "value": 20.0,
+                "requirements": {},
+            },
+            {
+                "type": "reddit",
+                "category": "hot",
+                "name": "Reddit Hot Post",
+                "value": 75.0,
+                "requirements": {"min_upvotes": 100},
+            },
+            {
+                "type": "twitter",
+                "category": "tweet",
+                "name": "Tweet",
+                "value": 25.0,
+                "requirements": {"min_likes": 50},
+            },
+            {
+                "type": "twitter",
+                "category": "viral",
+                "name": "Viral Tweet",
+                "value": 100.0,
+                "requirements": {"min_likes": 500},
+            },
+            {
+                "type": "instagram",
+                "category": "story",
+                "name": "Instagram Story",
+                "value": 10.0,
+                "requirements": {},
+            },
+            {
+                "type": "instagram",
+                "category": "post",
+                "name": "Instagram Post",
+                "value": 50.0,
+                "requirements": {"min_likes": 1000},
+            },
+            {
+                "type": "tiktok",
+                "category": "video",
+                "name": "TikTok Video",
+                "value": 50.0,
+                "requirements": {"min_views": 10000},
+            },
+            {
+                "type": "tiktok",
+                "category": "viral",
+                "name": "TikTok Viral",
+                "value": 200.0,
+                "requirements": {"min_views": 100000},
+            },
+            {
+                "type": "review",
+                "category": "trustpilot",
+                "name": "Trustpilot Bewertung",
+                "value": 10.0,
+                "requirements": {},
+            },
+            {
+                "type": "review",
+                "category": "g2",
+                "name": "G2 Bewertung",
+                "value": 15.0,
+                "requirements": {},
+            },
+            {
+                "type": "review",
+                "category": "testimonial",
+                "name": "Video-Testimonial",
+                "value": 100.0,
+                "requirements": {"min_duration": 60},
+            },
+            {
+                "type": "review",
+                "category": "casestudy",
+                "name": "Case Study",
+                "value": 200.0,
+                "requirements": {},
+            },
+        ]
+        for i, bt in enumerate(default_types):
+            db_bt = models.BenefitType(**bt, display_order=i)
+            db.add(db_bt)
+        db.commit()
+        types = (
+            db.query(models.BenefitType)
+            .filter(models.BenefitType.active == True)
+            .order_by(models.BenefitType.display_order)
+            .all()
+        )
+    return types
+
+
+@app.get("/benefits/my-requests", response_model=List[BenefitRequestResponse])
+def get_my_benefit_requests(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+    status: str = None,
+):
+    query = db.query(models.BenefitRequest).filter(
+        models.BenefitRequest.user_id == current_user.id
+    )
+    if status:
+        query = query.filter(models.BenefitRequest.status == status)
+    return query.order_by(models.BenefitRequest.submitted_at.desc()).all()
+
+
+@app.get("/benefits/balance", response_model=BenefitBalanceResponse)
+def get_benefit_balance(
+    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
+):
+    pending = (
+        db.query(models.BenefitRequest)
+        .filter(
+            models.BenefitRequest.user_id == current_user.id,
+            models.BenefitRequest.status == "pending",
+        )
+        .count()
+    )
+    approved = (
+        db.query(models.BenefitRequest)
+        .filter(
+            models.BenefitRequest.user_id == current_user.id,
+            models.BenefitRequest.status == "approved",
+        )
+        .count()
+    )
+    rejected = (
+        db.query(models.BenefitRequest)
+        .filter(
+            models.BenefitRequest.user_id == current_user.id,
+            models.BenefitRequest.status == "rejected",
+        )
+        .count()
+    )
+
+    return BenefitBalanceResponse(
+        benefit_balance=current_user.benefit_balance or 0.0,
+        total_benefits_claimed=current_user.total_benefits_claimed or 0.0,
+        pending_requests=pending,
+        approved_requests=approved,
+        rejected_requests=rejected,
+    )
+
+
+@app.post("/benefits/submit", response_model=BenefitRequestResponse)
+def submit_benefit(
+    benefit: BenefitRequestCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.account_locked:
+        raise HTTPException(status_code=403, detail="Account is locked")
+
+    existing = (
+        db.query(models.BenefitRequest)
+        .filter(
+            models.BenefitRequest.url == benefit.url,
+            models.BenefitRequest.user_id == current_user.id,
+            models.BenefitRequest.status == "pending",
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=400, detail="This URL is already pending review"
+        )
+
+    db_benefit = models.BenefitRequest(
+        user_id=current_user.id,
+        benefit_type=benefit.benefit_type,
+        benefit_category=benefit.benefit_category,
+        url=benefit.url,
+        description=benefit.description,
+        screenshot_url=benefit.screenshot_url,
+        claimed_value=benefit.claimed_value,
+        status="pending",
+    )
+    db.add(db_benefit)
+    db.commit()
+    db.refresh(db_benefit)
+
+    current_user.benefit_requests_count = (current_user.benefit_requests_count or 0) + 1
+    db.commit()
+
+    return db_benefit
+
+
+# --- Admin Benefits ---
+
+
+@app.get("/admin/benefits/pending")
+def get_pending_benefits(
+    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    benefits = (
+        db.query(models.BenefitRequest)
+        .filter(models.BenefitRequest.status == "pending")
+        .order_by(models.BenefitRequest.submitted_at.asc())
+        .all()
+    )
+
+    result = []
+    for b in benefits:
+        user = db.query(models.User).filter(models.User.id == b.user_id).first()
+        result.append(
+            {
+                "id": b.id,
+                "user_email": user.email if user else "Unknown",
+                "benefit_type": b.benefit_type,
+                "benefit_category": b.benefit_category,
+                "url": b.url,
+                "description": b.description,
+                "claimed_value": b.claimed_value,
+                "submitted_at": b.submitted_at.isoformat() if b.submitted_at else None,
+            }
+        )
+    return result
+
+
+@app.get("/admin/benefits/history")
+def get_benefits_history(
+    status: str = None,
+    limit: int = 100,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    query = db.query(models.BenefitRequest).filter(
+        models.BenefitRequest.status != "pending"
+    )
+
+    if status:
+        query = query.filter(models.BenefitRequest.status == status)
+
+    benefits = (
+        query.order_by(models.BenefitRequest.reviewed_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    result = []
+    for b in benefits:
+        user = db.query(models.User).filter(models.User.id == b.user_id).first()
+        result.append(
+            {
+                "id": b.id,
+                "user_email": user.email if user else "Unknown",
+                "benefit_type": b.benefit_type,
+                "benefit_category": b.benefit_category,
+                "url": b.url,
+                "description": b.description,
+                "claimed_value": b.claimed_value,
+                "approved_value": b.approved_value,
+                "status": b.status,
+                "admin_notes": b.admin_notes,
+                "fraud_flagged": b.fraud_flagged,
+                "fraud_reason": b.fraud_reason,
+                "submitted_at": b.submitted_at.isoformat() if b.submitted_at else None,
+                "reviewed_at": b.reviewed_at.isoformat() if b.reviewed_at else None,
+            }
+        )
+    return result
+
+
+@app.post("/admin/benefits/{benefit_id}/approve")
+def approve_benefit(
+    benefit_id: str,
+    review: BenefitRequestReview,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    benefit = (
+        db.query(models.BenefitRequest)
+        .filter(models.BenefitRequest.id == benefit_id)
+        .first()
+    )
+    if not benefit:
+        raise HTTPException(status_code=404, detail="Benefit request not found")
+
+    user = db.query(models.User).filter(models.User.id == benefit.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    approved_value = (
+        review.approved_value
+        if review.approved_value is not None
+        else benefit.claimed_value
+    )
+    benefit.approved_value = approved_value
+    benefit.status = "approved"
+    benefit.reviewed_at = datetime.utcnow()
+    benefit.reviewed_by = current_user.id
+    benefit.admin_notes = review.admin_notes
+
+    user.benefit_balance = (user.benefit_balance or 0.0) + approved_value
+    user.total_benefits_claimed = (user.total_benefits_claimed or 0.0) + approved_value
+
+    db.commit()
+    return {"success": True, "message": f"Approved {approved_value}€ traffic credit"}
+
+
+@app.post("/admin/benefits/{benefit_id}/reject")
+def reject_benefit(
+    benefit_id: str,
+    review: BenefitRequestReview,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    benefit = (
+        db.query(models.BenefitRequest)
+        .filter(models.BenefitRequest.id == benefit_id)
+        .first()
+    )
+    if not benefit:
+        raise HTTPException(status_code=404, detail="Benefit request not found")
+
+    benefit.status = "rejected"
+    benefit.reviewed_at = datetime.utcnow()
+    benefit.reviewed_by = current_user.id
+    benefit.admin_notes = review.admin_notes
+    benefit.fraud_flagged = review.fraud_flagged
+    benefit.fraud_reason = review.fraud_reason
+
+    if review.fraud_flagged:
+        user = db.query(models.User).filter(models.User.id == benefit.user_id).first()
+        if user:
+            user.account_locked = True
+            user.lock_reason = review.fraud_reason
+            user.locked_at = datetime.utcnow()
+
+    db.commit()
+    return {"success": True, "message": "Benefit request rejected"}
+
+
+# --- Admin Benefit Types ---
+
+
+@app.get("/admin/benefit-types", response_model=List[BenefitTypeResponse])
+def get_all_benefit_types_admin(
+    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return db.query(models.BenefitType).order_by(models.BenefitType.display_order).all()
+
+
+@app.post("/admin/benefit-types", response_model=BenefitTypeResponse)
+def create_benefit_type(
+    benefit: BenefitTypeCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    db_benefit = models.BenefitType(**benefit.dict())
+    db.add(db_benefit)
+    db.commit()
+    db.refresh(db_benefit)
+    return db_benefit
+
+
+@app.put("/admin/benefit-types/{type_id}", response_model=BenefitTypeResponse)
+def update_benefit_type(
+    type_id: str,
+    benefit: BenefitTypeCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    db_benefit = (
+        db.query(models.BenefitType).filter(models.BenefitType.id == type_id).first()
+    )
+    if not db_benefit:
+        raise HTTPException(status_code=404, detail="Benefit type not found")
+
+    db_benefit.type = benefit.type
+    db_benefit.category = benefit.category
+    db_benefit.name = benefit.name
+    db_benefit.value = benefit.value
+    db_benefit.requirements = benefit.requirements
+    db_benefit.active = benefit.active
+    db_benefit.display_order = benefit.display_order
+
+    db.commit()
+    db.refresh(db_benefit)
+    return db_benefit
+
+
+# --- Payout API ---
+
+
+@app.post("/affiliate/payouts/request", response_model=PayoutRequestResponse)
+def request_payout(
+    payout: PayoutRequestCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    tier = (
+        db.query(models.AffiliateTier)
+        .filter(models.AffiliateTier.user_id == current_user.id)
+        .first()
+    )
+    if not tier or tier.pending_payout < payout.amount:
+        raise HTTPException(status_code=400, detail="Insufficient pending earnings")
+
+    min_amounts = {"paypal": 50.0, "bank": 100.0, "usdt": 50.0, "btc": 100.0}
+    if payout.amount < min_amounts.get(payout.method, 50.0):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Minimum amount for {payout.method} is {min_amounts.get(payout.method, 50.0)}€",
+        )
+
+    db_payout = models.PayoutRequest(
+        user_id=current_user.id,
+        amount=payout.amount,
+        method=payout.method,
+        payout_details=payout.payout_details,
+        status="pending",
+    )
+    db.add(db_payout)
+
+    tier.pending_payout -= payout.amount
+    db.commit()
+    db.refresh(db_payout)
+
+    return db_payout
+
+
+@app.get("/affiliate/payouts", response_model=List[PayoutRequestResponse])
+def get_my_payouts(
+    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
+):
+    return (
+        db.query(models.PayoutRequest)
+        .filter(models.PayoutRequest.user_id == current_user.id)
+        .order_by(models.PayoutRequest.requested_at.desc())
+        .all()
+    )
+
+
+# --- Admin Payouts ---
+
+
+@app.get("/admin/payouts/pending")
+def get_pending_payouts(
+    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    payouts = (
+        db.query(models.PayoutRequest)
+        .filter(models.PayoutRequest.status == "pending")
+        .order_by(models.PayoutRequest.requested_at.asc())
+        .all()
+    )
+
+    result = []
+    for p in payouts:
+        user = db.query(models.User).filter(models.User.id == p.user_id).first()
+        result.append(
+            {
+                "id": p.id,
+                "user_email": user.email if user else "Unknown",
+                "amount": p.amount,
+                "method": p.method,
+                "payout_details": p.payout_details,
+                "requested_at": p.requested_at.isoformat() if p.requested_at else None,
+            }
+        )
+    return result
+
+
+@app.post("/admin/payouts/{payout_id}/approve")
+def approve_payout(
+    payout_id: str,
+    review: PayoutRequestReview,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    payout = (
+        db.query(models.PayoutRequest)
+        .filter(models.PayoutRequest.id == payout_id)
+        .first()
+    )
+    if not payout:
+        raise HTTPException(status_code=404, detail="Payout request not found")
+
+    payout.status = "approved"
+    payout.admin_notes = review.admin_notes
+    db.commit()
+
+    return {"success": True, "message": "Payout approved"}
+
+
+@app.post("/admin/payouts/{payout_id}/reject")
+def reject_payout(
+    payout_id: str,
+    review: PayoutRequestReview,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    payout = (
+        db.query(models.PayoutRequest)
+        .filter(models.PayoutRequest.id == payout_id)
+        .first()
+    )
+    if not payout:
+        raise HTTPException(status_code=404, detail="Payout request not found")
+
+    tier = (
+        db.query(models.AffiliateTier)
+        .filter(models.AffiliateTier.user_id == payout.user_id)
+        .first()
+    )
+    if tier:
+        tier.pending_payout += payout.amount
+
+    payout.status = "rejected"
+    payout.admin_notes = review.admin_notes
+    db.commit()
+
+    return {"success": True, "message": "Payout rejected and balance restored"}
+
+
+@app.post("/admin/payouts/{payout_id}/mark-paid")
+def mark_payout_paid(
+    payout_id: str,
+    review: PayoutRequestReview,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    payout = (
+        db.query(models.PayoutRequest)
+        .filter(models.PayoutRequest.id == payout_id)
+        .first()
+    )
+    if not payout:
+        raise HTTPException(status_code=404, detail="Payout request not found")
+
+    payout.status = "paid"
+    payout.processed_at = datetime.utcnow()
+    payout.processed_by = current_user.id
+    payout.transaction_hash = review.transaction_hash
+    payout.admin_notes = review.admin_notes
+
+    tier = (
+        db.query(models.AffiliateTier)
+        .filter(models.AffiliateTier.user_id == payout.user_id)
+        .first()
+    )
+    if tier:
+        tier.lifetime_payout += payout.amount
+
+    db.commit()
+
+    return {"success": True, "message": "Payout marked as paid"}
+
+
+# --- Admin Affiliates ---
+
+
+@app.get("/admin/affiliates")
+def get_all_affiliates(
+    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    tiers = db.query(models.AffiliateTier).all()
+    result = []
+    for t in tiers:
+        user = db.query(models.User).filter(models.User.id == t.user_id).first()
+        if user:
+            result.append(
+                {
+                    "id": t.id,
+                    "user_email": user.email,
+                    "tier_level": t.tier_level,
+                    "tier_name": t.tier_name,
+                    "commission_rate_l1": t.commission_rate_l1,
+                    "total_referrals_l1": t.total_referrals_l1,
+                    "total_referrals_l2": t.total_referrals_l2,
+                    "total_referrals_l3": t.total_referrals_l3,
+                    "total_earnings": t.total_earnings,
+                    "pending_payout": t.pending_payout,
+                    "lifetime_payout": t.lifetime_payout,
+                }
+            )
+    return result
+
+
+@app.post("/admin/affiliates/{user_id}/tier-update")
+def manual_tier_update(
+    user_id: str,
+    tier_level: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    tier = (
+        db.query(models.AffiliateTier)
+        .filter(models.AffiliateTier.user_id == user_id)
+        .first()
+    )
+    if not tier:
+        tier = models.AffiliateTier(user_id=user_id)
+        db.add(tier)
+
+    tier_names = {
+        1: "Bronze Starter",
+        2: "Silber Partner",
+        3: "Gold Pro Partner",
+        4: "Platin Elite",
+        5: "Diamant VIP",
+        6: "Legende",
+    }
+    rates = {1: 0.15, 2: 0.20, 3: 0.25, 4: 0.30, 5: 0.40, 6: 0.50}
+
+    tier.tier_level = tier_level
+    tier.tier_name = tier_names.get(tier_level, "Bronze Starter")
+    tier.commission_rate_l1 = rates.get(tier_level, 0.15)
+    tier.last_tier_update = datetime.utcnow()
+    db.commit()
+
+    return {"success": True, "message": f"Tier updated to {tier.tier_name}"}
 
 
 # --- Project Management (SaaS Style) ---
@@ -1612,7 +3307,12 @@ def simulate_deposit(data: DepositRequest, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # 2. Add Balance
+    # 2. Auto-verify user on first purchase
+    if not user.is_verified:
+        user.is_verified = True
+        print(f"[AUTO-VERIFY] User {user.email} auto-verified on deposit")
+
+    # 3. Add Balance
     if data.tier == "economy":
         user.balance_economy = (user.balance_economy or 0.0) + data.amount
     elif data.tier == "professional":
@@ -1641,35 +3341,146 @@ def simulate_deposit(data: DepositRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(trx)
 
-    # 4. Affiliate Commission (20% Lifetime)
+    # 4. Affiliate Commission (Multi-Level System)
     if user.referred_by:
-        referrer = (
+        referrer_l1 = (
             db.query(models.User).filter(models.User.id == user.referred_by).first()
         )
-        if referrer:
-            commission = data.amount * 0.20
+        if referrer_l1:
+            tier_l1 = (
+                db.query(models.AffiliateTier)
+                .filter(models.AffiliateTier.user_id == referrer_l1.id)
+                .first()
+            )
+            if not tier_l1:
+                tier_l1 = models.AffiliateTier(user_id=referrer_l1.id)
+                db.add(tier_l1)
+                db.commit()
 
-            # Create Earning record
-            earning = models.AffiliateEarnings(
-                referrer_id=referrer.id,
+            commission_l1 = data.amount * tier_l1.commission_rate_l1
+            referrer_l1.balance += commission_l1
+            tier_l1.total_earnings += commission_l1
+            tier_l1.pending_payout += commission_l1
+            tier_l1.total_referrals_l1 += 1
+
+            earning = models.AffiliateEarning(
+                affiliate_id=referrer_l1.id,
                 referee_id=user.id,
-                transaction_id=trx.id,
-                amount=commission,
-                status="pending",
+                amount=commission_l1,
+                status="approved",
+                tier=1,
             )
             db.add(earning)
 
-            # Update referrer balance (SaaS often adds to balance or separate wallet, here we add to balance)
-            referrer.balance += commission
-
-            # Add transaction for referrer
             ref_trx = models.Transaction(
-                user_id=referrer.id,
+                user_id=referrer_l1.id,
                 type="bonus",
-                amount=commission,
-                description=f"Affiliate Commission from {user.email}",
+                amount=commission_l1,
+                description=f"Affiliate L1 Commission from {user.email}",
             )
             db.add(ref_trx)
+
+            rel_l1 = (
+                db.query(models.AffiliateRelation)
+                .filter(models.AffiliateRelation.user_id == user.id)
+                .first()
+            )
+            if not rel_l1:
+                rel_l1 = models.AffiliateRelation(
+                    user_id=user.id, referrer_l1_id=referrer_l1.id
+                )
+                db.add(rel_l1)
+            else:
+                rel_l1.referrer_l1_id = referrer_l1.id
+
+            if referrer_l1.referred_by:
+                referrer_l2 = (
+                    db.query(models.User)
+                    .filter(models.User.id == referrer_l1.referred_by)
+                    .first()
+                )
+                if referrer_l2:
+                    tier_l2 = (
+                        db.query(models.AffiliateTier)
+                        .filter(models.AffiliateTier.user_id == referrer_l2.id)
+                        .first()
+                    )
+                    if not tier_l2:
+                        tier_l2 = models.AffiliateTier(user_id=referrer_l2.id)
+                        db.add(tier_l2)
+                        db.commit()
+
+                    commission_l2 = data.amount * tier_l2.commission_rate_l2
+                    referrer_l2.balance += commission_l2
+                    tier_l2.total_earnings += commission_l2
+                    tier_l2.pending_payout += commission_l2
+                    tier_l2.total_referrals_l2 += 1
+
+                    earning_l2 = models.AffiliateEarning(
+                        affiliate_id=referrer_l2.id,
+                        referee_id=user.id,
+                        amount=commission_l2,
+                        status="approved",
+                        tier=2,
+                    )
+                    db.add(earning_l2)
+
+                    ref_trx_l2 = models.Transaction(
+                        user_id=referrer_l2.id,
+                        type="bonus",
+                        amount=commission_l2,
+                        description=f"Affiliate L2 Commission from {user.email}",
+                    )
+                    db.add(ref_trx_l2)
+
+                    if rel_l1:
+                        rel_l1.referrer_l2_id = referrer_l2.id
+
+                    if referrer_l2.referred_by:
+                        referrer_l3 = (
+                            db.query(models.User)
+                            .filter(models.User.id == referrer_l2.referred_by)
+                            .first()
+                        )
+                        if referrer_l3:
+                            tier_l3 = (
+                                db.query(models.AffiliateTier)
+                                .filter(models.AffiliateTier.user_id == referrer_l3.id)
+                                .first()
+                            )
+                            if not tier_l3:
+                                tier_l3 = models.AffiliateTier(user_id=referrer_l3.id)
+                                db.add(tier_l3)
+                                db.commit()
+
+                            commission_l3 = data.amount * tier_l3.commission_rate_l3
+                            referrer_l3.balance += commission_l3
+                            tier_l3.total_earnings += commission_l3
+                            tier_l3.pending_payout += commission_l3
+                            tier_l3.total_referrals_l3 += 1
+
+                            earning_l3 = models.AffiliateEarning(
+                                affiliate_id=referrer_l3.id,
+                                referee_id=user.id,
+                                amount=commission_l3,
+                                status="approved",
+                                tier=3,
+                            )
+                            db.add(earning_l3)
+
+                            ref_trx_l3 = models.Transaction(
+                                user_id=referrer_l3.id,
+                                type="bonus",
+                                amount=commission_l3,
+                                description=f"Affiliate L3 Commission from {user.email}",
+                            )
+                            db.add(ref_trx_l3)
+
+                            if rel_l1:
+                                rel_l1.referrer_l3_id = referrer_l3.id
+
+            db.commit()
+            update_affiliate_tier(db, referrer_l1.id)
 
     db.commit()
     return {"status": "success", "new_balance": user.balance}
@@ -1882,20 +3693,16 @@ def get_active_now(
 ):
     """
     Real-time count of active visitors.
-    Counts hits in the last 60 seconds.
+    Counts hits in the last 60 seconds and includes hits_today.
     """
     from datetime import datetime, timedelta
     from hit_emulator import ga_emu_engine
 
     one_minute_ago = datetime.utcnow() - timedelta(seconds=60)
 
-    # Get user's projects
+    # Get user's projects (all, not just active - to show stats for paused too)
     user_projects = (
-        db.query(models.Project)
-        .filter(
-            models.Project.user_id == current_user.id, models.Project.status == "active"
-        )
-        .all()
+        db.query(models.Project).filter(models.Project.user_id == current_user.id).all()
     )
 
     project_ids = [p.id for p in user_projects]
@@ -1920,7 +3727,7 @@ def get_active_now(
         .all()
     )
 
-    # Build response
+    # Build response with hits_today from project
     projects_data = {}
     total_active = 0
 
@@ -1931,20 +3738,15 @@ def get_active_now(
         }
         total_active += hit.count
 
-    # Also check in-memory stats from emulator for real-time accuracy
-    for pid in project_ids:
-        if pid in ga_emu_engine.stats:
-            # Add in-memory count if higher (catches very recent hits not yet in DB)
-            mem_count = ga_emu_engine.stats[pid].get("total", 0)
-            if pid not in projects_data:
-                # Only use memory if no DB hits (very recent activity)
-                if mem_count > 0:
-                    # Check if emulator has recent activity
-                    projects_data[pid] = {
-                        "active": min(mem_count, 5),  # Cap at 5 to avoid overcounting
-                        "lastHit": datetime.utcnow().isoformat(),
-                    }
-                    total_active += min(mem_count, 5)
+    # Add hits_today for all user projects
+    for p in user_projects:
+        if p.id not in projects_data:
+            projects_data[p.id] = {
+                "active": 0,
+                "lastHit": None,
+            }
+        projects_data[p.id]["hitsToday"] = p.hits_today or 0
+        projects_data[p.id]["status"] = p.status
 
     return {"activeNow": total_active, "projects": projects_data}
 
@@ -1957,7 +3759,7 @@ def get_project_stats_hourly(
     db: Session = Depends(get_db),
 ):
     """
-    Hourly stats for single project.
+    30-minute interval stats for single project (48 intervals for 24 hours).
     Returns: [{ hour, visitors, pageviews }, ...]
     """
     from datetime import datetime, timedelta
@@ -1976,14 +3778,9 @@ def get_project_stats_hourly(
 
     start_time = datetime.utcnow() - timedelta(hours=hours)
 
-    stats = (
-        db.query(
-            func.strftime("%Y-%m-%d %H:00", models.TrafficLog.timestamp).label("hour"),
-            func.count().label("pageviews"),
-            func.count(
-                func.distinct(func.coalesce(models.TrafficLog.ip, models.TrafficLog.id))
-            ).label("visitors"),
-        )
+    # Get all traffic logs and group by 30-min intervals in Python for reliability
+    logs = (
+        db.query(models.TrafficLog)
         .filter(
             and_(
                 models.TrafficLog.project_id == project_id,
@@ -1991,15 +3788,47 @@ def get_project_stats_hourly(
                 models.TrafficLog.status == "success",
             )
         )
-        .group_by(func.strftime("%Y-%m-%d %H:00", models.TrafficLog.timestamp))
-        .order_by(func.strftime("%Y-%m-%d %H:00", models.TrafficLog.timestamp).desc())
         .all()
     )
 
-    return [
-        {"hour": s.hour, "visitors": s.visitors, "pageviews": s.pageviews}
-        for s in stats
-    ]
+    # Group by 30-minute intervals
+    stats_dict = {}
+    for log in logs:
+        ts = log.timestamp
+        minute = (ts.minute // 30) * 30
+        slot_time = ts.replace(minute=minute, second=0, microsecond=0)
+        hour_key = slot_time.strftime("%Y-%m-%d %H:%M")
+
+        if hour_key not in stats_dict:
+            stats_dict[hour_key] = {"visitors": set(), "pageviews": 0}
+
+        stats_dict[hour_key]["pageviews"] += 1
+        if log.ip:
+            stats_dict[hour_key]["visitors"].add(log.ip)
+        else:
+            stats_dict[hour_key]["visitors"].add(str(log.id))
+
+    # Generate all 48 intervals (30-minute slots) for the last 24 hours
+    result = []
+    now = datetime.utcnow()
+    for i in range(48):
+        slot_time = now - timedelta(minutes=i * 30)
+        minute = (slot_time.minute // 30) * 30
+        slot_time = slot_time.replace(minute=minute, second=0, microsecond=0)
+        hour_key = slot_time.strftime("%Y-%m-%d %H:%M")
+
+        if hour_key in stats_dict:
+            result.append(
+                {
+                    "hour": hour_key,
+                    "visitors": len(stats_dict[hour_key]["visitors"]),
+                    "pageviews": stats_dict[hour_key]["pageviews"],
+                }
+            )
+        else:
+            result.append({"hour": hour_key, "visitors": 0, "pageviews": 0})
+
+    return result
 
 
 @app.get("/admin/live-pulse")
@@ -2207,8 +4036,8 @@ def get_user_details_admin(
         db.query(models.User).filter(models.User.referred_by == user_id).count()
     )
     referral_earnings = (
-        db.query(func.sum(models.AffiliateEarnings.amount))
-        .filter(models.AffiliateEarnings.referrer_id == user_id)
+        db.query(func.sum(models.AffiliateEarning.amount))
+        .filter(models.AffiliateEarning.referrer_id == user_id)
         .scalar()
         or 0
     )
@@ -3523,6 +5352,12 @@ def approve_bank_transfer(
         raise HTTPException(status_code=404, detail="User not found")
 
     if approval.approved:
+        if not user.is_verified:
+            user.is_verified = True
+            print(
+                f"[AUTO-VERIFY] User {user.email} auto-verified on bank transfer approval"
+            )
+
         if proof.tier == "economy":
             user.balance_economy = (user.balance_economy or 0.0) + proof.amount
         elif proof.tier == "professional":
@@ -3569,14 +5404,30 @@ async def create_payment_intent(
     request: PaymentIntentRequest, current_user: models.User = Depends(get_current_user)
 ):
     try:
-        # Create a PaymentIntent with the order amount and currency
+        # Apply Gamification Discount if available
+        discount_percent = current_user.gamification_permanent_discount or 0
+        original_amount = request.amount
+        final_amount = original_amount
+        discount_amount = 0
+
+        if discount_percent > 0:
+            discount_amount = int(original_amount * (discount_percent / 100))
+            final_amount = original_amount - discount_amount
+
+        # Create a PaymentIntent with the discounted amount
         intent = stripe.PaymentIntent.create(
-            amount=request.amount,
+            amount=final_amount,
             currency=request.currency,
             automatic_payment_methods={
                 "enabled": True,
             },
-            metadata={"user_id": current_user.id, "email": current_user.email},
+            metadata={
+                "user_id": current_user.id,
+                "email": current_user.email,
+                "original_amount": original_amount,
+                "discount_percent": discount_percent,
+                "discount_amount": discount_amount,
+            },
         )
         return {"clientSecret": intent["client_secret"]}
     except Exception as e:

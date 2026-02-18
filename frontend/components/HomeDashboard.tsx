@@ -5,14 +5,38 @@ import { db } from '../services/db';
 import {
     TrendingUp, Activity, CreditCard, Users, ArrowRight, Clock,
     Zap, Info, AlertTriangle, AlertOctagon, Star, Sun, Globe,
-    Gift, MessageSquare, Copy, Check, BarChart, Plus
+    Gift, MessageSquare, Copy, Check, BarChart, Plus, X, Sparkles
 } from 'lucide-react';
+
+interface GamificationData {
+    level: number;
+    level_name: string;
+    xp: number;
+    xp_to_next: number;
+    total_spent: number;
+    discount_percent: number;
+    pending_bonus_hits: number;
+    pending_bonus_claimed: boolean;
+    streak_days: number;
+    streak_best: number;
+    next_reward: string;
+}
+
+interface DailyBonusResult {
+    success: boolean;
+    hits: number;
+    streak_days: number;
+    streak_best: number;
+    message: string;
+    tier: string;
+}
 
 interface HomeDashboardProps {
     projects: Project[];
     balance: number;
     onNavigateToProject: (id: string) => void;
     onNavigateToBuyCredits: () => void;
+    onNavigateToSupport?: () => void;
 }
 
 const CountdownTimer = ({ targetDate }: { targetDate: string }) => {
@@ -73,7 +97,7 @@ const TrafficChart = ({ stats }: { stats: { date: string, visitors: number }[] }
     );
 };
 
-const HomeDashboard: React.FC<HomeDashboardProps> = ({ projects, balance, onNavigateToProject, onNavigateToBuyCredits }) => {
+const HomeDashboard: React.FC<HomeDashboardProps> = ({ projects, balance, onNavigateToProject, onNavigateToBuyCredits, onNavigateToSupport }) => {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [alerts, setAlerts] = useState<SystemAlert[]>([]);
     const [user, setUser] = useState<User | null>(null);
@@ -83,11 +107,46 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ projects, balance, onNavi
     const [copiedRef, setCopiedRef] = useState(false);
     const [bonusClaimed, setBonusClaimed] = useState(false);
     const [activeNow, setActiveNow] = useState(0);
+    const [gamification, setGamification] = useState<GamificationData | null>(null);
+    const [showBonusPopup, setShowBonusPopup] = useState(false);
+    const [bonusResult, setBonusResult] = useState<DailyBonusResult | null>(null);
+    const [isClaimingBonus, setIsClaimingBonus] = useState(false);
 
     useEffect(() => {
         const currentUser = db.getCurrentUser();
         setUser(currentUser || null);
         setTransactions(db.getTransactions().slice(0, 5));
+
+        // Fetch gamification data
+        const fetchGamification = async () => {
+            try {
+                const response = await fetch(`${import.meta.env.VITE_API_URL || window.location.origin}/users/me/gamification`, {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('tgp_token')}` }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setGamification(data);
+                    setBonusClaimed(data.streak_days > 0 && !await canClaimBonus());
+                }
+            } catch (e) {
+                console.error('Failed to fetch gamification:', e);
+            }
+        };
+
+        const canClaimBonus = async () => {
+            try {
+                const response = await fetch(`${import.meta.env.VITE_API_URL || window.location.origin}/users/me/streak`, {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('tgp_token')}` }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    return data.can_claim_today;
+                }
+            } catch (e) {}
+            return true;
+        };
+
+        fetchGamification();
 
         // Fetch and Filter Alerts for Current User
         const allAlerts = db.getAlerts();
@@ -192,6 +251,40 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ projects, balance, onNavi
         setTimeout(() => setCopiedRef(false), 2000);
     };
 
+    const handleDailyBonus = async () => {
+        if (isClaimingBonus || bonusClaimed) return;
+        setIsClaimingBonus(true);
+        
+        try {
+            const response = await fetch(`${import.meta.env.VITE_API_URL || window.location.origin}/users/me/daily-bonus`, {
+                method: 'POST',
+                headers: { 
+                    'Authorization': `Bearer ${localStorage.getItem('tgp_token')}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            const data = await response.json();
+            setBonusResult(data);
+            setShowBonusPopup(true);
+            
+            if (data.success) {
+                setBonusClaimed(true);
+                setGamification(prev => prev ? { ...prev, streak_days: data.streak_days, streak_best: data.streak_best } : null);
+            }
+        } catch (e) {
+            console.error('Failed to claim bonus:', e);
+        } finally {
+            setIsClaimingBonus(false);
+        }
+    };
+
+    const getStreakProgress = () => {
+        const streak = gamification?.streak_days || 0;
+        const weekProgress = streak % 7;
+        return { current: weekProgress || 7, total: 7 };
+    };
+
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
 
@@ -287,14 +380,29 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ projects, balance, onNavi
                         <Star size={64} className="text-[#ff4d00]" />
                     </div>
                     <div className="flex justify-between items-center mb-1">
-                        <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Level 1 Novice</div>
-                        <span className="text-[10px] font-black text-[#ff4d00]">24%</span>
+                        <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                            Level {gamification?.level || 1} {gamification?.level_name || 'Novice'}
+                        </div>
+                        <span className="text-[10px] font-black text-[#ff4d00]">
+                            {gamification?.xp_to_next ? Math.min(100, Math.round((gamification.xp / (gamification.xp + gamification.xp_to_next)) * 100)) : 100}%
+                        </span>
                     </div>
                     <div className="text-2xl font-black text-gray-900 mb-3 uppercase tracking-tight">Growth Path</div>
                     <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden shadow-inner">
-                        <div className="h-full bg-[#ff4d00] w-[24%] transition-all duration-1000"></div>
+                        <div 
+                            className="h-full bg-[#ff4d00] transition-all duration-1000" 
+                            style={{ width: `${gamification?.xp_to_next ? Math.min(100, Math.round((gamification.xp / (gamification.xp + gamification.xp_to_next)) * 100)) : 100}%` }}
+                        ></div>
                     </div>
-                    <div className="mt-2 text-[9px] font-black text-gray-400 uppercase tracking-widest">Next Reward: +5% Bonus</div>
+                    <div className="mt-2 text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                        {gamification?.discount_percent ? `${gamification.discount_percent}% Discount Active • ` : ''}
+                        Next: {gamification?.next_reward || 'Max Level'}
+                    </div>
+                    {gamification?.pending_bonus_hits && gamification.pending_bonus_hits > 0 && !gamification.pending_bonus_claimed && (
+                        <button className="mt-3 w-full bg-[#ff4d00] text-white py-2 text-[9px] font-black uppercase tracking-widest rounded-sm hover:bg-black transition-colors animate-pulse">
+                            <Sparkles size={12} className="inline mr-1" /> Claim Level Bonus: +{gamification.pending_bonus_hits.toLocaleString()} Hits
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -366,15 +474,15 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ projects, balance, onNavi
 
                     {/* SEO Tip & Did You Know */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="bg-white border border-gray-200 p-6 rounded-sm shadow-sm flex gap-4 hover:border-blue-400 transition-colors">
-                            <div className="mt-1 bg-blue-50 p-2 rounded-sm"><Info size={16} className="text-blue-500" /></div>
+                        <div className="bg-white border border-gray-200 p-6 rounded-sm shadow-sm flex gap-4 hover:border-[#ff4d00] transition-colors">
+                            <div className="mt-1"><Info size={18} className="text-[#ff4d00]" /></div>
                             <div>
-                                <div className="text-[9px] font-black text-blue-500 uppercase tracking-widest mb-1">Weekly SEO Insight</div>
+                                <div className="text-[9px] font-black text-[#ff4d00] uppercase tracking-widest mb-1">Weekly SEO Insight</div>
                                 <p className="text-xs text-gray-700 leading-relaxed font-bold">"{dailyTip}"</p>
                             </div>
                         </div>
-                        <div className="bg-white border border-gray-200 p-6 rounded-sm shadow-sm flex gap-4 hover:border-orange-400 transition-colors">
-                            <div className="mt-1 bg-orange-50 p-2 rounded-sm"><Globe size={16} className="text-[#ff4d00]" /></div>
+                        <div className="bg-white border border-gray-200 p-6 rounded-sm shadow-sm flex gap-4 hover:border-[#ff4d00] transition-colors">
+                            <div className="mt-1"><Globe size={18} className="text-[#ff4d00]" /></div>
                             <div>
                                 <div className="text-[9px] font-black text-[#ff4d00] uppercase tracking-widest mb-1">Internet Statistics</div>
                                 <p className="text-xs text-gray-700 leading-relaxed font-bold">"{didYouKnow}"</p>
@@ -400,11 +508,11 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ projects, balance, onNavi
                                 <CreditCard size={20} className="mb-2 text-gray-400 group-hover:text-[#ff4d00]" />
                                 <div className="text-[9px] font-black uppercase tracking-widest">Buy Credits</div>
                             </button>
-                            <button onClick={() => setBonusClaimed(true)} disabled={bonusClaimed} className={`flex flex-col items-center justify-center p-4 transition-all rounded-sm group ${bonusClaimed ? 'bg-[#ff4d00]/10 text-[#ff4d00]' : 'bg-gray-50 hover:bg-[#ff4d00] hover:text-white'}`}>
+                            <button onClick={handleDailyBonus} disabled={bonusClaimed || isClaimingBonus} className={`flex flex-col items-center justify-center p-4 transition-all rounded-sm group ${bonusClaimed ? 'bg-[#ff4d00]/10 text-[#ff4d00]' : 'bg-gray-50 hover:bg-[#ff4d00] hover:text-white'}`}>
                                 <Gift size={20} className={`mb-2 ${bonusClaimed ? 'text-[#ff4d00]' : 'text-gray-400 group-hover:text-white'}`} />
-                                <div className="text-[9px] font-black uppercase tracking-widest">{bonusClaimed ? 'Claimed' : 'Daily Bonus'}</div>
+                                <div className="text-[9px] font-black uppercase tracking-widest">{isClaimingBonus ? 'Claiming...' : bonusClaimed ? 'Claimed' : 'Daily Bonus'}</div>
                             </button>
-                            <button className="flex flex-col items-center justify-center p-4 bg-gray-50 hover:bg-blue-600 hover:text-white transition-all rounded-sm group">
+                            <button onClick={() => onNavigateToSupport ? onNavigateToSupport() : window.location.href = '/dashboard/support'} className="flex flex-col items-center justify-center p-4 bg-gray-50 hover:bg-blue-600 hover:text-white transition-all rounded-sm group">
                                 <MessageSquare size={20} className="mb-2 text-gray-400 group-hover:text-white" />
                                 <div className="text-[9px] font-black uppercase tracking-widest">Get Support</div>
                             </button>
@@ -417,25 +525,28 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ projects, balance, onNavi
                         <div className="relative z-10">
                             <div className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Activity Streak</div>
                             <div className="text-3xl font-black flex items-center gap-3 mb-6">
-                                5 DAYS <Zap size={24} className="text-[#ff4d00] fill-[#ff4d00] animate-pulse" />
+                                {gamification?.streak_days || 0} DAYS <Zap size={24} className="text-[#ff4d00] fill-[#ff4d00] animate-pulse" />
                             </div>
                             <div className="flex gap-1.5 h-1.5 mb-3">
-                                {[1, 2, 3, 4, 5].map(i => <div key={i} className="bg-[#ff4d00] flex-1 rounded-full"></div>)}
-                                {[6, 7].map(i => <div key={i} className="bg-gray-800 flex-1 rounded-full"></div>)}
+                                {[1, 2, 3, 4, 5, 6, 7].map(i => (
+                                    <div key={i} className={`${i <= ((gamification?.streak_days || 0) % 7 || (gamification?.streak_days || 0) >= 7 ? 7 : 0) ? 'bg-[#ff4d00]' : 'bg-gray-800'} flex-1 rounded-full`}></div>
+                                ))}
                             </div>
-                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Maintain your streak to earn +10% bonus hits</p>
+                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+                                Best: {gamification?.streak_best || 0} days • Day 7 bonus: +10,000 hits
+                            </p>
                         </div>
                     </div>
 
                     {/* Referral Link Widget */}
                     <div className="bg-white border border-gray-200 shadow-sm p-6 rounded-sm">
                         <h3 className="text-xs font-black uppercase tracking-widest text-gray-900 mb-2 flex items-center gap-2">
-                            <Users size={14} className="text-blue-500" /> Affiliate Portal
+                            <Users size={14} className="text-[#ff4d00]" /> Affiliate Portal
                         </h3>
-                        <p className="text-[10px] text-gray-400 font-bold uppercase mb-4 tracking-tight">Earn hits by sharing your link</p>
-                        <div className="flex gap-2">
+                        <p className="text-[10px] text-gray-400 font-bold uppercase mb-4 tracking-tight">Earn 20% lifetime commission</p>
+                        <div className="flex gap-2 mb-3">
                             <div className="flex-1 bg-gray-50 border border-gray-200 text-[10px] px-3 py-2.5 rounded-sm font-mono text-gray-500 truncate">
-                                traffic.com/ref/{user?.id || '...'}
+                                {user?.referralCode ? `modus-traffic.com/ref/${user.referralCode}` : `modus-traffic.com/ref/u/${user?.id || '...'}`}
                             </div>
                             <button
                                 onClick={handleCopyReferral}
@@ -444,6 +555,12 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ projects, balance, onNavi
                                 {copiedRef ? <Check size={14} /> : <Copy size={14} />}
                             </button>
                         </div>
+                        <button 
+                            onClick={() => window.location.href = '/dashboard/affiliate'}
+                            className="w-full bg-black text-white py-2.5 text-[10px] font-black uppercase tracking-widest hover:bg-[#ff4d00] transition-colors rounded-sm flex items-center justify-center gap-2"
+                        >
+                            Open Affiliate Portal <ArrowRight size={12} />
+                        </button>
                     </div>
 
                     {/* Recent History */}
@@ -481,6 +598,61 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ projects, balance, onNavi
 
                 </div>
             </div>
+
+            {/* Daily Bonus Popup Modal */}
+            {showBonusPopup && bonusResult && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-sm shadow-2xl max-w-md w-full mx-4 overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
+                        <div className="bg-[#ff4d00] p-6 text-center relative">
+                            <button onClick={() => setShowBonusPopup(false)} className="absolute top-4 right-4 text-white/70 hover:text-white">
+                                <X size={20} />
+                            </button>
+                            <Gift size={48} className="mx-auto mb-3 text-white animate-bounce" />
+                            <h2 className="text-2xl font-black text-white uppercase tracking-tight">
+                                {bonusResult.success ? 'Bonus Claimed!' : 'Already Claimed'}
+                            </h2>
+                        </div>
+                        <div className="p-8 text-center">
+                            {bonusResult.success ? (
+                                <>
+                                    <p className="text-4xl font-black text-[#ff4d00] mb-2">
+                                        +{bonusResult.hits.toLocaleString()}
+                                    </p>
+                                    <p className="text-sm text-gray-500 font-bold uppercase tracking-widest mb-4">
+                                        {bonusResult.tier.charAt(0).toUpperCase() + bonusResult.tier.slice(1)} Hits Added
+                                    </p>
+                                    <div className="bg-gray-50 rounded-sm p-4 mb-6">
+                                        <div className="flex items-center justify-center gap-4">
+                                            <div>
+                                                <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Current Streak</div>
+                                                <div className="text-2xl font-black text-gray-900">{bonusResult.streak_days} Days</div>
+                                            </div>
+                                            <div className="w-px h-10 bg-gray-200"></div>
+                                            <div>
+                                                <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Best Streak</div>
+                                                <div className="text-2xl font-black text-gray-900">{bonusResult.streak_best} Days</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-gray-500 font-medium">
+                                        Come back tomorrow to continue your streak and earn more bonus hits!
+                                    </p>
+                                </>
+                            ) : (
+                                <p className="text-gray-600">{bonusResult.message}</p>
+                            )}
+                        </div>
+                        <div className="bg-gray-50 px-8 py-4">
+                            <button 
+                                onClick={() => setShowBonusPopup(false)}
+                                className="w-full bg-black text-white py-3 text-xs font-black uppercase tracking-widest hover:bg-[#ff4d00] transition-colors rounded-sm"
+                            >
+                                Got it!
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

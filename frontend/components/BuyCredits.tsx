@@ -45,7 +45,7 @@ const TIERS: TierDef[] = [
         color: 'border-orange-300'
     },
     {
-    id: 'expert',
+        id: 'expert',
         name: 'Expert',
         factor: 1.0,
         quality: '100% Quality',
@@ -223,8 +223,15 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
         setBalance(db.getBalance());
     }, []);
 
+    const user = db.getCurrentUser();
+    const discountPercent = user?.gamificationPermanentDiscount || 0;
+
     const visitors = VOLUME_STEPS[volumeIndex];
-    const totalPrice = PRICING_MATRIX[selectedTier.id][visitors][bulkPack];
+    const basePrice = PRICING_MATRIX[selectedTier.id][visitors][bulkPack];
+
+    // Calculate discount
+    const discountAmount = (basePrice * discountPercent) / 100;
+    const totalPrice = basePrice - discountAmount;
 
     const totalVisitors = visitors * bulkPack;
     const cpm = totalPrice / (totalVisitors / 1000);
@@ -234,8 +241,9 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
         if (paymentMethod === 'card') {
             setIsProcessing(true);
             try {
-                // Convert to cents
-                const amountInCents = Math.round(totalPrice * 100);
+                // Convert base price to cents for initial intent creation
+                // The backend will apply the discount automatically
+                const amountInCents = Math.round(basePrice * 100);
                 const data = await db.createPaymentIntent(amountInCents, 'eur');
                 if (data.clientSecret) {
                     setClientSecret(data.clientSecret);
@@ -256,7 +264,8 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
 
     const handlePaymentSuccess = async (paymentId: string) => {
         setIsProcessing(true);
-        await db.purchaseCredits(totalPrice, `Traffic Credits (${totalVisitors.toLocaleString()} ${selectedTier.name}) - Stripe ${paymentId}`, selectedTier.id, totalVisitors);
+        // Credit full value (basePrice) despite paying discounted price
+        await db.purchaseCredits(basePrice, `Traffic Credits (${totalVisitors.toLocaleString()} ${selectedTier.name}) - Stripe ${paymentId}`, selectedTier.id, totalVisitors);
         setBalance(db.getBalance());
         setIsProcessing(false);
         if (onPurchase) onPurchase();
@@ -315,7 +324,7 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
 
     const renderBankDetails = (currency: Currency) => {
         const bank = BANK_DETAILS[currency];
-        
+
         return (
             <div className="space-y-2 font-mono text-sm">
                 <div className="flex justify-between items-center py-2 border-b border-gray-100">
@@ -327,7 +336,7 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
                         </button>
                     </div>
                 </div>
-                
+
                 {bank.iban && (
                     <div className="flex justify-between items-center py-2 border-b border-gray-100">
                         <span className="text-gray-500">IBAN:</span>
@@ -339,7 +348,7 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
                         </div>
                     </div>
                 )}
-                
+
                 {bank.accountNumber && (
                     <div className="flex justify-between items-center py-2 border-b border-gray-100">
                         <span className="text-gray-500">Account Number:</span>
@@ -351,7 +360,7 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
                         </div>
                     </div>
                 )}
-                
+
                 {bank.routingNumber && (
                     <div className="flex justify-between items-center py-2 border-b border-gray-100">
                         <span className="text-gray-500">Routing Number:</span>
@@ -363,7 +372,7 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
                         </div>
                     </div>
                 )}
-                
+
                 {bank.sortCode && (
                     <div className="flex justify-between items-center py-2 border-b border-gray-100">
                         <span className="text-gray-500">Sort-Code:</span>
@@ -375,7 +384,7 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
                         </div>
                     </div>
                 )}
-                
+
                 {bank.bsb && (
                     <div className="flex justify-between items-center py-2 border-b border-gray-100">
                         <span className="text-gray-500">BSB-Code:</span>
@@ -387,7 +396,7 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
                         </div>
                     </div>
                 )}
-                
+
                 {bank.swift && (
                     <div className="flex justify-between items-center py-2 border-b border-gray-100">
                         <span className="text-gray-500">SWIFT/BIC:</span>
@@ -399,12 +408,12 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
                         </div>
                     </div>
                 )}
-                
+
                 <div className="flex justify-between items-center py-2 border-b border-gray-100">
                     <span className="text-gray-500">Bank Name:</span>
                     <span className="font-bold">{bank.bankName}</span>
                 </div>
-                
+
                 <div className="flex justify-between items-center py-2 border-b border-gray-100">
                     <span className="text-gray-500">Reference:</span>
                     <div className="flex items-center gap-2">
@@ -414,7 +423,7 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
                         </button>
                     </div>
                 </div>
-                
+
                 <div className="mt-3 p-2 bg-gray-50 border border-gray-200 rounded">
                     <p className="text-xs text-gray-500">{bank.note}</p>
                 </div>
@@ -601,9 +610,19 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
                                     <div className="font-black text-base text-[#ff4d00]">{totalVisitors.toLocaleString()}</div>
                                 </div>
                                 <div className="flex justify-between items-end">
-                                    <div className="text-gray-400 text-xs font-black uppercase tracking-widest">Effective CPM</div>
-                                    <div className="font-black text-base text-gray-300">€{cpm.toFixed(2)}</div>
+                                    <div className="text-gray-400 text-xs font-black uppercase tracking-widest">Pricing Tier</div>
+                                    <div className="font-black text-base text-gray-300">€{cpm.toFixed(2)} CPM</div>
                                 </div>
+
+                                {discountPercent > 0 && (
+                                    <div className="flex justify-between items-end text-[#ff4d00]">
+                                        <div className="text-xs font-black uppercase tracking-widest flex items-center gap-1">
+                                            <Star size={12} fill="currentColor" /> Level {user?.gamificationLevel || 1} Discount
+                                        </div>
+                                        <div className="font-black text-base">-{discountPercent}%</div>
+                                    </div>
+                                )}
+
 
                                 <div className="h-px bg-gray-800 my-10"></div>
 
@@ -676,11 +695,10 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
                                                     <button
                                                         key={curr}
                                                         onClick={() => setSelectedCurrency(curr)}
-                                                        className={`px-6 py-3 text-base font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${
-                                                            selectedCurrency === curr
-                                                                ? 'bg-[#ff4d00] text-white shadow-lg'
-                                                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                                        }`}
+                                                        className={`px-6 py-3 text-base font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${selectedCurrency === curr
+                                                            ? 'bg-[#ff4d00] text-white shadow-lg'
+                                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                            }`}
                                                     >
                                                         <span className="text-lg">{icons[curr]}</span>
                                                         {curr}
@@ -703,7 +721,7 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
                                     <label className="text-sm font-black uppercase tracking-widest text-gray-400 mb-4 block">
                                         Upload Transfer Confirmation
                                     </label>
-                                    
+
                                     {uploadSuccess ? (
                                         <div className="bg-green-50 border border-green-200 p-10 text-center h-full flex flex-col items-center justify-center">
                                             <CheckCircle size={72} className="text-green-500 mb-6" />

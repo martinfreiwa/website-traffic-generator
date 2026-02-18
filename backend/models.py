@@ -22,6 +22,68 @@ def generate_uuid():
     return str(uuid.uuid4())
 
 
+class AffiliateRelation(Base):
+    __tablename__ = "affiliate_relations"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), unique=True)
+    referrer_l1_id = Column(String, ForeignKey("users.id"), nullable=True)
+    referrer_l2_id = Column(String, ForeignKey("users.id"), nullable=True)
+    referrer_l3_id = Column(String, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    user = relationship(
+        "User", back_populates="affiliate_relation", foreign_keys=[user_id]
+    )
+
+
+class BenefitRequest(Base):
+    __tablename__ = "benefit_requests"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"))
+    benefit_type = Column(String, nullable=False)
+    benefit_category = Column(String, nullable=False)
+    url = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    screenshot_url = Column(String, nullable=True)
+    claimed_value = Column(Float, default=0.0)
+    approved_value = Column(Float, nullable=True)
+    status = Column(String, default="pending")
+    admin_notes = Column(Text, nullable=True)
+    fraud_flagged = Column(Boolean, default=False)
+    fraud_reason = Column(String, nullable=True)
+    submitted_at = Column(DateTime, default=datetime.datetime.utcnow)
+    reviewed_at = Column(DateTime, nullable=True)
+    reviewed_by = Column(String, ForeignKey("users.id"), nullable=True)
+
+    user = relationship(
+        "User", back_populates="benefit_requests", foreign_keys=[user_id]
+    )
+    reviewer = relationship("User", foreign_keys=[reviewed_by])
+
+
+class PayoutRequest(Base):
+    __tablename__ = "payout_requests"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"))
+    amount = Column(Float)
+    method = Column(String)
+    payout_details = Column(JSON)
+    status = Column(String, default="pending")
+    admin_notes = Column(Text, nullable=True)
+    requested_at = Column(DateTime, default=datetime.datetime.utcnow)
+    processed_at = Column(DateTime, nullable=True)
+    processed_by = Column(String, ForeignKey("users.id"), nullable=True)
+    transaction_hash = Column(String, nullable=True)
+
+    user = relationship(
+        "User", back_populates="payout_requests", foreign_keys=[user_id]
+    )
+    processor = relationship("User", foreign_keys=[processed_by])
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -93,9 +155,41 @@ class User(Base):
     subscription_plan = Column(String, nullable=True)
     subscription_current_period_end = Column(DateTime, nullable=True)
 
+    # Gamification & Streak
+    gamification_xp = Column(Integer, default=0)
+    gamification_level = Column(Integer, default=1)
+    gamification_total_spent = Column(Float, default=0.0)
+    gamification_permanent_discount = Column(Integer, default=0)
+    gamification_claimed_levels = Column(JSON, default=list)
+    streak_days = Column(Integer, default=0)
+    streak_last_date = Column(DateTime, nullable=True)
+    streak_best = Column(Integer, default=0)
+    last_daily_bonus = Column(DateTime, nullable=True)
+
+    # Benefits & Affiliate
+    benefit_balance = Column(Float, default=0.0)
+    total_benefits_claimed = Column(Float, default=0.0)
+    benefit_requests_count = Column(Integer, default=0)
+    account_locked = Column(Boolean, default=False)
+    lock_reason = Column(String, nullable=True)
+    locked_at = Column(DateTime, nullable=True)
+
     # Relationships
     projects = relationship("Project", back_populates="user")
     transactions = relationship("Transaction", back_populates="user")
+    affiliate_tier = relationship("AffiliateTier", back_populates="user", uselist=False)
+    affiliate_relation = relationship(
+        "AffiliateRelation",
+        back_populates="user",
+        uselist=False,
+        foreign_keys=[AffiliateRelation.user_id],
+    )
+    benefit_requests = relationship(
+        "BenefitRequest", back_populates="user", foreign_keys=[BenefitRequest.user_id]
+    )
+    payout_requests = relationship(
+        "PayoutRequest", back_populates="user", foreign_keys=[PayoutRequest.user_id]
+    )
 
 
 class Project(Base):
@@ -244,32 +338,48 @@ class AffiliateEarning(Base):
     __tablename__ = "affiliate_earnings"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    affiliate_id = Column(String, ForeignKey("users.id"))
+    referrer_id = Column(String, ForeignKey("users.id"))
     referee_id = Column(String, ForeignKey("users.id"))
+    transaction_id = Column(String, ForeignKey("transactions.id"))
     amount = Column(Float)
     status = Column(String, default="pending")
+    tier = Column(Integer, default=1)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
-
-class SystemSettings(Base):
-    __tablename__ = "system_settings"
-
-    id = Column(Integer, primary_key=True)
-    settings = Column(JSON, default=dict)
-    updated_at = Column(
-        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
-    )
+    referrer = relationship("User", foreign_keys=[referrer_id])
+    referee = relationship("User", foreign_keys=[referee_id])
 
 
-class Broadcast(Base):
-    __tablename__ = "broadcasts"
+class BenefitType(Base):
+    __tablename__ = "benefit_types"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    title = Column(String, nullable=False)
-    message = Column(String, nullable=False)
-    type = Column(String, default="info")  # 'info', 'warning', 'critical', 'success'
-    is_active = Column(Boolean, default=True)
+    type = Column(String, nullable=False)
+    category = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    value = Column(Float, default=0.0)
+    requirements = Column(JSON, default=dict)
+    active = Column(Boolean, default=True)
+    display_order = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    expires_at = Column(DateTime, nullable=True)
-    action_url = Column(String, nullable=True)
-    action_text = Column(String, nullable=True)
+
+
+class AffiliateTier(Base):
+    __tablename__ = "affiliate_tiers"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), unique=True)
+    tier_level = Column(Integer, default=1)
+    tier_name = Column(String, default="Bronze Starter")
+    commission_rate_l1 = Column(Float, default=0.15)
+    commission_rate_l2 = Column(Float, default=0.05)
+    commission_rate_l3 = Column(Float, default=0.02)
+    total_referrals_l1 = Column(Integer, default=0)
+    total_referrals_l2 = Column(Integer, default=0)
+    total_referrals_l3 = Column(Integer, default=0)
+    total_earnings = Column(Float, default=0.0)
+    pending_payout = Column(Float, default=0.0)
+    lifetime_payout = Column(Float, default=0.0)
+    last_tier_update = Column(DateTime, default=datetime.datetime.utcnow)
+
+    user = relationship("User", back_populates="affiliate_tier")

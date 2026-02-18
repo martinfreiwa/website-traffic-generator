@@ -79,10 +79,10 @@ describe('Project Management Logic', () => {
         it('should allow admin to create project for specific user', async () => {
             const adminProject: Project = {
                 id: '456',
-                userId: 'target_user_id', // Explicitly set different user
+                userId: 'target_user_id',
                 name: 'Admin Created Project',
                 plan: 'Pro',
-                settings: { trafficSpeed: 500 } as any,
+                settings: { bounceRate: 0 } as any,
                 status: 'active',
                 createdAt: new Date().toISOString(),
                 expires: 'Never'

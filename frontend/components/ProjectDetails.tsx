@@ -8,12 +8,13 @@
 
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Project, ProjectSettings, TrafficLog, GeoTarget, PayloadTemplate } from '../types';
 import { db } from '../services/db';
 import {
     ArrowLeft, Calendar, Save, Copy, RefreshCw, Layers,
     HelpCircle, Globe, Activity, Smartphone, Monitor, CheckCircle2, Zap, Radio, Lock, ToggleLeft, ToggleRight,
-    Plus, Trash2, Download, Upload, AlertCircle, FileCode, Search, MapPin, X, Target, BarChart2, Star
+    Plus, Trash2, Download, Upload, AlertCircle, FileCode, Search, MapPin, X, Target, BarChart2, Star, Play, Pause
 } from 'lucide-react';
 import CustomSelect from './CustomSelect';
 import { COUNTRY_MAP, COUNTRIES_LIST, ALL_LANGUAGES, TRAFFIC_SOURCES, TIME_ON_PAGE_OPTS, TIMEZONES } from '../constants';
@@ -59,6 +60,7 @@ const URL_ORDER_MODES = [
 ];
 
 const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUpdate }) => {
+    const navigate = useNavigate();
     const [project, setProject] = useState<Project | undefined>(undefined);
     const [loading, setLoading] = useState(true);
     const [settings, setSettings] = useState<ProjectSettings | undefined>(undefined);
@@ -280,6 +282,33 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
         }
     };
 
+    // --- PROJECT CONTROL HANDLERS ---
+    const handleToggleStatus = async () => {
+        if (!project) return;
+        const newStatus = project.status === 'active' ? 'stopped' : 'active';
+        try {
+            await db.updateProjectStatus(project.id, newStatus);
+            setProject({ ...project, status: newStatus });
+            if (onUpdate) onUpdate();
+        } catch (error) {
+            console.error("Failed to update project status:", error);
+            alert("Failed to update project status. Please try again.");
+        }
+    };
+
+    const handleDeleteProject = async () => {
+        if (!project) return;
+        if (!confirm(`Are you sure you want to delete "${project.name}"? This action cannot be undone.`)) return;
+        try {
+            await db.deleteProject(project.id);
+            if (onUpdate) onUpdate();
+            navigate('/dashboard/campaigns');
+        } catch (error) {
+            console.error("Failed to delete project:", error);
+            alert("Failed to delete project. Please try again.");
+        }
+    };
+
     // --- TEMPLATE HANDLERS ---
     const handleSaveAsTemplate = () => {
         if (!newTemplateName.trim()) return;
@@ -453,6 +482,23 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                     <button className="flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-4 py-2.5 text-xs font-bold uppercase tracking-wider hover:border-[#ff4d00] hover:text-[#ff4d00] transition-colors">
                         <Copy size={14} /> Clone
                     </button>
+                    <button 
+                        onClick={handleToggleStatus}
+                        className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-colors ${
+                            project.status === 'active' 
+                                ? 'bg-yellow-50 border border-yellow-200 text-yellow-700 hover:bg-yellow-100' 
+                                : 'bg-green-50 border border-green-200 text-green-700 hover:bg-green-100'
+                        }`}
+                    >
+                        {project.status === 'active' ? <Pause size={14} /> : <Play size={14} />} 
+                        {project.status === 'active' ? 'Pause' : 'Resume'}
+                    </button>
+                    <button 
+                        onClick={handleDeleteProject}
+                        className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-600 px-4 py-2.5 text-xs font-bold uppercase tracking-wider hover:bg-red-100 transition-colors"
+                    >
+                        <Trash2 size={14} /> Delete
+                    </button>
                 </div>
             </div>
 
@@ -504,7 +550,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
             )}
 
             {/* --- STATUS CARDS --- */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <div className="bg-white p-5 border border-gray-200 shadow-sm flex flex-col justify-between">
                     <div className="text-xs font-bold uppercase text-gray-400 mb-2 flex items-center gap-2"><Target size={14} /> Total Target</div>
                     <div className="text-xl font-bold text-gray-900">{totalVolume > 0 ? totalVolume.toLocaleString() : project.plan}</div>
@@ -514,8 +560,12 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                     <div className="text-xl font-bold text-gray-900">{dailySpeed > 0 ? `${dailySpeed.toLocaleString()}/day` : 'N/A'}</div>
                 </div>
                 <div className="bg-white p-5 border border-gray-200 shadow-sm flex flex-col justify-between">
-                    <div className="text-xs font-bold uppercase text-gray-400 mb-2 flex items-center gap-2"><Activity size={14} /> Status</div>
-                    <div className={`text-sm font-black uppercase tracking-wide ${project.status === 'active' ? 'text-[#ff4d00]' : 'text-gray-500'}`}>
+                    <div className="text-xs font-bold uppercase text-gray-400 mb-2 flex items-center gap-2"><Activity size={14} /> Hits Today</div>
+                    <div className="text-xl font-bold text-gray-900">{project.hitsToday?.toLocaleString() || 0}</div>
+                </div>
+                <div className="bg-white p-5 border border-gray-200 shadow-sm flex flex-col justify-between">
+                    <div className="text-xs font-bold uppercase text-gray-400 mb-2 flex items-center gap-2"><Radio size={14} /> Status</div>
+                    <div className={`text-sm font-black uppercase tracking-wide ${project.status === 'active' ? 'text-green-600' : project.status === 'stopped' ? 'text-yellow-600' : 'text-gray-500'}`}>
                         {project.status === 'completed' ? 'Expired' : project.status}
                     </div>
                 </div>

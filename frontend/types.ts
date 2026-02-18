@@ -75,7 +75,6 @@ export interface ProjectSettings {
     keywords: string;
     referralUrls: string;
     socialPlatforms?: string[];
-    noEndDate?: boolean;
 
     proxyMode?: 'auto' | 'sticky' | 'custom';
     customProxies?: string;
@@ -268,6 +267,13 @@ export interface User {
   avatarUrl?: string;
   createdAt?: string;
   lastActive?: string;
+  // Gamification
+  gamificationXp?: number;
+  gamificationLevel?: number;
+  gamificationTotalSpent?: number;
+  gamificationPermanentDiscount?: number;
+  streakDays?: number;
+  streakBest?: number;
 }
 
 export interface LiveVisitor {
@@ -392,9 +398,96 @@ export interface LoyaltySettings {
 
 export interface ReferralSettings {
   enabled: boolean;
-  referrerReward: number; // Credit amount
-  refereeReward: number; // Discount amount or credit
+  referrerReward: number;
+  refereeReward: number;
   rewardType: 'credit' | 'cash';
+}
+
+export interface BenefitType {
+  id: string;
+  type: string;
+  category: string;
+  name: string;
+  value: number;
+  requirements: Record<string, any>;
+  active: boolean;
+  displayOrder: number;
+}
+
+export interface BenefitRequest {
+  id: string;
+  userId: string;
+  benefitType: string;
+  benefitCategory: string;
+  url: string;
+  description?: string;
+  screenshotUrl?: string;
+  claimedValue: number;
+  approvedValue?: number;
+  status: 'pending' | 'approved' | 'rejected';
+  adminNotes?: string;
+  fraudFlagged: boolean;
+  fraudReason?: string;
+  submittedAt: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+}
+
+export interface BenefitBalance {
+  benefitBalance: number;
+  totalBenefitsClaimed: number;
+  pendingRequests: number;
+  approvedRequests: number;
+  rejectedRequests: number;
+}
+
+export interface AffiliateTier {
+  id: string;
+  userId: string;
+  tierLevel: number;
+  tierName: string;
+  commissionRateL1: number;
+  commissionRateL2: number;
+  commissionRateL3: number;
+  totalReferralsL1: number;
+  totalReferralsL2: number;
+  totalReferralsL3: number;
+  totalEarnings: number;
+  pendingPayout: number;
+  lifetimePayout: number;
+  lastTierUpdate: string;
+}
+
+export interface AffiliateRelation {
+  id: string;
+  userId: string;
+  referrerL1Id?: string;
+  referrerL2Id?: string;
+  referrerL3Id?: string;
+}
+
+export interface AffiliateDashboard {
+  tier: AffiliateTier;
+  relations: AffiliateRelation[];
+  referralLink: string;
+  totalReferrals: number;
+  totalEarnings: number;
+  pendingPayout: number;
+  benefitBalance: number;
+}
+
+export interface PayoutRequest {
+  id: string;
+  userId: string;
+  amount: number;
+  method: string;
+  payoutDetails: Record<string, any>;
+  status: 'pending' | 'approved' | 'rejected' | 'paid';
+  adminNotes?: string;
+  requestedAt: string;
+  processedAt?: string;
+  processedBy?: string;
+  transactionHash?: string;
 }
 
 export interface MarketingCampaign {

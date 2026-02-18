@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { db } from '../services/db';
 import { Project, ProjectSettings, GeoTarget, Transaction } from '../types';
-import { ArrowLeft, Save, Globe, Info, Zap, MapPin, Search, X, Check, Calendar, Clock, AlertCircle, Settings, Layers } from 'lucide-react';
+import { ArrowLeft, Globe, Info, Zap, MapPin, Search, X, Check, AlertCircle, Settings, Layers } from 'lucide-react';
 import CustomSelect from './CustomSelect';
 import { COUNTRIES_LIST, TRAFFIC_SOURCES, TIME_ON_PAGE_OPTS } from '../constants';
 
@@ -30,6 +31,7 @@ const SOCIAL_PLATFORMS = [
 ];
 
 const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
+    const navigate = useNavigate();
     const [currentStep, setCurrentStep] = useState(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
@@ -81,7 +83,6 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
         return today.toISOString().split('T')[0];
     });
     const [durationDays, setDurationDays] = useState<number>(10);
-    const [noEndDate, setNoEndDate] = useState<boolean>(false);
 
     const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
     const [countryPercents, setCountryPercents] = useState<Record<string, number>>({});
@@ -93,13 +94,6 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
     const [keywords, setKeywords] = useState('');
     const [referralUrls, setReferralUrls] = useState('');
     const [selectedSocialPlatforms, setSelectedSocialPlatforms] = useState<string[]>([]);
-
-    const estimatedDuration = useMemo(() => {
-        if (noEndDate && dailyLimit > 0) {
-            return Math.ceil(totalHits / dailyLimit);
-        }
-        return durationDays;
-    }, [noEndDate, dailyLimit, totalHits, durationDays]);
 
     const handleScanGA = async () => {
         if (!url) return;
@@ -113,7 +107,11 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
                 setError('No GA4 ID found on this page. Please enter manually.');
             }
         } catch (e: any) {
-            setError(e?.message || 'Failed to scan for GA4.');
+            if (e?.message?.includes('credentials') || e?.message?.includes('401')) {
+                setError('Session expired. Please enter GA-ID manually or refresh the page.');
+            } else {
+                setError(e?.message || 'Failed to scan for GA4. Please enter manually.');
+            }
         } finally {
             setIsScanningGA(false);
         }
@@ -121,24 +119,57 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
 
     const toggleCountry = (code: string) => {
         if (selectedCountries.includes(code)) {
-            setSelectedCountries(prev => prev.filter(c => c !== code));
+            const newSelected = selectedCountries.filter(c => c !== code);
+            setSelectedCountries(newSelected);
+            
             setCountryPercents(prev => {
                 const newPercents = { ...prev };
                 delete newPercents[code];
+                
+                if (newSelected.length > 0) {
+                    const percent = Math.floor(100 / newSelected.length);
+                    newSelected.forEach(c => {
+                        newPercents[c] = percent;
+                    });
+                    const remainder = 100 - (percent * newSelected.length);
+                    if (remainder > 0 && newSelected.length > 0) {
+                        newPercents[newSelected[0]] += remainder;
+                    }
+                }
                 return newPercents;
             });
         } else {
-            setSelectedCountries(prev => [...prev, code]);
-            setCountryPercents(prev => ({ ...prev, [code]: 0 }));
+            const newSelected = [...selectedCountries, code];
+            setSelectedCountries(newSelected);
+            
+            const percent = Math.floor(100 / newSelected.length);
+            const newPercents: Record<string, number> = {};
+            newSelected.forEach(c => {
+                newPercents[c] = percent;
+            });
+            const remainder = 100 - (percent * newSelected.length);
+            if (remainder > 0) {
+                newPercents[code] += remainder;
+            }
+            setCountryPercents(newPercents);
         }
     };
 
     const updateCountryPercent = (code: string, percent: number) => {
-        setCountryPercents(prev => ({ ...prev, [code]: Math.max(0, Math.min(100, percent)) }));
+        setCountryPercents(prev => {
+            const othersTotal = Object.entries(prev)
+                .filter(([c]) => c !== code)
+                .reduce((sum: number, [, p]) => sum + (p as number), 0);
+            
+            const maxPercent = Math.max(0, 100 - othersTotal);
+            const clampedPercent = Math.max(0, Math.min(maxPercent, percent));
+            
+            return { ...prev, [code]: clampedPercent };
+        });
     };
 
     const totalCountryPercent = useMemo(() => {
-        return Object.values(countryPercents).reduce((sum, p) => sum + p, 0);
+        return Object.values(countryPercents).reduce((sum: number, p: number) => sum + p, 0);
     }, [countryPercents]);
 
     const distributeEvenly = () => {
@@ -175,7 +206,7 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
         if (currentStep === 2) {
             if (totalHits < 100) return setError('Minimum 100 hits required.');
             if (dailyLimit < 1) return setError('Minimum 1 hit per day required.');
-            if (!noEndDate && durationDays < 1) return setError('Minimum 1 day duration required.');
+            if (durationDays < 1) return setError('Minimum 1 day duration required.');
             
             const available = calculateAvailableHits(selectedTier);
             if (totalHits > available) {
@@ -218,13 +249,7 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
 
         try {
             const startDate = new Date(startAt);
-            let endDate: Date;
-            
-            if (noEndDate) {
-                endDate = new Date(startDate.getTime() + (365 * 24 * 60 * 60 * 1000));
-            } else {
-                endDate = new Date(startDate.getTime() + (durationDays * 24 * 60 * 60 * 1000));
-            }
+            const endDate = new Date(startDate.getTime() + (durationDays * 24 * 60 * 60 * 1000));
 
             const geoTargets: GeoTarget[] = selectedCountries.map(code => ({
                 id: `geo-${code}`,
@@ -258,7 +283,6 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
                 keywords,
                 referralUrls,
                 socialPlatforms: selectedSocialPlatforms,
-                noEndDate,
                 proxyMode: 'auto',
                 customProxies: '',
                 scheduleMode: 'continuous',
@@ -290,7 +314,7 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
                 tier: selectedTier,
                 customTarget: {
                     totalVisitors: totalHits,
-                    durationDays: noEndDate ? estimatedDuration : durationDays,
+                    durationDays: durationDays,
                     dailyLimit
                 },
                 startAt: startDate.toISOString(),
@@ -300,11 +324,15 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
                 settings
             };
 
-            await db.addProject(newProject);
+            const createdProject = await db.addProject(newProject);
             onCreated();
-            onBack();
+            
+            const projectId = createdProject?.id || newProject.id;
+            navigate(`/dashboard/campaigns/${projectId}`);
+            
         } catch (e: any) {
-            setError(e.message || 'Failed to create project');
+            console.error('Project creation error:', e);
+            setError(e.message || 'Failed to create project. Please try again.');
         } finally {
             setIsSubmitting(false);
         }
@@ -318,7 +346,7 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
 
     const renderStepHint = () => {
         const hints: Record<number, string[]> = {
-            1: ['UTM Tracking', 'Sitemap Crawling', 'Custom Proxies'],
+            1: ['UTM Tracking', 'Sitemap Crawling'],
             2: ['Night/Day Volume', 'Auto-Renew', 'Schedule Burst Mode'],
             3: ['City-Level Targeting', 'Language Settings', 'Device Split'],
             4: ['Device Targeting', 'Browser Selection', 'Session Randomization']
@@ -506,35 +534,22 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Duration</label>
-                                <div className="flex items-center gap-3 mb-2">
-                                    <input
-                                        type="checkbox"
-                                        checked={noEndDate}
-                                        onChange={(e) => setNoEndDate(e.target.checked)}
-                                        className="w-4 h-4 accent-[#ff4d00]"
-                                    />
-                                    <span className="text-sm font-medium text-gray-600">No end date (run until hits exhausted)</span>
-                                </div>
-                                {!noEndDate && (
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        value={durationDays}
-                                        onChange={(e) => setDurationDays(parseInt(e.target.value) || 1)}
-                                        className="w-full bg-[#f9fafb] border border-gray-200 p-4 text-lg font-bold text-gray-900 focus:border-[#ff4d00] outline-none"
-                                        placeholder="Days"
-                                    />
-                                )}
+                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-3">Duration (Days) *</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={durationDays}
+                                    onChange={(e) => setDurationDays(parseInt(e.target.value) || 1)}
+                                    className="w-full bg-[#f9fafb] border border-gray-200 p-4 text-lg font-bold text-gray-900 focus:border-[#ff4d00] outline-none"
+                                    placeholder="Days"
+                                />
                             </div>
                         </div>
 
                         <div className="bg-gray-50 border border-gray-200 p-6 flex flex-col md:flex-row justify-between items-center gap-6">
                             <div>
-                                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Estimated Duration</div>
-                                <div className="text-xl font-bold text-gray-900">
-                                    {noEndDate ? `~${estimatedDuration} days` : `${durationDays} days`}
-                                </div>
+                                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Campaign Duration</div>
+                                <div className="text-xl font-bold text-gray-900">{durationDays} days</div>
                             </div>
                             <div className="text-right">
                                 <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Total Cost</div>
@@ -579,6 +594,9 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
                                     {selectedCountries.map(code => {
                                         const country = COUNTRIES_LIST.find(c => c.code === code);
                                         const percent = countryPercents[code] || 0;
+                                        const othersTotal = totalCountryPercent - percent;
+                                        const maxPercent = 100 - othersTotal;
+                                        
                                         return (
                                             <div key={code} className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-100">
                                                 <img 
@@ -591,7 +609,7 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
                                                 <input
                                                     type="range"
                                                     min="0"
-                                                    max="100"
+                                                    max={maxPercent}
                                                     value={percent}
                                                     onChange={(e) => updateCountryPercent(code, parseInt(e.target.value))}
                                                     className="w-24 accent-[#ff4d00]"
@@ -599,7 +617,7 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
                                                 <input
                                                     type="number"
                                                     min="0"
-                                                    max="100"
+                                                    max={maxPercent}
                                                     value={percent}
                                                     onChange={(e) => updateCountryPercent(code, parseInt(e.target.value) || 0)}
                                                     className="w-16 p-1 text-center text-sm font-bold border border-gray-200 outline-none focus:border-[#ff4d00]"
@@ -612,7 +630,7 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
                                         );
                                     })}
                                 </div>
-                                <div className={`text-right mt-2 text-sm font-bold ${totalCountryPercent === 100 ? 'text-green-600' : 'text-red-500'}`}>
+                                <div className={`text-right mt-2 text-sm font-bold ${totalCountryPercent === 100 ? 'text-green-600' : 'text-orange-500'}`}>
                                     Total: {totalCountryPercent}%
                                 </div>
                             </div>
@@ -771,7 +789,7 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
                             <ReviewRow label="Total Hits" value={`${totalHits.toLocaleString()} hits`} highlight />
                             <ReviewRow label="Daily Limit" value={`${dailyLimit.toLocaleString()} hits/day`} />
                             <ReviewRow label="Start Date" value={startAt} />
-                            <ReviewRow label="Duration" value={noEndDate ? `~${estimatedDuration} days (no end)` : `${durationDays} days`} />
+                            <ReviewRow label="Duration" value={`${durationDays} days`} />
                             <div className="h-px bg-gray-100"></div>
                             <ReviewRow label="Countries" value={selectedCountries.length > 0 ? `${selectedCountries.length} selected` : 'None'} />
                             <div className="h-px bg-gray-100"></div>
@@ -784,7 +802,7 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
                             <Info className="text-blue-500 flex-shrink-0" size={18} />
                             <div className="text-xs text-blue-700 font-medium leading-relaxed">
                                 <p className="font-bold mb-1">After creation, more settings will be available:</p>
-                                <p>UTM Tracking, Device Split, Browser Selection, Custom Proxies, Sitemap Crawling, City-Level Targeting, and more.</p>
+                                <p>UTM Tracking, Device Split, Browser Selection, Sitemap Crawling, City-Level Targeting, and more.</p>
                             </div>
                         </div>
                     </>

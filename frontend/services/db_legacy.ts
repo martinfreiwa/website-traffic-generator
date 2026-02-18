@@ -22,7 +22,6 @@ const STORAGE_KEYS = {
 };
 
 const DEFAULT_SETTINGS: ProjectSettings = {
-  trafficSpeed: 100,
   bounceRate: 0,
   returnRate: 0,
   deviceSplit: 70,
@@ -79,7 +78,7 @@ const generateStats = (base: number): ProjectStats[] => {
 
 const SEED_PROJECTS: Project[] = [
   { id: '2819', userId: 'u2', name: 'dutchheatingproducts', plan: 'Custom', customTarget: { totalVisitors: 50000, durationDays: 30, dailyLimit: 1666 }, expires: '2025-12-01', status: 'completed', settings: { ...DEFAULT_SETTINGS, entryUrls: 'https://dutchheating.com' }, stats: generateStats(500) },
-  { id: '3344', userId: 'u2', name: 'Traffic bot1', plan: 'Free Trial', expires: '2024-11-15', status: 'stopped', settings: { ...DEFAULT_SETTINGS, trafficSpeed: 50 }, stats: generateStats(100) },
+  { id: '3344', userId: 'u2', name: 'Traffic bot1', plan: 'Free Trial', expires: '2024-11-15', status: 'stopped', settings: { ...DEFAULT_SETTINGS, bounceRate: 50 }, stats: generateStats(100) },
   { id: '4102', userId: 'u1', name: 'CryptoNews Daily', plan: 'Custom', customTarget: { totalVisitors: 1000000, durationDays: 60, dailyLimit: 16666 }, expires: '2025-02-28', status: 'active', settings: { ...DEFAULT_SETTINGS, trafficSource: 'Social, Facebook' }, stats: generateStats(5000) },
   { id: '4103', userId: 'u2', name: 'TechReview 24', plan: 'Custom', customTarget: { totalVisitors: 150000, durationDays: 30, dailyLimit: 5000 }, expires: '2025-03-10', status: 'active', settings: DEFAULT_SETTINGS, stats: generateStats(1200) },
   { id: '4105', userId: 'u1', name: 'LocalBakery NY', plan: 'Custom', customTarget: { totalVisitors: 10000, durationDays: 30, dailyLimit: 333 }, expires: '2024-12-20', status: 'stopped', settings: DEFAULT_SETTINGS, stats: generateStats(200) },
