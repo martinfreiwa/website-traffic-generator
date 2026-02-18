@@ -66,36 +66,137 @@ def run_column_migrations():
     try:
         from sqlalchemy import text
 
-        migrations = [
-            "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS session_token VARCHAR(255)",
-            "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS ip_address VARCHAR(100)",
-            "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS user_agent TEXT",
-            "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS device VARCHAR(50)",
-            "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS browser VARCHAR(50)",
-            "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS current_page VARCHAR(255)",
-            "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS total_visits INTEGER DEFAULT 1",
-            "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active'",
-            "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS last_active TIMESTAMP",
-            "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP",
-            "CREATE INDEX IF NOT EXISTS ix_user_sessions_session_token ON user_sessions(session_token)",
-            "CREATE TABLE IF NOT EXISTS user_notification_prefs (id VARCHAR(255) PRIMARY KEY, user_id VARCHAR(255) UNIQUE, email_marketing BOOLEAN DEFAULT TRUE, email_transactional BOOLEAN DEFAULT TRUE, email_alerts BOOLEAN DEFAULT TRUE, browser_notifications BOOLEAN DEFAULT TRUE, newsletter_sub BOOLEAN DEFAULT FALSE, email_frequency VARCHAR(50) DEFAULT 'instant', updated_at TIMESTAMP)",
-            "CREATE TABLE IF NOT EXISTS activity_logs (id VARCHAR(255) PRIMARY KEY, user_id VARCHAR(255), action VARCHAR(255), details JSONB, ip_address VARCHAR(100), user_agent TEXT, created_at TIMESTAMP)",
-            "CREATE TABLE IF NOT EXISTS token_blacklist (id VARCHAR(255) PRIMARY KEY, token VARCHAR(500), revoked_at TIMESTAMP, expires_at TIMESTAMP)",
-            "CREATE TABLE IF NOT EXISTS impersonation_logs (id VARCHAR(255) PRIMARY KEY, admin_id VARCHAR(255), target_user_id VARCHAR(255), started_at TIMESTAMP, ended_at TIMESTAMP, actions JSONB)",
-            "CREATE TABLE IF NOT EXISTS balance_adjustment_logs (id VARCHAR(255) PRIMARY KEY, user_id VARCHAR(255), admin_id VARCHAR(255), amount INTEGER, tier VARCHAR(50), reason TEXT, created_at TIMESTAMP)",
-            "CREATE TABLE IF NOT EXISTS email_logs (id VARCHAR(255) PRIMARY KEY, user_id VARCHAR(255), email_type VARCHAR(100), recipient VARCHAR(255), subject TEXT, status VARCHAR(50), error TEXT, sent_at TIMESTAMP)",
+        def column_exists(table: str, column: str) -> bool:
+            result = db.execute(
+                text(
+                    "SELECT 1 FROM information_schema.columns WHERE table_name = :table AND column_name = :column"
+                ),
+                {"table": table, "column": column},
+            ).fetchone()
+            return result is not None
+
+        def table_exists(table: str) -> bool:
+            result = db.execute(
+                text(
+                    "SELECT 1 FROM information_schema.tables WHERE table_name = :table"
+                ),
+                {"table": table},
+            ).fetchone()
+            return result is not None
+
+        user_sessions_cols = [
+            ("session_token", "VARCHAR(255)"),
+            ("ip_address", "VARCHAR(100)"),
+            ("user_agent", "TEXT"),
+            ("device", "VARCHAR(50)"),
+            ("browser", "VARCHAR(50)"),
+            ("current_page", "VARCHAR(255)"),
+            ("total_visits", "INTEGER DEFAULT 1"),
+            ("status", "VARCHAR(50) DEFAULT 'active'"),
+            ("last_active", "TIMESTAMP"),
+            ("expires_at", "TIMESTAMP"),
         ]
-        for sql in migrations:
+
+        for col_name, col_type in user_sessions_cols:
+            if not column_exists("user_sessions", col_name):
+                try:
+                    db.execute(
+                        text(
+                            f"ALTER TABLE user_sessions ADD COLUMN {col_name} {col_type}"
+                        )
+                    )
+                    db.commit()
+                    logger.info(f"Added column user_sessions.{col_name}")
+                except Exception as e:
+                    db.rollback()
+                    logger.warning(f"Could not add user_sessions.{col_name}: {e}")
+
+        tables_to_create = [
+            (
+                "user_notification_prefs",
+                """id VARCHAR(255) PRIMARY KEY, 
+                   user_id VARCHAR(255) UNIQUE, 
+                   email_marketing BOOLEAN DEFAULT TRUE, 
+                   email_transactional BOOLEAN DEFAULT TRUE, 
+                   email_alerts BOOLEAN DEFAULT TRUE, 
+                   browser_notifications BOOLEAN DEFAULT TRUE, 
+                   newsletter_sub BOOLEAN DEFAULT FALSE, 
+                   email_frequency VARCHAR(50) DEFAULT 'instant', 
+                   updated_at TIMESTAMP""",
+            ),
+            (
+                "activity_logs",
+                """id VARCHAR(255) PRIMARY KEY, 
+                   user_id VARCHAR(255), 
+                   action VARCHAR(255), 
+                   details JSONB, 
+                   ip_address VARCHAR(100), 
+                   user_agent TEXT, 
+                   created_at TIMESTAMP""",
+            ),
+            (
+                "token_blacklist",
+                """id VARCHAR(255) PRIMARY KEY, 
+                   token VARCHAR(500), 
+                   revoked_at TIMESTAMP, 
+                   expires_at TIMESTAMP""",
+            ),
+            (
+                "impersonation_logs",
+                """id VARCHAR(255) PRIMARY KEY, 
+                   admin_id VARCHAR(255), 
+                   target_user_id VARCHAR(255), 
+                   started_at TIMESTAMP, 
+                   ended_at TIMESTAMP, 
+                   actions JSONB""",
+            ),
+            (
+                "balance_adjustment_logs",
+                """id VARCHAR(255) PRIMARY KEY, 
+                   user_id VARCHAR(255), 
+                   admin_id VARCHAR(255), 
+                   amount INTEGER, 
+                   tier VARCHAR(50), 
+                   reason TEXT, 
+                   created_at TIMESTAMP""",
+            ),
+            (
+                "email_logs",
+                """id VARCHAR(255) PRIMARY KEY, 
+                   user_id VARCHAR(255), 
+                   email_type VARCHAR(100), 
+                   recipient VARCHAR(255), 
+                   subject TEXT, 
+                   status VARCHAR(50), 
+                   error TEXT, 
+                   sent_at TIMESTAMP""",
+            ),
+        ]
+
+        for table_name, columns in tables_to_create:
+            if not table_exists(table_name):
+                try:
+                    db.execute(text(f"CREATE TABLE {table_name} ({columns})"))
+                    db.commit()
+                    logger.info(f"Created table {table_name}")
+                except Exception as e:
+                    db.rollback()
+                    logger.warning(f"Could not create {table_name}: {e}")
+
+        if column_exists("user_sessions", "session_token"):
             try:
-                db.execute(text(sql))
+                db.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_user_sessions_session_token ON user_sessions(session_token)"
+                    )
+                )
                 db.commit()
             except Exception as e:
                 db.rollback()
-                if (
-                    "already exists" not in str(e).lower()
-                    and "duplicate" not in str(e).lower()
-                ):
-                    logger.warning(f"Migration skipped: {e}")
+                logger.warning(f"Index creation skipped: {e}")
+
+    except Exception as e:
+        logger.error(f"Migration error: {e}")
     finally:
         db.close()
 
