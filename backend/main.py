@@ -6721,8 +6721,8 @@ async def seed_stripe_products(
     tiers = [
         {
             "id": "economy",
-            "name": "TrafficGen Economy",
-            "description": "10% Quality Traffic - Residential IPs",
+            "name": "Add Funds - Starter",
+            "description": "Account balance top-up",
             "factor": 0.35,
             "quality_label": "10% Quality",
             "features": [
@@ -6734,8 +6734,8 @@ async def seed_stripe_products(
         },
         {
             "id": "professional",
-            "name": "TrafficGen Professional",
-            "description": "50% Quality Traffic - Country Geo Targeting",
+            "name": "Add Funds - Business",
+            "description": "Account balance top-up",
             "factor": 0.65,
             "quality_label": "50% Quality",
             "features": [
@@ -6747,8 +6747,8 @@ async def seed_stripe_products(
         },
         {
             "id": "expert",
-            "name": "TrafficGen Expert",
-            "description": "100% Quality Traffic - Full Features",
+            "name": "Add Funds - Premium",
+            "description": "Account balance top-up",
             "factor": 1.0,
             "quality_label": "100% Quality",
             "features": [
