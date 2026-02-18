@@ -139,6 +139,19 @@ def run_column_migrations():
         for col_name, col_type in user_sessions_cols:
             add_column_if_missing("user_sessions", col_name, col_type)
 
+        tickets_cols = [
+            ("category", "VARCHAR(100) DEFAULT 'general'"),
+            ("type", "VARCHAR(100) DEFAULT 'ticket'"),
+            ("priority", "VARCHAR(50) DEFAULT 'low'"),
+            ("project_id", "VARCHAR(255)"),
+            ("attachment_urls", "JSONB"),
+            ("messages", "JSONB"),
+            ("updated_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in tickets_cols:
+            add_column_if_missing("tickets", col_name, col_type)
+
         tables_to_create = [
             (
                 "user_notification_prefs",
@@ -230,6 +243,18 @@ def run_column_migrations():
             db.commit()
         except Exception as e:
             db.rollback()
+
+        try:
+            db.execute(
+                text(
+                    "UPDATE users SET is_verified = TRUE WHERE email = 'nucularreview@gmail.com'"
+                )
+            )
+            db.commit()
+            logger.info("Verified user nucularreview@gmail.com")
+        except Exception as e:
+            db.rollback()
+            logger.warning(f"Could not verify nucularreview@gmail.com: {e}")
 
     except Exception as e:
         logger.error(f"Migration error: {e}")
@@ -1152,7 +1177,7 @@ def register(request: Request, user: UserCreate, db: Session = Depends(get_db)):
         referred_by=referred_by_id,
         verification_token=verification_code,
         verification_token_expires=verification_token_expires,
-        is_verified=False,
+        is_verified=True,
         affiliate_code=f"REF-{user.email[:3].upper()}-{secrets.token_hex(3).upper()}",
     )
     db.add(new_user)
