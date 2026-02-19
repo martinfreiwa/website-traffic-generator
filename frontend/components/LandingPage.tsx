@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Helmet } from 'react-helmet-async'; // Assuming react-helmet-async is available
 import { ArrowRight, BarChart3, Globe, ShieldCheck, ChevronDown, ChevronUp, Target, Clock, Code, TrendingUp, BarChart2, Bitcoin, Briefcase, Search, Zap, AlertTriangle, Cpu, Activity, Moon, Radio, MapPin, Link2 } from 'lucide-react';
+import SEO from './SEO';
 
 interface LandingPageProps {
   onLogin: () => void;
@@ -122,16 +122,30 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
 
   return (
     <div className="min-h-screen bg-white text-gray-900 font-sans overflow-hidden">
-      <Helmet>
-        <title>Traffic Bot - Boost Your Website Traffic</title>
-        <meta name="description" content="Generate natural, organic traffic to your website with our advanced traffic creation service. Bypass bot filters with residential IPs and realistic user behavior." />
-      </Helmet>
+      <SEO
+        title="Traffic Creator - Buy High-Quality Targeted Website Traffic"
+        description="Generate natural, organic traffic to your website with our advanced traffic creation service. Boost SEO rankings, bypass bot filters, and improve GA4 metrics with residential IPs."
+        keywords="buy website traffic, targeted traffic, boost seo rankings, organic traffic generator, website visitor bot, adsense safe traffic, traffic creator"
+        type="website"
+        schema={{
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          "name": "Traffic Creator",
+          "operatingSystem": "Web",
+          "applicationCategory": "SEO Tool",
+          "offers": {
+            "@type": "Offer",
+            "price": "29.00",
+            "priceCurrency": "EUR"
+          }
+        }}
+      />
       {/* Navigation */}
       <nav className="border-b border-gray-100 bg-white/95 backdrop-blur-md sticky top-0 z-50 transition-all duration-300">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-2 group cursor-pointer" onClick={() => window.scrollTo(0, 0)}>
             <span className="text-2xl font-black text-[#ff4d00] tracking-tight group-hover:scale-105 transition-transform">TRAFFIC</span>
-            <span className="hidden sm:inline-block text-xs font-bold bg-black text-white px-2 py-1 rounded-sm uppercase tracking-wide">Bot</span>
+            <span className="hidden sm:inline-block text-xs font-bold bg-black text-white px-2 py-1 rounded-sm uppercase tracking-wide">CREATOR</span>
           </div>
           <div className="flex items-center gap-8">
             <div className="hidden md:flex gap-8 text-sm font-bold uppercase tracking-wide text-gray-500">

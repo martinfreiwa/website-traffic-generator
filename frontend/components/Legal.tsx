@@ -10,6 +10,30 @@ interface LegalProps {
 
 const Legal: React.FC<LegalProps> = ({ type, onBack }) => {
 
+    const getSEOTitle = () => {
+        switch (type) {
+            case 'privacy': return 'Privacy Policy | Traffic Creator - Secure Website Traffic';
+            case 'terms': return 'Terms of Use | Service Agreement - Traffic Creator';
+            case 'impressum': return 'Impressum & Legal Imprint - EasyTrafficBot UG';
+            case 'agb': return 'General Terms and Conditions (AGB) - Traffic Creator';
+            case 'refund': return 'Refund & Cancellation Policy - Traffic Creator';
+            case 'delivery': return 'Service Delivery Standards | Digital fulfillment';
+            default: return 'Legal Documentation - Traffic Creator';
+        }
+    }
+
+    const getSEODescription = () => {
+        switch (type) {
+            case 'privacy': return 'Learn how Traffic Creator collects, uses, and protects your personal data in accordance with GDPR and international privacy standards.';
+            case 'terms': return 'Our Terms of Use outline the legal agreement between you and Traffic Creator regarding your use of our website and services.';
+            case 'impressum': return 'Official legal imprint and corporate information for EasyTrafficBot UG, the parent company of Traffic Creator.';
+            case 'agb': return 'Read our General Terms and Conditions (AGB) for a detailed overview of our service agreements, pricing, and liability policies.';
+            case 'refund': return 'Information about our refund policy, satisfaction guarantees, and the process for requesting a refund at Traffic Creator.';
+            case 'delivery': return 'Understand our digital service delivery standards, including campaign activation times and fulfillment processes.';
+            default: return 'Official legal documentation for Traffic Creator services and website usage.';
+        }
+    }
+
     const getTitle = () => {
         switch (type) {
             case 'privacy': return 'Privacy Policy';
@@ -30,33 +54,33 @@ const Legal: React.FC<LegalProps> = ({ type, onBack }) => {
                         <p className="font-bold text-gray-900 mb-8">Last modified: February 06, 2024</p>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-12 text-sm text-gray-600">
                             <div>
-                                <h3 className="font-bold uppercase tracking-widest text-[#ff4d00] mb-4">Angaben gemäß § 5 TMG</h3>
+                                <h3 className="font-bold uppercase tracking-widest text-[#ff4d00] mb-4">Information according to § 5 TMG</h3>
                                 <p className="font-bold text-gray-900">EasyTrafficBot UG</p>
                                 <p>Arrenbergsche Höfe 6</p>
-                                <p>Gebäude 44</p>
+                                <p>Building 44</p>
                                 <p>42117 Wuppertal</p>
-                                <p className="mt-2 text-xs">Handelsregister: HRB 30863</p>
-                                <p className="text-xs">Registergericht: Amtsgericht Wuppertal</p>
+                                <p className="mt-2 text-xs">Commercial Register: HRB 30863</p>
+                                <p className="text-xs">Registration Court: Amtsgericht Wuppertal</p>
                             </div>
                             <div>
-                                <h3 className="font-bold uppercase tracking-widest text-[#ff4d00] mb-4">Kontakt</h3>
-                                <p><span className="font-bold">Telefon:</span> +84373832085</p>
-                                <p><span className="font-bold">Telefax:</span> +49 (0) 123 44 55 99</p>
+                                <h3 className="font-bold uppercase tracking-widest text-[#ff4d00] mb-4">Contact</h3>
+                                <p><span className="font-bold">Phone:</span> +84373832085</p>
+                                <p><span className="font-bold">Fax:</span> +49 (0) 123 44 55 99</p>
                                 <p><span className="font-bold">E-Mail:</span> support@traffic-creator.com</p>
                             </div>
                             <div>
-                                <h3 className="font-bold uppercase tracking-widest text-[#ff4d00] mb-4">Vertreten durch</h3>
+                                <h3 className="font-bold uppercase tracking-widest text-[#ff4d00] mb-4">Represented by</h3>
                                 <p>Martin Freiwald</p>
                             </div>
                             <div>
-                                <h3 className="font-bold uppercase tracking-widest text-[#ff4d00] mb-4">EU-Streitschlichtung</h3>
-                                <p>Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit:</p>
+                                <h3 className="font-bold uppercase tracking-widest text-[#ff4d00] mb-4">EU Dispute Resolution</h3>
+                                <p>The European Commission provides a platform for online dispute resolution (ODR):</p>
                                 <a href="https://ec.europa.eu/consumers/odr/" target="_blank" rel="noopener noreferrer" className="text-[#ff4d00] hover:underline break-all">https://ec.europa.eu/consumers/odr/</a>
-                                <p className="mt-2 italic">Unsere E-Mail-Adresse finden Sie oben im Impressum.</p>
+                                <p className="mt-2 italic">You can find our e-mail address above in the imprint.</p>
                             </div>
                             <div className="md:col-span-2">
-                                <h3 className="font-bold uppercase tracking-widest text-[#ff4d00] mb-4">Verbraucherstreitbeilegung/Universalschlichtungsstelle</h3>
-                                <p>Wir sind nicht bereit oder verpflichtet, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen.</p>
+                                <h3 className="font-bold uppercase tracking-widest text-[#ff4d00] mb-4">Consumer dispute resolution/Universal arbitration board</h3>
+                                <p>We are not willing or obliged to participate in dispute resolution proceedings before a consumer arbitration board.</p>
                             </div>
                         </div>
                     </>
@@ -64,7 +88,7 @@ const Legal: React.FC<LegalProps> = ({ type, onBack }) => {
             case 'agb':
                 return (
                     <>
-                        <p className="font-bold text-gray-900 mb-8">Allgemeine Geschäftsbedingungen (AGB) for Traffic Bot</p>
+                        <p className="font-bold text-gray-900 mb-8">General Terms and Conditions (AGB) for Traffic Bot</p>
 
                         <h3 className="text-xl font-bold text-gray-900 mt-8 mb-4">1. Scope of Application</h3>
                         <p>These General Terms and Conditions (AGB) apply to all business relationships between EasyTrafficBot UG (hereinafter: Provider) and its customers (hereinafter: Customer). The version valid at the time of the conclusion of the contract is authoritative.</p>
@@ -305,10 +329,19 @@ const Legal: React.FC<LegalProps> = ({ type, onBack }) => {
     return (
         <div className="min-h-screen bg-white">
             <SEO
-                title={`${getTitle()} (Updated 2024) - Traffic Bot`}
-                description={`Official ${getTitle()} for Traffic Bot, updated for 2024. Please read carefully to understand our policies.`}
-                keywords={`traffic bot ${type} 2024, ${type} policy, legal ${type}, traffic generator legal`}
+                title={getSEOTitle()}
+                description={getSEODescription()}
+                keywords={`traffic bot ${type}, website traffic ${type}, seo traffic legal, easytrafficbot ug documentation`}
                 type="article"
+                schema={{
+                    "@context": "https://schema.org",
+                    "@type": "WebPage",
+                    "publisher": {
+                        "@type": "Organization",
+                        "name": "Traffic Creator",
+                        "logo": "https://traffic-creator.com/logo.png"
+                    }
+                }}
             />
             {/* Header */}
             <div className="border-b border-gray-100 bg-white sticky top-0 z-50">

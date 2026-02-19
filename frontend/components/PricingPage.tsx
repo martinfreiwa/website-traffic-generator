@@ -117,8 +117,8 @@ const PricingPage: React.FC = () => {
                     <button
                         onClick={() => setPricingTab('subscriptions')}
                         className={`px-8 py-3 text-xs font-black uppercase tracking-widest transition-all ${pricingTab === 'subscriptions'
-                                ? 'bg-[#ff4d00] text-white shadow-lg'
-                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            ? 'bg-[#ff4d00] text-white shadow-lg'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                             }`}
                     >
                         <CreditCard size={14} className="inline mr-2" />
@@ -127,8 +127,8 @@ const PricingPage: React.FC = () => {
                     <button
                         onClick={() => setPricingTab('credits')}
                         className={`px-8 py-3 text-xs font-black uppercase tracking-widest transition-all ${pricingTab === 'credits'
-                                ? 'bg-[#ff4d00] text-white shadow-lg'
-                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            ? 'bg-[#ff4d00] text-white shadow-lg'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                             }`}
                     >
                         <ShoppingCart size={14} className="inline mr-2" />
@@ -214,8 +214,8 @@ const PricingPage: React.FC = () => {
                                 key={tier.id}
                                 onClick={() => setSelectedTier(tier.id)}
                                 className={`px-6 py-3 text-xs font-black uppercase tracking-widest transition-all ${selectedTier === tier.id
-                                        ? 'bg-[#ff4d00] text-white'
-                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                    ? 'bg-[#ff4d00] text-white'
+                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                     } ${tier.popular ? 'ring-2 ring-[#ff4d00]/30' : ''}`}
                             >
                                 {tier.name}
@@ -408,16 +408,21 @@ const PricingPage: React.FC = () => {
         <div className="min-h-screen bg-[#f3f4f6] py-20 px-6 font-sans">
             <div className="max-w-7xl mx-auto">
                 <SEO
-                    title="Pricing Plans 2024 - Scalable Organic Traffic Packages | Traffic Bot"
-                    description="Transparent pricing for 2024. Start with our flexible credit packs or choose a monthly agency plan. Plans start at just €29. High-quality residential traffic for modern SEO."
-                    keywords="traffic bot pricing 2024, buy website hits cost, cheap seo traffic, agency traffic plan, organic traffic packages"
+                    title="Pricing Plans 2024 - Scalable Website Traffic Packages | Traffic Creator"
+                    description="Transparent pricing for 2024. Start with our flexible credit packs or choose a monthly agency plan. High-quality residential traffic starting at just €29."
+                    keywords="traffic creator pricing, buy website visitors, organic traffic cost, agency traffic reseller, seo traffic packages 2024"
                     type="product"
                     schema={{
                         "@context": "https://schema.org",
-                        "@type": "PriceSpecification",
-                        "priceCurrency": "EUR",
-                        "minPrice": "29.00",
-                        "maxPrice": "2999.00"
+                        "@type": "Product",
+                        "name": "Traffic Creator Traffic Packages",
+                        "description": "High-quality, targeted website traffic for SEO and analytics improvement.",
+                        "offers": {
+                            "@type": "AggregateOffer",
+                            "lowPrice": "29.00",
+                            "highPrice": "2999.00",
+                            "priceCurrency": "EUR"
+                        }
                     }}
                 />
                 {/* Step Indicator */}

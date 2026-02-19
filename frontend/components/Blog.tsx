@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Calendar, User, Clock, ArrowRight, Share2, Tag } from 'lucide-react';
 import { Link } from 'react-router-dom';
-
-import { Helmet } from 'react-helmet-async';
+import SEO from './SEO';
 
 interface BlogProps {
     onBack: () => void;
@@ -47,18 +46,25 @@ const Blog: React.FC<BlogProps> = ({ onBack }) => {
     if (view === 'article') {
         return (
             <div className="min-h-screen bg-white font-sans text-gray-900">
-                <Helmet>
-                    <title>{articles[0].title} - Traffic Creator Blog</title>
-                    <meta name="description" content={articles[0].excerpt} />
-                    <meta name="keywords" content={`SEO, ${articles[0].category}, website traffic, ${articles[0].author}`} />
-
-                    {/* OpenGraph */}
-                    <meta property="og:title" content={articles[0].title} />
-                    <meta property="og:description" content={articles[0].excerpt} />
-                    <meta property="og:type" content="article" />
-                    <meta property="article:published_time" content={new Date(articles[0].date).toISOString()} />
-                    <meta property="article:author" content={articles[0].author} />
-                </Helmet>
+                <SEO
+                    title={`${articles[0].title} | Traffic Creator Blog`}
+                    description={articles[0].excerpt}
+                    keywords={`SEO, ${articles[0].category}, website traffic guide, ${articles[0].author}, traffic creator strategies`}
+                    type="article"
+                    image={articles[0].image}
+                    schema={{
+                        "@context": "https://schema.org",
+                        "@type": "BlogPosting",
+                        "headline": articles[0].title,
+                        "description": articles[0].excerpt,
+                        "author": {
+                            "@type": "Person",
+                            "name": articles[0].author
+                        },
+                        "datePublished": new Date(articles[0].date).toISOString(),
+                        "image": articles[0].image
+                    }}
+                />
                 {/* Article Header */}
                 <div className="relative h-[60vh] bg-black">
                     <img src={articles[0].image} className="w-full h-full object-cover opacity-60" alt="Cover" />
@@ -109,9 +115,9 @@ const Blog: React.FC<BlogProps> = ({ onBack }) => {
                             <p className="text-gray-700 text-sm">Always verify your traffic using Google Analytics 4 (GA4). Look at the "Engagement Time" metric. Real human traffic will have varied session durations, whereas bots often have exactly 0 or 30 seconds.</p>
                         </div>
 
-                        <h2 className="text-3xl font-bold text-gray-900 mt-12 mb-6">How Modus Ensures Quality</h2>
+                        <h2 className="text-3xl font-bold text-gray-900 mt-12 mb-6">How Traffic Creator Ensures Quality</h2>
                         <p className="mb-6">
-                            At Modus, we use a proprietary filtering system that validates every visitor before they reach your site. We filter by:
+                            At Traffic Creator, we use a proprietary filtering system that validates every visitor before they reach your site. We filter by:
                         </p>
                         <ol className="list-decimal pl-6 space-y-4 mb-8 text-gray-600">
                             <li><strong>Device Fingerprinting:</strong> Ensuring the request comes from a real physical device.</li>
@@ -155,35 +161,21 @@ const Blog: React.FC<BlogProps> = ({ onBack }) => {
 
     return (
         <div className="min-h-screen bg-white font-sans text-gray-900">
-            <Helmet>
-                <title>Blog - Traffic Creator | SEO & Marketing Insights</title>
-                <meta name="description" content="Read the latest articles on website traffic, SEO strategies, and digital marketing from the Traffic Creator team." />
-                <meta name="keywords" content="SEO tips, digital marketing blog, buy traffic guide, SEO myths 2025, website traffic strategy, boost SEO rankings, organic growth tips" />
-
-                {/* OpenGraph */}
-                <meta property="og:title" content="Blog - Traffic Creator | SEO & Marketing Insights" />
-                <meta property="og:description" content="Expert insights into website traffic generation and SEO optimization." />
-                <meta property="og:type" content="blog" />
-                <meta property="og:url" content="http://localhost:3000/blog" />
-
-                {/* Twitter */}
-                <meta name="twitter:card" content="summary_large_image" />
-                <meta name="twitter:title" content="Blog - Traffic Creator" />
-                <meta name="twitter:description" content="Read our latest insights on traffic and SEO." />
-
-                {/* Schema.org JSON-LD */}
-                <script type="application/ld+json">
-                    {JSON.stringify(blogSchema)}
-                </script>
-            </Helmet>
+            <SEO
+                title="Blog - Traffic Creator | SEO & Marketing Insights"
+                description="Read the latest articles on website traffic, SEO strategies, and digital marketing from the Traffic Creator team."
+                keywords="SEO tips, digital marketing blog, buy traffic guide, SEO myths 2025, website traffic strategy, boost SEO rankings, organic growth tips"
+                type="website"
+                schema={blogSchema}
+            />
             <div className="border-b border-gray-100 sticky top-0 bg-white/95 backdrop-blur-sm z-50">
                 <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
                     <Link to="/" className="flex items-center gap-2 text-gray-500 hover:text-[#ff4d00] transition-colors text-xs font-bold uppercase tracking-wider">
                         <ArrowLeft size={16} /> Back to Home
                     </Link>
                     <div className="flex items-center gap-2">
-                        <span className="text-xl font-black text-[#ff4d00] tracking-tight">MODUS</span>
-                        <span className="text-[10px] font-bold bg-black text-white px-1.5 py-0.5 rounded-sm uppercase tracking-wide">Journal</span>
+                        <span className="text-xl font-black text-[#ff4d00] tracking-tight">TRAFFIC</span>
+                        <span className="text-[10px] font-bold bg-black text-white px-1.5 py-0.5 rounded-sm uppercase tracking-wide">CREATOR</span>
                     </div>
                 </div>
             </div>
@@ -228,8 +220,8 @@ const Blog: React.FC<BlogProps> = ({ onBack }) => {
 
             <footer className="bg-black text-white py-12 px-6 mt-20">
                 <div className="max-w-7xl mx-auto flex justify-between items-center">
-                    <div className="text-xl font-black tracking-tight">MODUS</div>
-                    <div className="text-xs text-gray-500">© 2025 Modus Traffic Inc.</div>
+                    <div className="text-xl font-black tracking-tight">TRAFFIC CREATOR</div>
+                    <div className="text-xs text-gray-500">© 2024 Traffic Creator. All rights reserved.</div>
                 </div>
             </footer>
         </div>
