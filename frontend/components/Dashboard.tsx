@@ -150,7 +150,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
               <div className="w-8 h-8 bg-[#ff4d00] flex items-center justify-center">
                 <span className="font-black text-black">T</span>
               </div>
-              <span className="text-xl font-black tracking-tighter">TRAFFIC</span>
+              <span className="text-xl font-black tracking-tighter">TRAFFIC BOT</span>
             </div>
             {menuSections.map((section, idx) => (
               <div key={idx} className="py-6 border-b border-gray-900">
@@ -179,9 +179,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
 
       <main className="flex-1 md:ml-64 flex flex-col min-h-screen relative">
         <BroadcastBanner />
-        
+
         {!db.getCurrentUser()?.isVerified && db.getCurrentUser()?.email && (
-          <VerificationBanner 
+          <VerificationBanner
             email={db.getCurrentUser()!.email}
             onVerified={() => {
               const user = db.getCurrentUser();
@@ -280,7 +280,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
               <Link to="/legal/impressum" className="hover:text-[#ff4d00] transition-colors uppercase">Impressum</Link>
             </div>
             <div className="text-[10px] font-medium text-gray-400">
-              © 2025 Traffic Creator Inc.
+              © 2024 EasyTrafficBot UG
             </div>
           </div>
         </footer>

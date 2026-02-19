@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en" dir="">
+  <head>
+    <!-- Required Meta Tags Always Come First -->
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no"
+    />
+    <!-- Title -->
+    <title><?=$title?></title>
+    <meta name="description" content="<?=$description?>" />
+    <link rel="canonical" href="https://traffic-bot.com/blog/tips-tricks-utm" />
+    <!-- Favicon -->
+    <link rel="shortcut icon" href="./favicon.ico" />
+    <!-- Font -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <!-- CSS Implementing Plugins -->
+    <link
+      rel="stylesheet"
+      href="views/assets/vendor/bootstrap-icons/font/bootstrap-icons.css"
+    />
+    <link
+      rel="stylesheet"
+      href="views/assets/vendor/hs-mega-menu/dist/hs-mega-menu.min.css"
+    />
+    <!-- CSS Front Template -->
+    <link rel="stylesheet" href="views/assets/css/theme.min.css" />
+  </head>
+  <body>
+    <!-- ========== HEADER ========== -->
+    <?php include 'header.php';?>
+    <!-- ========== END HEADER ========== -->
+    <!-- ========== MAIN CONTENT ========== -->
+    <main id="content" role="main">
+      <!-- Article Description -->
+      <div
+        class="container content-space-t-3 content-space-t-lg-4 content-space-b-2"
+      >
+        <div class="w-lg-65 mx-lg-auto">
+          <div class="mb-4">
+            <h1 class="h2">
+              Using UTMs to Separate Real Visitors from Bot Traffic
+            </h1>
+          </div>
+          <div class="row align-items-sm-center mb-5">
+            <div class="col-sm-7 mb-4 mb-sm-0">
+              <!-- Media -->
+              <div class="d-flex align-items-center">
+                <div class="flex-shrink-0">
+                  <img
+                    class="avatar avatar-circle"
+                    src="views/assets/img/160x160/img9.jpg"
+                    alt="Image Description"
+                  />
+                </div>
+                <div class="flex-grow-1 ms-3">
+                  <h5 class="mb-0">
+                    <a class="text-dark" href="./blog-author-profile">
+                      <?=$author?>
+                    </a>
+                  </h5>
+                  <span class="d-block small"> <?=$date?> </span>
+                </div>
+              </div>
+              <!-- End Media -->
+            </div>
+            <!-- End Col -->
+            <div class="col-sm-5">
+              <div class="d-flex justify-content-sm-end align-items-center">
+                <span class="text-cap mb-0 me-2">Share:</span>
+                <div class="d-flex gap-2">
+                  <a
+                    class="btn btn-soft-secondary btn-sm btn-icon rounded-circle"
+                    href="#"
+                  >
+                    <i class="bi-facebook"></i>
+                  </a>
+                  <a
+                    class="btn btn-soft-secondary btn-sm btn-icon rounded-circle"
+                    href="#"
+                  >
+                    <i class="Introductionbi-twitter"></i>
+                  </a>
+                  <a
+                    class="btn btn-soft-secondary btn-sm btn-icon rounded-circle"
+                    href="#"
+                  >
+                    <i class="bi-instagram"></i>
+                  </a>
+                  <a
+                    class="btn btn-soft-secondary btn-sm btn-icon rounded-circle"
+                    href="#"
+                  >
+                    <i class="bi-telegram"></i>
+                  </a>
+                </div>
+              </div>
+            </div>
+            <!-- End Col -->
+          </div>
+          <!-- End Row -->
+        </div>
+        <div class="w-lg-65 mx-lg-auto">
+          <h2>Introduction</h2>
+          <p>
+            In digital marketing, maximizing the performance and visibility of a
+            website has become increasingly complex. Yet, some tools and
+            strategies have proven remarkably effective. Among these are UTM
+            parameters or Urchin Tracking Module parameters. But what are UTMs,
+            and how do they integrate with another common practice, buying bot
+            traffic? Let's dive in.
+          </p>
+          <h2>What are UTMs?</h2>
+          <p>
+            <mark
+              >UTMs are simple code snippets added to the end of a URL to track
+              the performance of campaigns and content.</mark
+            >
+            They were initially developed for use with Urchin, the software
+            precursor to Google Analytics, but they have since been adopted
+            widely in digital marketing. UTMs enable you to track where your
+            website's traffic is coming from, which marketing campaigns are most
+            effective, and how different audience segments interact with your
+            site.
+          </p>
+          <h2>How do UTMs work?</h2>
+          <p>
+            UTMs add specific parameters to your URLs, creating unique links
+            that can be tracked individually. When a user clicks on a
+            UTM-tracked link, the parameters in the URL are sent to your
+            analytics platform, which interprets the data and records it in your
+            reports. This enables a deep dive into your traffic data, offering
+            invaluable insights for marketing optimization.
+          </p>
+          <h2>What information can be tracked using UTMs?</h2>
+          <p>
+            The power of UTMs comes from their ability to track key information
+            about your website traffic. This includes the source (where the
+            traffic came from), the medium (the type of traffic), and the
+            campaign (the specific promotion or strategy driving the traffic).
+            Additional parameters can track the content (which link was clicked)
+            and the term (the keywords used in a paid search ad).
+          </p>
+          <h2>How do I create and add UTMs to my URLs?</h2>
+          <p>
+            Creating and adding UTMs to URLs is surprisingly straightforward.
+            Google offers a free URL builder where you can input your URL,
+            campaign source, campaign medium, and other parameters. The tool
+            then generates a URL with the UTM parameters included. This URL can
+            be used in your campaigns, enabling detailed tracking of your
+            marketing efforts.
+          </p>
+          <a
+            href="https://ga-dev-tools.google/campaign-url-builder/"
+            target="_blank"
+            >Google's Campaign URL Builder (UTM Builder link)</a
+          >
+          <p class="tex-center">
+            <img
+              class="img-fluid mt-6 mb-6"
+              src="../views/assets/img/blog/utm_google.webp"
+              alt="Screenshot of UTM biulding tool from Google"
+            />
+          </p>
+          <p>
+            <b style="color: rgb(25, 125, 255)">Enter the Website URL:</b> This
+            is the website or webpage you want to track in your campaign. For
+            example, if you want to track visits to your homepage, you'd enter
+            <code>https://www.yourwebsite.com</code>.
+          </p>
+          <p>
+            <b style="color: rgb(25, 125, 255)"
+              >Campaign Source (utm_source):</b
+            >
+            Enter the platform (or referrer) where your traffic will come from,
+            like <code>Google</code>, <code>Newsletter</code>, or
+            <code>Twitter</code>.
+          </p>
+          <p>
+            <b style="color: rgb(25, 125, 255)"
+              >Campaign Medium (utm_medium):</b
+            >
+            Enter the marketing medium, like <code>CPC</code>,
+            <code>Email</code>, <code>Social</code>.
+          </p>
+          <p>
+            <b style="color: rgb(25, 125, 255)"
+              >Campaign Name (utm_campaign):</b
+            >
+            Enter the name of your campaign. This could be a specific product
+            promotion or strategic campaign like <code>Spring_Sale</code>,
+            <code>BlackFriday</code>, <code>New_Product_Launch</code>.
+          </p>
+          <p>
+            <b style="color: rgb(25, 125, 255)"
+              >Campaign Term (utm_term) (Optional):</b
+            >
+            You can use this field for paid search to identify the keywords for
+            your ad.
+          </p>
+          <p>
+            <b style="color: rgb(25, 125, 255)"
+              >Campaign Content (utm_content) (Optional):</b
+            >
+            Used to differentiate ads or links that point to the same URL.
+            Examples: logo link or text link.
+          </p>
+          <p>
+            After you've filled in all the relevant information, the Campaign
+            URL Builder will automatically generate a campaign URL for you. This
+            is the URL you should use in your campaigns.
+          </p>
+          <p class="tex-center">
+            <img
+              class="img-fluid"
+              src="../views/assets/img/blog/utm_result.webp"
+              alt="Screenshot of UTM biulding tool from Google with a ready UTM URL"
+            />
+          </p>
+          <h2>Do I need technical expertise to use UTMs?</h2>
+          <p>
+            While UTMs may sound technical, they're accessible to marketers of
+            all levels. A basic understanding of your marketing goals and the
+            nature of your campaigns is enough to start using UTMs effectively.
+          </p>
+          <h2>How will UTMs benefit my marketing efforts?</h2>
+          <p>
+            UTMs can significantly improve your marketing analytics by providing
+            data about your traffic. This information allows for detailed
+            campaign analysis and aids in making informed decisions about future
+            marketing strategies.
+          </p>
+          <h2>Can UTMs be used to track bot traffic?</h2>
+          <p>
+            Indeed, UTMs can effectively track bot traffic as well. This is
+            particularly useful for businesses that purchase bot traffic to
+            improve web metrics. Applying UTMs to URLs directed at bot traffic
+            lets you monitor how these bots interact with your site and
+            contribute to your overall traffic.
+          </p>
+          <p class="tex-center">
+            <img
+              class="img-fluid mt-6 mb-6"
+              src="../views/assets/img/blog/trafficbot-utm.webp"
+              alt="Screenshot of Traffic Bot project settings with a URL with UTM parameters"
+            />
+          </p>
+          <h2>
+            What is the impact of bot traffic on website performance metrics
+            like bounce rates, returning visitors, and time on the page?
+          </h2>
+          <p>
+            Purchased bot traffic can greatly influence website performance
+            metrics. For instance, it can lower bounce rates, increase the rate
+            of returning visitors, and augment the average time spent on your
+            pages. This happens as the bot traffic imitates the behavior of real
+            users, and these enhanced metrics can positively affect your site's
+            SEO ranking.
+          </p>
+          <h2>
+            How does bot traffic improve CTR using Google Search Console
+            Traffic?
+          </h2>
+          <p>
+            Services such as Google Search Console Traffic are designed to boost
+            your pages' Click-Through-Rate (CTR). When applied to bot traffic,
+            they can simulate real user interactions with your search listings,
+            increasing the overall CTR. Higher CTR can signal to search engines
+            that your page is relevant to user queries, thus improving your
+            search engine ranking.
+          </p>
+          <h2>
+            How can improved parameters from bot traffic boost a website's
+            search engine ranking?
+          </h2>
+          <p>
+            Bot traffic can significantly improve specific parameters critical
+            to search engine ranking. Search engines like Google view these
+            improved metrics as indications of a quality website that provides
+            value to visitors, thereby influencing the search engine ranking
+            favorably. Coupling this strategy with relevant content and SEO
+            practices can increase organic traffic.
+          </p>
+          <h2>
+            Are there any limitations or potential issues with using bot
+            traffic?
+          </h2>
+          <p>
+            While using bot traffic can provide numerous benefits, it's
+            essential to understand potential limitations and pitfalls. One
+            issue is that not all bots are created equal. Some low-quality bots
+            can result in a spike of invalid traffic, which can trigger search
+            engine penalties. Therefore, choosing a reputable provider ensures
+            the bot traffic behaves like real users and complies with Google's
+            guidelines is crucial.
+          </p>
+          <a
+            href="https://traffic-bot.com/blog/30-best-traffic-bots"
+            target="_blank"
+          >
+            <h3 style="color: rgb(25, 125, 255)">
+              → CHECK OUR COMPARISON OF 30+ TRAFFIC BOTS
+            </h3>
+          </a>
+          <h2>
+            Are there any best practices for using bot traffic to enhance UTM
+            data?
+          </h2>
+          <p>
+            To effectively use bot traffic in tandem with UTMs, consider the
+            following best practices:
+          </p>
+          <ul>
+            <li>
+              Ensure UTMs are correctly structured and relevant to each campaign
+              to guarantee precise tracking.
+            </li>
+            <li>
+              Regularly review your UTM reports to understand the bot traffic
+              behavior and its impact on your metrics.
+            </li>
+            <li>
+              Use UTMs to track the effectiveness of different types of bot
+              traffic and adjust your strategies accordingly.
+            </li>
+          </ul>
+          <h2>
+            How can I ensure my UTM reports reflect accurate data while using
+            good and bad bot traffic?
+          </h2>
+          <p>
+            If you are using UTM parameters in your URLs for tracking your
+            marketing efforts and you're worried about bot traffic skewing your
+            data, there are a few steps you can take to ensure your reports are
+            as accurate as possible:
+          </p>
+          <ul>
+            <li>
+              <b style="color: rgb(25, 125, 255)"
+                >Google Analytics Filtering:</b
+              >
+              You can create a filter in Google Analytics to exclude known bad
+              bots and spiders. Google has a predefined filter for this under
+              View settings, where you can check the box that says, 'Exclude all
+              hits from known bots and spiders.'
+            </li>
+            <li>
+              <b style="color: rgb(25, 125, 255)">Advanced Segments:</b> In
+              Google Analytics, you can create an Advanced Segment to exclude
+              traffic by ISP or network domain if you identify large amounts of
+              harmful bot traffic from specific ISPs or domains.
+            </li>
+            <li>
+              <b style="color: rgb(25, 125, 255)">Monitor Traffic Sources:</b>
+              Regularly review your traffic sources. Bad bot traffic often comes
+              from a few specific locations or may have other identifiable
+              patterns, such as low time spent on site, high bounce rates, or
+              large pages per session. Be wary of unusually high spikes in
+              traffic without a corresponding increase in conversions or
+              engagement.
+            </li>
+            <li>
+              <b style="color: rgb(25, 125, 255)">IP Exclusion:</b> If you
+              identify bad bot traffic coming from specific IPs, you can exclude
+              these from your reports in Google Analytics.
+            </li>
+            <li>
+              <b style="color: rgb(25, 125, 255)">CAPTCHA Implementation:</b> On
+              your website, consider implementing CAPTCHAs, which can deter many
+              simpler bots.
+            </li>
+            <li>
+              <b style="color: rgb(25, 125, 255)"
+                >Use a Bot Management Solution:</b
+              >
+              You can track good bot traffic and adjust settings in
+              Traffic-Bot.com's Dashboard.
+            </li>
+            <li>
+              <b style="color: rgb(25, 125, 255)">Validate User Agents:</b>
+              Consider validating user agents of incoming traffic. While this
+              may not deter all bot traffic (as some bots pretend to be
+              legitimate web browsers), it can help filter out some less
+              sophisticated bots.
+            </li>
+          </ul>
+          <h2>Conclusion</h2>
+          <p>
+            In conclusion, utilizing UTMs with purchased bot traffic can yield
+            valuable insights into your website's performance and significantly
+            boost your SEO efforts. The key is understanding the mechanisms of
+            UTMs and using bot traffic responsibly and effectively. With these
+            tools, you can take your digital marketing strategies to new
+            heights, improving your website's visibility and success in today's
+            competitive online marketplace.
+          </p>
+          <hr />
+          <p>
+            We will continue to update
+            <a class="link" href="https://traffic-bot.com">traffic-bot.com</a>;
+            if you have any questions or suggestions, please contact us!
+          </p>
+          <!-- Badges -->
+          <div class="mt-5">
+            <a class="btn btn-soft-secondary btn-xs m-1" href="#"
+              >Why Using Bot Traffic</a
+            >
+            <a class="btn btn-soft-secondary btn-xs m-1" href="#"
+              >Bot Traffic</a
+            >
+            <a class="btn btn-soft-secondary btn-xs m-1" href="#"
+              >Google Search Console Traffic</a
+            >
+            <a class="btn btn-soft-secondary btn-xs m-1" href="#"
+              >What is The Best Bot Traffic?</a
+            >
+            <a class="btn btn-soft-secondary btn-xs m-1" href="#"
+              >Best Bot Traffic</a
+            >
+          </div>
+          <!-- End Badges -->
+          <!-- End Row -->
+        </div>
+      </div>
+      <!-- End Article Description -->
+      <!-- End Subscribe -->
+    </main>
+    <!-- ========== END MAIN CONTENT ========== -->
+    <!-- ========== FOOTER ========== -->
+    <?php include ('footer.php'); ?>
+    <!-- ========== END FOOTER ========== -->
+    <!-- ========== SECONDARY CONTENTS ========== -->
+    <!-- Sign Up -->
+    <div
+      class="modal fade"
+      id="signupModal"
+      tabindex="-1"
+      role="dialog"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+          <!-- Header -->
+          <div class="modal-close">
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <!-- End Header -->
+          <!-- Body -->
+          <div class="modal-body">
+            <!-- Log in -->
+            <div id="signupModalFormLogin" style="display: none; opacity: 0">
+              <!-- Heading -->
+              <div class="text-center mb-7">
+                <h2>Log in</h2>
+                <p>
+                  Don't have an account yet?
+                  <a
+                    class="js-animation-link link"
+                    href="javascript:;"
+                    role="button"
+                    data-hs-show-animation-options='{
+                         "targetSelector": "#signupModalFormSignup",
+                         "groupName": "idForm"
+                       }'
+                    >Sign up</a
+                  >
+                </p>
+              </div>
+              <!-- End Heading -->
+              <div class="d-grid gap-2">
+                <a class="btn btn-white btn-lg" href="#">
+                  <span
+                    class="d-flex justify-content-center align-items-center"
+                  >
+                    <img
+                      class="avatar avatar-xss me-2"
+                      src="views/assets/svg/brands/google-icon.svg"
+                      alt="Image Description"
+                    />
+                    Log in with Google
+                  </span>
+                </a>
+                <a
+                  class="js-animation-link btn btn-primary btn-lg"
+                  href="#"
+                  data-hs-show-animation-options='{
+                       "targetSelector": "#signupModalFormLoginWithEmail",
+                       "groupName": "idForm"
+                     }'
+                  >Log in with Email</a
+                >
+              </div>
+            </div>
+            <!-- End Log in -->
+            <!-- Log in with Modal -->
+            <div
+              id="signupModalFormLoginWithEmail"
+              style="display: none; opacity: 0"
+            >
+              <!-- Heading -->
+              <div class="text-center mb-7">
+                <h2>Log in</h2>
+                <p>
+                  Don't have an account yet?
+                  <a
+                    class="js-animation-link link"
+                    href="javascript:;"
+                    role="button"
+                    data-hs-show-animation-options='{
+                         "targetSelector": "#signupModalFormSignup",
+                         "groupName": "idForm"
+                       }'
+                    >Sign up</a
+                  >
+                </p>
+              </div>
+              <!-- End Heading -->
+              <form class="js-validate needs-validation" novalidate>
+                <!-- Form -->
+                <div class="mb-3">
+                  <label class="form-label" for="signupModalFormLoginEmail"
+                    >Your email</label
+                  >
+                  <input
+                    type="email"
+                    class="form-control form-control-lg"
+                    name="email"
+                    id="signupModalFormLoginEmail"
+                    placeholder="email@site.com"
+                    aria-label="email@site.com"
+                    required
+                  />
+                  <span class="invalid-feedback"
+                    >Please enter a valid email address.</span
+                  >
+                </div>
+                <!-- End Form -->
+                <!-- Form -->
+                <div class="mb-3">
+                  <div
+                    class="d-flex justify-content-between align-items-center"
+                  >
+                    <label class="form-label" for="signupModalFormLoginPassword"
+                      >Password</label
+                    >
+                    <a
+                      class="js-animation-link form-label-link"
+                      href="javascript:;"
+                      data-hs-show-animation-options='{
+                       "targetSelector": "#signupModalFormResetPassword",
+                       "groupName": "idForm"
+                     }'
+                      >Forgot Password?</a
+                    >
+                  </div>
+                  <input
+                    type="password"
+                    class="form-control form-control-lg"
+                    name="password"
+                    id="signupModalFormLoginPassword"
+                    placeholder="8+ characters required"
+                    aria-label="8+ characters required"
+                    required
+                    minlength="8"
+                  />
+                  <span class="invalid-feedback"
+                    >Please enter a valid password.</span
+                  >
+                </div>
+                <!-- End Form -->
+                <div class="d-grid mb-3">
+                  <button type="submit" class="btn btn-primary form-control-lg">
+                    Log in
+                  </button>
+                </div>
+              </form>
+            </div>
+            <!-- End Log in with Modal -->
+            <!-- Sign up -->
+            <div id="signupModalFormSignup">
+              <!-- Heading -->
+              <div class="text-center mb-7">
+                <h2>Sign up</h2>
+                <p>
+                  Already have an account?
+                  <a
+                    class="js-animation-link link"
+                    href="javascript:;"
+                    role="button"
+                    data-hs-show-animation-options='{
+                         "targetSelector": "#signupModalFormLogin",
+                         "groupName": "idForm"
+                       }'
+                    >Log in</a
+                  >
+                </p>
+              </div>
+              <!-- End Heading -->
+              <div class="d-grid gap-3">
+                <a class="btn btn-white btn-lg" href="#">
+                  <span
+                    class="d-flex justify-content-center align-items-center"
+                  >
+                    <img
+                      class="avatar avatar-xss me-2"
+                      src="views/assets/svg/brands/google-icon.svg"
+                      alt="Image Description"
+                    />
+                    Sign up with Google
+                  </span>
+                </a>
+                <a
+                  class="js-animation-link btn btn-primary btn-lg"
+                  href="#"
+                  data-hs-show-animation-options='{
+                       "targetSelector": "#signupModalFormSignupWithEmail",
+                       "groupName": "idForm"
+                     }'
+                  >Sign up with Email</a
+                >
+                <div class="text-center">
+                  <p class="small mb-0">
+                    By continuing you agree to our
+                    <a href="#">Terms and Conditions</a>
+                  </p>
+                </div>
+              </div>
+            </div>
+            <!-- End Sign up -->
+            <!-- Sign up with Modal -->
+            <div
+              id="signupModalFormSignupWithEmail"
+              style="display: none; opacity: 0"
+            >
+              <!-- Heading -->
+              <div class="text-center mb-7">
+                <h2>Sign up</h2>
+                <p>
+                  Already have an account?
+                  <a
+                    class="js-animation-link link"
+                    href="javascript:;"
+                    role="button"
+                    data-hs-show-animation-options='{
+                         "targetSelector": "#signupModalFormLogin",
+                         "groupName": "idForm"
+                       }'
+                    >Log in</a
+                  >
+                </p>
+              </div>
+              <!-- End Heading -->
+              <form class="js-validate need-validate" novalidate>
+                <!-- Form -->
+                <div class="mb-3">
+                  <label class="form-label" for="signupModalFormSignupEmail"
+                    >Your email</label
+                  >
+                  <input
+                    type="email"
+                    class="form-control form-control-lg"
+                    name="email"
+                    id="signupModalFormSignupEmail"
+                    placeholder="email@site.com"
+                    aria-label="email@site.com"
+                    required
+                  />
+                  <span class="invalid-feedback"
+                    >Please enter a valid email address.</span
+                  >
+                </div>
+                <!-- End Form -->
+                <!-- Form -->
+                <div class="mb-3">
+                  <label class="form-label" for="signupModalFormSignupPassword"
+                    >Password</label
+                  >
+                  <input
+                    type="password"
+                    class="form-control form-control-lg"
+                    name="password"
+                    id="signupModalFormSignupPassword"
+                    placeholder="8+ characters required"
+                    aria-label="8+ characters required"
+                    required
+                  />
+                  <span class="invalid-feedback"
+                    >Your password is invalid. Please try again.</span
+                  >
+                </div>
+                <!-- End Form -->
+                <!-- Form -->
+                <div class="mb-3" data-hs-validation-validate-class>
+                  <label
+                    class="form-label"
+                    for="signupModalFormSignupConfirmPassword"
+                    >Confirm password</label
+                  >
+                  <input
+                    type="password"
+                    class="form-control form-control-lg"
+                    name="confirmPassword"
+                    id="signupModalFormSignupConfirmPassword"
+                    placeholder="8+ characters required"
+                    aria-label="8+ characters required"
+                    required
+                    data-hs-validation-equal-field="#signupModalFormSignupPassword"
+                  />
+                  <span class="invalid-feedback"
+                    >Password does not match the confirm password.</span
+                  >
+                </div>
+                <!-- End Form -->
+                <div class="d-grid mb-3">
+                  <button type="submit" class="btn btn-primary form-control-lg">
+                    Sign up
+                  </button>
+                </div>
+                <div class="text-center">
+                  <p class="small mb-0">
+                    By continuing you agree to our
+                    <a href="#">Terms and Conditions</a>
+                  </p>
+                </div>
+              </form>
+            </div>
+            <!-- End Sign up with Modal -->
+            <!-- Reset Password -->
+            <div
+              id="signupModalFormResetPassword"
+              style="display: none; opacity: 0"
+            >
+              <!-- Heading -->
+              <div class="text-center mb-7">
+                <h2>Forgot password?</h2>
+                <p>
+                  Enter the email address you used when you joined and we'll
+                  send you instructions to reset your password.
+                </p>
+              </div>
+              <!-- En dHeading -->
+              <form class="js-validate need-validate" novalidate>
+                <div class="mb-3">
+                  <!-- Form -->
+                  <div
+                    class="d-flex justify-content-between align-items-center"
+                  >
+                    <label
+                      class="form-label"
+                      for="signupModalFormResetPasswordEmail"
+                      tabindex="0"
+                      >Your email</label
+                    >
+                    <a
+                      class="js-animation-link form-label-link"
+                      href="javascript:;"
+                      data-hs-show-animation-options='{
+                         "targetSelector": "#signupModalFormLogin",
+                         "groupName": "idForm"
+                       }'
+                    >
+                      <i class="bi-chevron-left small"></i> Back to Log in
+                    </a>
+                  </div>
+                  <input
+                    type="email"
+                    class="form-control form-control-lg"
+                    name="email"
+                    id="signupModalFormResetPasswordEmail"
+                    tabindex="1"
+                    placeholder="Enter your email address"
+                    aria-label="Enter your email address"
+                    required
+                  />
+                  <span class="invalid-feedback"
+                    >Please enter a valid email address.</span
+                  >
+                  <!-- End Form -->
+                </div>
+                <div class="d-grid">
+                  <button type="submit" class="btn btn-primary form-control-lg">
+                    Submit
+                  </button>
+                </div>
+              </form>
+            </div>
+            <!-- End Reset Password -->
+          </div>
+          <!-- End Body -->
+          <!-- Footer -->
+          <div class="modal-footer d-block text-center py-sm-5">
+            <small class="text-cap mb-4"
+              >Trusted by the world's best teams</small
+            >
+            <div class="w-85 mx-auto">
+              <div class="row justify-content-between">
+                <div class="col">
+                  <img
+                    class="img-fluid"
+                    src="views/assets/svg/brands/gitlab-gray.svg"
+                    alt="Logo"
+                  />
+                </div>
+                <!-- End Col -->
+                <div class="col">
+                  <img
+                    class="img-fluid"
+                    src="views/assets/svg/brands/fitbit-gray.svg"
+                    alt="Logo"
+                  />
+                </div>
+                <!-- End Col -->
+                <div class="col">
+                  <img
+                    class="img-fluid"
+                    src="views/assets/svg/brands/flow-xo-gray.svg"
+                    alt="Logo"
+                  />
+                </div>
+                <!-- End Col -->
+                <div class="col">
+                  <img
+                    class="img-fluid"
+                    src="views/assets/svg/brands/layar-gray.svg"
+                    alt="Logo"
+                  />
+                </div>
+                <!-- End Col -->
+              </div>
+            </div>
+            <!-- End Row -->
+          </div>
+          <!-- End Footer -->
+        </div>
+      </div>
+    </div>
+    <!-- Go To -->
+    <a
+      class="js-go-to go-to position-fixed"
+      href="javascript:;"
+      style="visibility: hidden"
+      data-hs-go-to-options='{
+       "offsetTop": 700,
+       "position": {
+         "init": {
+           "right": "2rem"
+         },
+         "show": {
+           "bottom": "2rem"
+         },
+         "hide": {
+           "bottom": "-2rem"
+         }
+       }
+     }'
+    >
+      <i class="bi-chevron-up"></i>
+    </a>
+    <!-- ========== END SECONDARY CONTENTS ========== -->
+    <!-- JS Global Compulsory  -->
+    <script src="views/assets/vendor/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- JS Implementing Plugins -->
+    <script src="views/assets/vendor/hs-header/dist/hs-header.min.js"></script>
+    <script src="views/assets/vendor/hs-mega-menu/dist/hs-mega-menu.min.js"></script>
+    <script src="views/assets/vendor/hs-show-animation/dist/hs-show-animation.min.js"></script>
+    <script src="views/assets/vendor/hs-go-to/dist/hs-go-to.min.js"></script>
+    <!-- JS Front -->
+    <script src="views/assets/js/theme.min.js"></script>
+    <!-- JS Plugins Init. -->
+    <script>
+      (function () {
+        // INITIALIZATION OF HEADER
+        // =======================================================
+        new HSHeader("#header").init();
+        // INITIALIZATION OF MEGA MENU
+        // =======================================================
+        new HSMegaMenu(".js-mega-menu", {
+          desktop: {
+            position: "left",
+          },
+        });
+        // INITIALIZATION OF SHOW ANIMATIONS
+        // =======================================================
+        new HSShowAnimation(".js-animation-link");
+        // INITIALIZATION OF BOOTSTRAP VALIDATION
+        // =======================================================
+        HSBsValidation.init(".js-validate", {
+          onSubmit: (data) => {
+            data.event.preventDefault();
+            alert("Submited");
+          },
+        });
+        // INITIALIZATION OF BOOTSTRAP DROPDOWN
+        // =======================================================
+        HSBsDropdown.init();
+        // INITIALIZATION OF GO TO
+        // =======================================================
+        new HSGoTo(".js-go-to");
+      })();
+    </script>
+  </body>
+</html>

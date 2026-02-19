@@ -53,9 +53,9 @@ const HelpDesk: React.FC<HelpDeskProps> = ({ onBack }) => {
     return (
         <div className="min-h-screen bg-white text-gray-900 font-sans">
             <SEO
-                title="Help Center & Documentation 2026 - Traffic Creator Support"
-                description="Find answers to common questions, setup guides, and API documentation for Traffic Creator in 2026."
-                keywords="traffic creator support 2026, help center, documentation, faq, seo tool support"
+                title="Help Center & Documentation 2024 - Traffic Bot Support"
+                description="Find answers to common questions, setup guides, and API documentation for Traffic Bot in 2024."
+                keywords="traffic bot support 2024, help center, documentation, faq, seo tool support"
                 type="article"
                 schema={{
                     "@context": "https://schema.org",
@@ -162,8 +162,8 @@ const HelpDesk: React.FC<HelpDeskProps> = ({ onBack }) => {
             {/* Footer */}
             <footer className="bg-black text-white py-12 px-6">
                 <div className="max-w-4xl mx-auto flex justify-between items-center">
-                    <div className="text-xl font-black tracking-tight">TRAFFIC CREATOR</div>
-                    <div className="text-xs text-gray-500">© 2025 Traffic Creator Inc.</div>
+                    <div className="text-xl font-black tracking-tight">TRAFFIC BOT</div>
+                    <div className="text-xs text-gray-500">© 2024 EasyTrafficBot UG</div>
                 </div>
             </footer>
         </div>

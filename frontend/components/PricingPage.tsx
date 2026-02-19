@@ -70,7 +70,7 @@ const PricingPage: React.FC = () => {
                     <thead>
                         <tr className="bg-gray-50 border-b border-gray-200">
                             <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-gray-400">Feature</th>
-                            <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-[#ff4d00]">Traffic Creator OS</th>
+                            <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-[#ff4d00]">Traffic Bot OS</th>
                             <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-gray-300">Other Ad Networks</th>
                         </tr>
                     </thead>
@@ -116,22 +116,20 @@ const PricingPage: React.FC = () => {
                 <div className="flex justify-center gap-4 mb-8">
                     <button
                         onClick={() => setPricingTab('subscriptions')}
-                        className={`px-8 py-3 text-xs font-black uppercase tracking-widest transition-all ${
-                            pricingTab === 'subscriptions'
+                        className={`px-8 py-3 text-xs font-black uppercase tracking-widest transition-all ${pricingTab === 'subscriptions'
                                 ? 'bg-[#ff4d00] text-white shadow-lg'
                                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
+                            }`}
                     >
                         <CreditCard size={14} className="inline mr-2" />
                         Subscriptions
                     </button>
                     <button
                         onClick={() => setPricingTab('credits')}
-                        className={`px-8 py-3 text-xs font-black uppercase tracking-widest transition-all ${
-                            pricingTab === 'credits'
+                        className={`px-8 py-3 text-xs font-black uppercase tracking-widest transition-all ${pricingTab === 'credits'
                                 ? 'bg-[#ff4d00] text-white shadow-lg'
                                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
+                            }`}
                     >
                         <ShoppingCart size={14} className="inline mr-2" />
                         Credit Packs
@@ -215,11 +213,10 @@ const PricingPage: React.FC = () => {
                             <button
                                 key={tier.id}
                                 onClick={() => setSelectedTier(tier.id)}
-                                className={`px-6 py-3 text-xs font-black uppercase tracking-widest transition-all ${
-                                    selectedTier === tier.id
+                                className={`px-6 py-3 text-xs font-black uppercase tracking-widest transition-all ${selectedTier === tier.id
                                         ? 'bg-[#ff4d00] text-white'
                                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                } ${tier.popular ? 'ring-2 ring-[#ff4d00]/30' : ''}`}
+                                    } ${tier.popular ? 'ring-2 ring-[#ff4d00]/30' : ''}`}
                             >
                                 {tier.name}
                                 {tier.popular && <span className="ml-2 text-[10px]">★</span>}
@@ -411,9 +408,9 @@ const PricingPage: React.FC = () => {
         <div className="min-h-screen bg-[#f3f4f6] py-20 px-6 font-sans">
             <div className="max-w-7xl mx-auto">
                 <SEO
-                    title="Pricing Plans 2026 - Scalable Organic Traffic Packages | Traffic Creator"
-                    description="Transparent pricing for 2026. Start with our flexible credit packs or choose a monthly agency plan. Plans start at just €29. High-quality residential traffic for modern SEO."
-                    keywords="traffic bot pricing 2026, buy website hits cost, cheap seo traffic, agency traffic plan, organic traffic packages"
+                    title="Pricing Plans 2024 - Scalable Organic Traffic Packages | Traffic Bot"
+                    description="Transparent pricing for 2024. Start with our flexible credit packs or choose a monthly agency plan. Plans start at just €29. High-quality residential traffic for modern SEO."
+                    keywords="traffic bot pricing 2024, buy website hits cost, cheap seo traffic, agency traffic plan, organic traffic packages"
                     type="product"
                     schema={{
                         "@context": "https://schema.org",

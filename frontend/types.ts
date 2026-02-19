@@ -246,7 +246,7 @@ export interface User {
   twoFactorEnabled?: boolean;
   bio?: string;
   jobTitle?: string;
-  loginHistory?: { ip: string; device: string; date: string }[];
+  loginHistory?: { ip: string; device: string; date: string; type?: string }[];
   socialLinks?: { discord?: string; twitter?: string; linkedin?: string };
   recoveryEmail?: string;
   timezone?: string;

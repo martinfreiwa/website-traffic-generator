@@ -515,25 +515,21 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                             <Lock size={14} /> Read Only
                         </div>
                     )}
-                    <button className="flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-4 py-2.5 text-xs font-bold uppercase tracking-wider hover:border-[#ff4d00] hover:text-[#ff4d00] transition-colors">
-                        <Copy size={14} /> Clone
+                    <button className="flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider text-gray-600 hover:text-[#ff4d00] hover:bg-orange-50 border border-gray-200 hover:border-[#ff4d00] transition-colors">
+                        <Copy size={14} className="text-[#ff4d00]" /> Clone
                     </button>
                     <button 
                         onClick={handleToggleStatus}
-                        className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-colors ${
-                            project.status === 'active' 
-                                ? 'bg-yellow-50 border border-yellow-200 text-yellow-700 hover:bg-yellow-100' 
-                                : 'bg-green-50 border border-green-200 text-green-700 hover:bg-green-100'
-                        }`}
+                        className="flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider text-gray-600 hover:text-[#ff4d00] hover:bg-orange-50 border border-gray-200 hover:border-[#ff4d00] transition-colors"
                     >
-                        {project.status === 'active' ? <Pause size={14} /> : <Play size={14} />} 
+                        {project.status === 'active' ? <Pause size={14} className="text-[#ff4d00]" /> : <Play size={14} className="text-[#ff4d00]" />} 
                         {project.status === 'active' ? 'Pause' : 'Resume'}
                     </button>
                     <button 
                         onClick={handleDeleteProject}
-                        className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-600 px-4 py-2.5 text-xs font-bold uppercase tracking-wider hover:bg-red-100 transition-colors"
+                        className="flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider text-gray-600 hover:text-[#ff4d00] hover:bg-orange-50 border border-gray-200 hover:border-[#ff4d00] transition-colors"
                     >
-                        <Trash2 size={14} /> Delete
+                        <Trash2 size={14} className="text-[#ff4d00]" /> Delete
                     </button>
                 </div>
             </div>
@@ -596,8 +592,8 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                     <div className="text-xl font-bold text-gray-900">{dailySpeed > 0 ? `${dailySpeed.toLocaleString()}/day` : 'N/A'}</div>
                 </div>
                 <div className="bg-white p-5 border border-gray-200 shadow-sm flex flex-col justify-between">
-                    <div className="text-xs font-bold uppercase text-gray-400 mb-2 flex items-center gap-2"><Activity size={14} /> Hits Today</div>
-                    <div className="text-xl font-bold text-gray-900">{project.hitsToday?.toLocaleString() || 0}</div>
+                    <div className="text-xs font-bold uppercase text-gray-400 mb-2 flex items-center gap-2"><Activity size={14} /> Hits Total</div>
+                    <div className="text-xl font-bold text-gray-900">{project.totalHits?.toLocaleString() || 0}</div>
                 </div>
                 <div className="bg-white p-5 border border-gray-200 shadow-sm flex flex-col justify-between">
                     <div className="text-xs font-bold uppercase text-gray-400 mb-2 flex items-center gap-2"><Radio size={14} /> Status</div>
@@ -718,19 +714,15 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                     <div className="flex items-center gap-4">
                         <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00]">Traffic Statistics</h3>
                         <div className="flex bg-gray-100 rounded-sm p-1">
-                            <button onClick={() => setChartMode('visitors')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm transition-all ${chartMode === 'visitors' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-700'}`}>Visitors</button>
-                            <button onClick={() => setChartMode('pageviews')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm transition-all ${chartMode === 'pageviews' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-700'}`}>Pageviews</button>
-                        </div>
-                        <div className="flex bg-gray-100 rounded-sm p-1">
                             <button onClick={() => setChartView('daily')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm transition-all ${chartView === 'daily' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-700'}`}>30 Days</button>
                             <button onClick={() => setChartView('hourly')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm transition-all ${chartView === 'hourly' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-700'}`}>24 Hours</button>
                             <button onClick={() => setChartView('live')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm transition-all ${chartView === 'live' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-700'}`}>Live</button>
                         </div>
                     </div>
                     <div className="text-xs text-gray-500 font-bold">
-                        Total {chartMode === 'visitors' ? 'Visits' : 'Views'}: 
+                        Total Views: 
                         <span className="text-gray-900 ml-1">
-                            {(chartView === 'daily' ? stats : chartView === 'hourly' ? hourlyStats : liveStats).reduce((a, b) => a + (chartMode === 'visitors' ? b.visitors : (b.pageviews || b.visitors)), 0).toLocaleString()}
+                            {(chartView === 'daily' ? stats : chartView === 'hourly' ? hourlyStats : liveStats).reduce((a, b) => a + (b.pageviews || b.visitors), 0).toLocaleString()}
                         </span>
                     </div>
                 </div>
@@ -751,9 +743,9 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                         </div>
                     ) : (
                         (chartView === 'daily' ? stats : chartView === 'hourly' ? hourlyStats : liveStats).map((stat, i) => {
-                            const val = chartMode === 'visitors' ? stat.visitors : (stat.pageviews || stat.visitors);
+                            const val = stat.pageviews || stat.visitors;
                             const dataStats = chartView === 'daily' ? stats : chartView === 'hourly' ? hourlyStats : liveStats;
-                            const localMax = Math.max(...dataStats.map(s => chartMode === 'visitors' ? s.visitors : (s.pageviews || s.visitors)), 1);
+                            const localMax = Math.max(...dataStats.map(s => s.pageviews || s.visitors), 1);
                             const heightPercent = localMax > 0 ? (val / localMax) * 100 : 0;
                             const label = chartView === 'daily' ? (stat as any).date : chartView === 'hourly' ? (stat as any).hour : (stat as any).time;
                             return (
@@ -1020,40 +1012,6 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                     </div>
                 </div>
 
-                {/* --- UTM SETTINGS --- */}
-                <div className="bg-white border border-gray-200 shadow-sm p-6 md:p-8 mt-6" onClick={(e) => e.stopPropagation()}>
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-8 flex items-center gap-2">
-                        <Target size={16} /> Tracking & Attribution (UTM)
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <Label>Campaign Source</Label>
-                            <input value={settings.utmSource || ''} onChange={(e) => handleChange('utmSource', e.target.value)} className="w-full bg-[#f9fafb] border-b-2 border-transparent focus:border-[#ff4d00] p-3 outline-none text-sm font-medium" placeholder="e.g. google, newsletter" disabled={isFreeTrial} />
-                        </div>
-                        <div>
-                            <Label>Campaign Medium</Label>
-                            <input value={settings.utmMedium || ''} onChange={(e) => handleChange('utmMedium', e.target.value)} className="w-full bg-[#f9fafb] border-b-2 border-transparent focus:border-[#ff4d00] p-3 outline-none text-sm font-medium" placeholder="e.g. cpc, banner" disabled={isFreeTrial} />
-                        </div>
-                        <div>
-                            <Label>Campaign Name</Label>
-                            <input value={settings.utmCampaign || ''} onChange={(e) => handleChange('utmCampaign', e.target.value)} className="w-full bg-[#f9fafb] border-b-2 border-transparent focus:border-[#ff4d00] p-3 outline-none text-sm font-medium" placeholder="e.g. spring_sale" disabled={isFreeTrial} />
-                        </div>
-                        <div>
-                            <Label>Campaign Term</Label>
-                            <input value={settings.utmTerm || ''} onChange={(e) => handleChange('utmTerm', e.target.value)} className="w-full bg-[#f9fafb] border-b-2 border-transparent focus:border-[#ff4d00] p-3 outline-none text-sm font-medium" placeholder="e.g. running shoes" disabled={isFreeTrial} />
-                        </div>
-                        <div className="md:col-span-2">
-                            <Label>Campaign Content</Label>
-                            <input value={settings.utmContent || ''} onChange={(e) => handleChange('utmContent', e.target.value)} className="w-full bg-[#f9fafb] border-b-2 border-transparent focus:border-[#ff4d00] p-3 outline-none text-sm font-medium" placeholder="e.g. logolink, textlink" disabled={isFreeTrial} />
-                            <div className="mt-2 flex gap-2">
-                                <span className="text-[10px] text-gray-400 bg-gray-50 px-2 py-1 rounded border border-gray-100">{`{{random_keyword}}`}</span>
-                                <span className="text-[10px] text-gray-400 bg-gray-50 px-2 py-1 rounded border border-gray-100">{`{{timestamp}}`}</span>
-                                <span className="text-[10px] text-gray-400 bg-gray-50 px-2 py-1 rounded border border-gray-100">{`{{device_type}}`}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
                     {/* --- ADVANCED LOCATION --- */}
                     <div className="bg-white border border-gray-200 shadow-sm p-6 md:p-8" onClick={(e) => e.stopPropagation()}>
@@ -1200,6 +1158,40 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                                     />
                                 </div>
                             )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* --- UTM SETTINGS --- */}
+                <div className="bg-white border border-gray-200 shadow-sm p-6 md:p-8 mt-6" onClick={(e) => e.stopPropagation()}>
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-8 flex items-center gap-2">
+                        <Target size={16} /> Tracking & Attribution (UTM)
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <Label>Campaign Source</Label>
+                            <input value={settings.utmSource || ''} onChange={(e) => handleChange('utmSource', e.target.value)} className="w-full bg-[#f9fafb] border-b-2 border-transparent focus:border-[#ff4d00] p-3 outline-none text-sm font-medium" placeholder="e.g. google, newsletter" disabled={isFreeTrial} />
+                        </div>
+                        <div>
+                            <Label>Campaign Medium</Label>
+                            <input value={settings.utmMedium || ''} onChange={(e) => handleChange('utmMedium', e.target.value)} className="w-full bg-[#f9fafb] border-b-2 border-transparent focus:border-[#ff4d00] p-3 outline-none text-sm font-medium" placeholder="e.g. cpc, banner" disabled={isFreeTrial} />
+                        </div>
+                        <div>
+                            <Label>Campaign Name</Label>
+                            <input value={settings.utmCampaign || ''} onChange={(e) => handleChange('utmCampaign', e.target.value)} className="w-full bg-[#f9fafb] border-b-2 border-transparent focus:border-[#ff4d00] p-3 outline-none text-sm font-medium" placeholder="e.g. spring_sale" disabled={isFreeTrial} />
+                        </div>
+                        <div>
+                            <Label>Campaign Term</Label>
+                            <input value={settings.utmTerm || ''} onChange={(e) => handleChange('utmTerm', e.target.value)} className="w-full bg-[#f9fafb] border-b-2 border-transparent focus:border-[#ff4d00] p-3 outline-none text-sm font-medium" placeholder="e.g. running shoes" disabled={isFreeTrial} />
+                        </div>
+                        <div className="md:col-span-2">
+                            <Label>Campaign Content</Label>
+                            <input value={settings.utmContent || ''} onChange={(e) => handleChange('utmContent', e.target.value)} className="w-full bg-[#f9fafb] border-b-2 border-transparent focus:border-[#ff4d00] p-3 outline-none text-sm font-medium" placeholder="e.g. logolink, textlink" disabled={isFreeTrial} />
+                            <div className="mt-2 flex gap-2">
+                                <span className="text-[10px] text-gray-400 bg-gray-50 px-2 py-1 rounded border border-gray-100">{`{{random_keyword}}`}</span>
+                                <span className="text-[10px] text-gray-400 bg-gray-50 px-2 py-1 rounded border border-gray-100">{`{{timestamp}}`}</span>
+                                <span className="text-[10px] text-gray-400 bg-gray-50 px-2 py-1 rounded border border-gray-100">{`{{device_type}}`}</span>
+                            </div>
                         </div>
                     </div>
                 </div>

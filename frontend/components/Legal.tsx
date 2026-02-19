@@ -13,7 +13,7 @@ const Legal: React.FC<LegalProps> = ({ type, onBack }) => {
     const getTitle = () => {
         switch (type) {
             case 'privacy': return 'Privacy Policy';
-            case 'terms': return 'Terms of Service';
+            case 'terms': return 'Terms of Use';
             case 'impressum': return 'Impressum (Imprint)';
             case 'agb': return 'AGB (General Terms)';
             case 'refund': return 'Refund Policy';
@@ -27,39 +27,36 @@ const Legal: React.FC<LegalProps> = ({ type, onBack }) => {
             case 'impressum':
                 return (
                     <>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                        <p className="font-bold text-gray-900 mb-8">Last modified: February 06, 2024</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 text-sm text-gray-600">
                             <div>
-                                <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400 mb-4">Angaben gemäß § 5 TMG</h3>
-                                <p className="font-bold text-gray-900">Traffic Creator Inc.</p>
-                                <p>Tech Park Avenue 12</p>
-                                <p>10115 Berlin</p>
-                                <p>Germany</p>
+                                <h3 className="font-bold uppercase tracking-widest text-[#ff4d00] mb-4">Angaben gemäß § 5 TMG</h3>
+                                <p className="font-bold text-gray-900">EasyTrafficBot UG</p>
+                                <p>Arrenbergsche Höfe 6</p>
+                                <p>Gebäude 44</p>
+                                <p>42117 Wuppertal</p>
+                                <p className="mt-2 text-xs">Handelsregister: HRB 30863</p>
+                                <p className="text-xs">Registergericht: Amtsgericht Wuppertal</p>
                             </div>
                             <div>
-                                <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400 mb-4">Contact</h3>
-                                <p><span className="font-bold">Phone:</span> +49 (0) 30 1234 5678</p>
-                                <p><span className="font-bold">Email:</span> support@traffic-creator.com</p>
-                                <p><span className="font-bold">Web:</span> www.traffic-creator.com</p>
+                                <h3 className="font-bold uppercase tracking-widest text-[#ff4d00] mb-4">Kontakt</h3>
+                                <p><span className="font-bold">Telefon:</span> +84373832085</p>
+                                <p><span className="font-bold">Telefax:</span> +49 (0) 123 44 55 99</p>
+                                <p><span className="font-bold">E-Mail:</span> support@traffic-creator.com</p>
                             </div>
                             <div>
-                                <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400 mb-4">Represented By</h3>
-                                <p>John Doe, CEO</p>
-                                <p>Jane Smith, CTO</p>
+                                <h3 className="font-bold uppercase tracking-widest text-[#ff4d00] mb-4">Vertreten durch</h3>
+                                <p>Martin Freiwald</p>
                             </div>
                             <div>
-                                <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400 mb-4">Register Entry</h3>
-                                <p>Entry in the Handelsregister.</p>
-                                <p>Registering Court: Amtsgericht Berlin-Charlottenburg</p>
-                                <p>Registration Number: HRB 123456</p>
+                                <h3 className="font-bold uppercase tracking-widest text-[#ff4d00] mb-4">EU-Streitschlichtung</h3>
+                                <p>Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit:</p>
+                                <a href="https://ec.europa.eu/consumers/odr/" target="_blank" rel="noopener noreferrer" className="text-[#ff4d00] hover:underline break-all">https://ec.europa.eu/consumers/odr/</a>
+                                <p className="mt-2 italic">Unsere E-Mail-Adresse finden Sie oben im Impressum.</p>
                             </div>
-                            <div>
-                                <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400 mb-4">VAT ID</h3>
-                                <p>Sales tax identification number according to § 27 a Umsatzsteuergesetz:</p>
-                                <p className="font-mono">DE 123 456 789</p>
-                            </div>
-                            <div>
-                                <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400 mb-4">Dispute Resolution</h3>
-                                <p className="text-sm text-gray-500">We are not willing or obliged to participate in dispute resolution proceedings before a consumer arbitration board.</p>
+                            <div className="md:col-span-2">
+                                <h3 className="font-bold uppercase tracking-widest text-[#ff4d00] mb-4">Verbraucherstreitbeilegung/Universalschlichtungsstelle</h3>
+                                <p>Wir sind nicht bereit oder verpflichtet, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen.</p>
                             </div>
                         </div>
                     </>
@@ -67,10 +64,10 @@ const Legal: React.FC<LegalProps> = ({ type, onBack }) => {
             case 'agb':
                 return (
                     <>
-                        <p className="font-bold text-gray-900 mb-8">Allgemeine Geschäftsbedingungen (AGB) for Traffic Creator</p>
+                        <p className="font-bold text-gray-900 mb-8">Allgemeine Geschäftsbedingungen (AGB) for Traffic Bot</p>
 
                         <h3 className="text-xl font-bold text-gray-900 mt-8 mb-4">1. Scope of Application</h3>
-                        <p>These General Terms and Conditions (AGB) apply to all business relationships between Traffic Creator Inc. (hereinafter: Provider) and its customers (hereinafter: Customer). The version valid at the time of the conclusion of the contract is authoritative.</p>
+                        <p>These General Terms and Conditions (AGB) apply to all business relationships between EasyTrafficBot UG (hereinafter: Provider) and its customers (hereinafter: Customer). The version valid at the time of the conclusion of the contract is authoritative.</p>
 
                         <h3 className="text-xl font-bold text-gray-900 mt-8 mb-4">2. Conclusion of Contract</h3>
                         <p>The presentation of services on the website does not constitute a legally binding offer but an invitation to order. By clicking the "Order" or "Pay" button, the Customer places a binding order for the services contained in the shopping cart.</p>
@@ -88,20 +85,67 @@ const Legal: React.FC<LegalProps> = ({ type, onBack }) => {
             case 'refund':
                 return (
                     <>
-                        <p className="font-bold text-gray-900 mb-8">Last Updated: October 24, 2025</p>
-
-                        <h3 className="text-xl font-bold text-gray-900 mt-8 mb-4">1. General Refund Policy</h3>
-                        <p>We strive to provide the highest quality traffic services. However, if you are not satisfied with our service, you may be eligible for a refund under specific conditions.</p>
-
-                        <h3 className="text-xl font-bold text-gray-900 mt-8 mb-4">2. Non-Delivery of Service</h3>
-                        <p>If we fail to deliver the purchased traffic within 72 hours of the scheduled start time, you are entitled to a full refund of the undelivered portion of your order.</p>
-
-                        <h3 className="text-xl font-bold text-gray-900 mt-8 mb-4">3. Technical Issues</h3>
-                        <p>If technical issues on our end prevent the delivery of traffic, we will pause the campaign and attempt to resolve the issue. If the issue cannot be resolved, a pro-rated refund will be issued to your wallet balance or original payment method.</p>
-
-                        <h3 className="text-xl font-bold text-gray-900 mt-8 mb-4">4. Non-Refundable Circumstances</h3>
-                        <p>Refunds are not granted if the traffic was delivered but did not result in sales, leads, or other specific user actions on your website. We guarantee visitors, not conversions.</p>
-                        <p className="mt-4">Furthermore, if your URL is taken offline or blocks our traffic source during the campaign, no refund will be issued.</p>
+                        <p className="font-bold text-gray-900 mb-8">Last modified: September 25, 2024</p>
+                        <div className="space-y-8">
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">1. Right of Withdrawal</h3>
+                                <p>As a consumer based in the European Union, you have the right to withdraw from this contract within 14 days without giving any reason. The withdrawal period will expire after 14 days from the day of the conclusion of the contract.</p>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">2. Effects of Withdrawal</h3>
+                                <p>If you withdraw from this contract, we shall reimburse to you all payments received from you, including the costs of delivery (with the exception of the supplementary costs resulting from your choice of a type of delivery other than the least expensive type of standard delivery offered by us), without undue delay and in any event not later than 14 days from the day on which we are informed about your decision to withdraw from this contract.</p>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">3. Exceptions to the Right of Withdrawal</h3>
+                                <p>The right of withdrawal does not apply to:</p>
+                                <ul className="list-disc pl-5 mt-2 space-y-1">
+                                    <li>The supply of digital content which is not supplied on a tangible medium if the performance has begun with your prior express consent and acknowledgment that you thereby lose your right of withdrawal.</li>
+                                    <li>Services that have been fully performed if the performance has begun with your prior express consent, and with acknowledgment that you will lose your right of withdrawal once the contract has been fully performed.</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">4. How to Exercise Your Right of Withdrawal</h3>
+                                <p>To exercise your right of withdrawal, you must inform us of your decision to withdraw from this contract by an unequivocal statement (e.g., a letter sent by post or email). You may use the attached model withdrawal form, but it is not obligatory.</p>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">5. Refunds for Defective Products or Services</h3>
+                                <p>If the product or service you received is defective or not as described, you are entitled to a repair, replacement, or refund. Please contact our customer service team to initiate this process.</p>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">6. Subscription Services</h3>
+                                <p>You may cancel your subscription at any time. Refunds for the remaining unused period will be provided on a pro-rata basis. If you cancel within the first 30 days of your subscription ("trial period"), you are eligible for a full refund.</p>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">7. Non-Refundable Items and Situations</h3>
+                                <p>The following items, services, or situations are non-refundable:</p>
+                                <ul className="list-disc pl-5 mt-2 space-y-1">
+                                    <li>Custom or personalized services</li>
+                                    <li>Downloadable software or digital products that have been accessed or downloaded</li>
+                                    <li>Services that have already been fully performed</li>
+                                    <li>Traffic creation services where the failure to deliver traffic is due to factors beyond our control</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">8. Traffic Delivery Issues Outside Our Control</h3>
+                                <p>Refunds will not be issued in cases where the failure to deliver traffic is due to factors beyond our control, including but not duration to:</p>
+                                <ul className="list-disc pl-5 mt-2 space-y-1">
+                                    <li>Changes in search engine algorithms or policies</li>
+                                    <li>Changes in social media platform algorithms or policies</li>
+                                    <li>Restrictions or bans imposed on the client's website by third-party platforms</li>
+                                    <li>Client's website being offline or experiencing technical issues</li>
+                                    <li>Content on the client's website violating our terms of service or the terms of service of traffic sources</li>
+                                    <li>Force majeure events (e.g., natural disasters, global pandemics, significant internet outages)</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">9. Refund Processing Time</h3>
+                                <p>Refunds will be processed within 5-10 business days of approval. The time it takes for the refund to appear in your account may vary depending on your payment method and financial institution.</p>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">10. Contact Us</h3>
+                                <p>If you have any questions about our refund policy or wish to request a refund, please contact us at: support@traffic-creator.com</p>
+                            </div>
+                        </div>
                     </>
                 );
             case 'delivery':
@@ -122,33 +166,135 @@ const Legal: React.FC<LegalProps> = ({ type, onBack }) => {
             case 'privacy':
                 return (
                     <>
-                        <p className="font-bold text-gray-900">Last Updated: October 24, 2025</p>
-                        <p>At Traffic Creator, we take your privacy seriously. This Privacy Policy describes how we collect, use, and protect your personal information.</p>
+                        <p className="font-bold text-gray-900 mb-8">Last Updated: October 27, 2023</p>
+                        <div className="space-y-8">
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4 tracking-tight uppercase">1. Interpretation and Definitions</h3>
+                                <div className="space-y-4">
+                                    <h4 className="font-bold text-gray-800">Interpretation</h4>
+                                    <p>The words of which the initial letter is capitalized have meanings defined under the following conditions. The following definitions shall have the same meaning regardless of whether they appear in singular or in plural.</p>
+                                    <h4 className="font-bold text-gray-800">Definitions</h4>
+                                    <p>For the purposes of this Privacy Policy:</p>
+                                    <ul className="list-disc pl-5 space-y-2">
+                                        <li><strong>Account</strong> means a unique account created for You to access our Service or parts of our Service.</li>
+                                        <li><strong>Company</strong> (referred to as either "the Company", "We", "Us" or "Our" in this Agreement) refers to EasyTrafficBot UG, Arrenbergsche Höfe 6, 42117.</li>
+                                        <li><strong>Cookies</strong> are small files that are placed on Your computer, mobile device or any other device by a website...</li>
+                                        <li><strong>Personal Data</strong> is any information that relates to an identified or identifiable individual.</li>
+                                        <li><strong>Service</strong> refers to the Website.</li>
+                                        <li><strong>Usage Data</strong> refers to data collected automatically, either generated by the use of the Service or from the Service infrastructure itself.</li>
+                                    </ul>
+                                </div>
+                            </div>
 
-                        <h3 className="text-xl font-bold text-gray-900 mt-8 mb-4">1. Information We Collect</h3>
-                        <p>We collect information you provide directly to us, such as when you create an account, purchase credits, or communicate with our support team. This may include your name, email address, payment information, and website URLs.</p>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4 tracking-tight uppercase">2. Collecting and Using Your Personal Data</h3>
+                                <div className="space-y-4">
+                                    <h4 className="font-bold text-gray-800 underline">Types of Data Collected</h4>
+                                    <p><strong>Personal Data:</strong> While using Our Service, We may ask You to provide Us with certain personally identifiable information that can be used to contact or identify You. Personally identifiable information may include, but is not limited to: Email address, First name and last name, Usage Data.</p>
+                                    <p><strong>Usage Data:</strong> Usage Data is collected automatically when using the Service. It may include information such as Your Device's Internet Protocol address (e.g. IP address), browser type, browser version, the pages of our Service that You visit, the time and date of Your visit, the time spent on those pages, unique device identifiers and other diagnostic data.</p>
+                                </div>
+                            </div>
 
-                        <h3 className="text-xl font-bold text-gray-900 mt-8 mb-4">2. How We Use Your Information</h3>
-                        <p>We use the information we collect to operate, maintain, and improve our services, to process your transactions, and to communicate with you about your account and our services.</p>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4 tracking-tight uppercase">3. Tracking Technologies and Cookies</h3>
+                                <p>We use Cookies and similar tracking technologies to track the activity on Our Service and store certain information. Tracking technologies used are beacons, tags, and scripts to collect and track information and to improve and analyze Our Service.</p>
+                                <ul className="list-disc pl-5 mt-4 space-y-2">
+                                    <li><strong>Necessary / Essential Cookies:</strong> These Cookies are essential to provide You with services available through the Website.</li>
+                                    <li><strong>Cookies Policy / Notice Acceptance Cookies:</strong> These Cookies identify if users have accepted the use of cookies on the Website.</li>
+                                    <li><strong>Functionality Cookies:</strong> These Cookies allow us to remember choices You make when You use the Website.</li>
+                                </ul>
+                            </div>
 
-                        <h3 className="text-xl font-bold text-gray-900 mt-8 mb-4">3. Data Security</h3>
-                        <p>We implement appropriate technical and organizational measures to protect the security of your personal information. However, please note that no method of transmission over the Internet is 100% secure.</p>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4 tracking-tight uppercase">4. Use of Your Personal Data</h3>
+                                <p>The Company may use Personal Data for the following purposes:</p>
+                                <ul className="list-disc pl-5 mt-4 space-y-2">
+                                    <li>To provide and maintain our Service.</li>
+                                    <li>To manage Your Account.</li>
+                                    <li>For the performance of a contract.</li>
+                                    <li>To contact You.</li>
+                                    <li>To provide You with news, special offers and general information.</li>
+                                </ul>
+                            </div>
+
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4 tracking-tight uppercase">5. Delete Your Personal Data</h3>
+                                <p>You have the right to delete or request that We assist in deleting the Personal Data that We have collected about You. Our Service may give You the ability to delete certain information about You from within the Service.</p>
+                            </div>
+
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4 tracking-tight uppercase">6. Contact Us</h3>
+                                <p>If you have any questions about this Privacy Policy, You can contact us by email: support@traffic-creator.com</p>
+                            </div>
+                        </div>
                     </>
                 );
             case 'terms':
                 return (
                     <>
-                        <p className="font-bold text-gray-900">Last Updated: October 24, 2025</p>
-                        <p>Please read these Terms of Service carefully before using Traffic Creator. By accessing or using our services, you agree to be bound by these terms.</p>
-
-                        <h3 className="text-xl font-bold text-gray-900 mt-8 mb-4">1. Acceptable Use</h3>
-                        <p>You agree not to use our services for any unlawful purpose or in any way that violates these Terms. You are responsible for ensuring that your target URLs comply with all applicable laws and regulations.</p>
-
-                        <h3 className="text-xl font-bold text-gray-900 mt-8 mb-4">2. Payment and Refunds</h3>
-                        <p>All payments are final. Credits purchased are non-refundable unless the service is not delivered as described. We reserve the right to change our pricing at any time.</p>
-
-                        <h3 className="text-xl font-bold text-gray-900 mt-8 mb-4">3. Limitation of Liability</h3>
-                        <p>Traffic Creator shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of or inability to use the service.</p>
+                        <p className="font-bold text-gray-900 mb-8">Last modified: September 25, 2024</p>
+                        <div className="space-y-8">
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">1. Introduction</h3>
+                                <p>Welcome to Traffic Bot. These Terms of Use (the 'Terms') constitute a legally binding agreement between you ('the User') and Traffic Bot ('we', 'our', or 'us') regarding your access to and use of our website and services. By accessing or using our services, you confirm your acceptance of these Terms in full.</p>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">2. User Obligations</h3>
+                                <p>When using our services, you agree to:</p>
+                                <ul className="list-disc pl-5 mt-2 space-y-1">
+                                    <li>Provide accurate and complete information (such as your name, email, etc.) when creating an account</li>
+                                    <li>Maintain the security of your account credentials</li>
+                                    <li>Use our services only for lawful purposes and in accordance with these Terms</li>
+                                    <li>Not attempt to interfere with or disrupt our services or servers</li>
+                                    <li>Not use our services to distribute malware or other harmful code</li>
+                                    <li>Notify us immediately of any unauthorized access to or use of your account</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">3. Privacy Policy</h3>
+                                <p>We respect your privacy and are committed to protecting your personal data. Our Privacy Policy outlines how we collect, use, and protect your personal information.</p>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">4. Intellectual Property Rights</h3>
+                                <p>All content, features, and functionality of our services are owned by Traffic Bot and are protected by international copyright, trademark, and other intellectual property laws. You may not reproduce, modify, distribute, or otherwise exploit any intellectual property belonging to Traffic Bot without our express written consent.</p>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">5. Limitation of Liability</h3>
+                                <p>To the fullest extent permitted by law, Traffic Bot shall not be liable for any indirect, incidental, special, consequential, or punitive damages, or any loss of profits or revenues, whether incurred directly or indirectly, or any loss of data, use, goodwill, or other intangible losses resulting from your use or inability to use our services.</p>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">6. Termination</h3>
+                                <p>We reserve the right to terminate or suspend your account at our sole discretion, without prior notice, for reasons including but not limited to violations of these Terms, illegal activity, or prolonged periods of inactivity.</p>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">7. Governing Law</h3>
+                                <p>These Terms shall be governed by the laws of Germany, without reference to conflict of law principles. Any legal disputes shall be exclusively resolved in the courts of Wuppertal.</p>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">8. Dispute Resolution</h3>
+                                <p>Any disputes arising out of or related to these Terms or our services shall first be attempted to be resolved through good-faith negotiations. If such negotiations fail, both parties agree to resolve the dispute through binding arbitration.</p>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">9. Amendments to Terms</h3>
+                                <p>We may modify these Terms from time to time. Material changes will be communicated via email, through a notice on our website, or other appropriate methods. Your continued use of our services following the posting of changes will confirm your acceptance of such changes.</p>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">10. Acceptance of Terms</h3>
+                                <p>By accessing or using our services, you confirm that you have read, understood, and agree to be bound by these Terms of Use. If you do not agree, you must not use our services.</p>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">11. Severability</h3>
+                                <p>If any provision of these Terms is held to be unenforceable or invalid, such provision will be changed and interpreted to accomplish the objectives of such provision to the greatest extent possible under applicable law, and the remaining provisions will continue in full force and effect.</p>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">12. Third-Party Services</h3>
+                                <p>Our services may contain links to third-party websites or services that are not owned or controlled by Traffic Bot. We have no control over, and assume no responsibility for, the content, privacy policies, or practices of any third-party websites or services.</p>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-4">13. Contact Us</h3>
+                                <p>If you have any questions about these Terms of Use, please contact us at: support@traffic-creator.com</p>
+                            </div>
+                        </div>
                     </>
                 );
             default:
@@ -159,9 +305,9 @@ const Legal: React.FC<LegalProps> = ({ type, onBack }) => {
     return (
         <div className="min-h-screen bg-white">
             <SEO
-                title={`${getTitle()} (Updated 2026) - Traffic Creator`}
-                description={`Official ${getTitle()} for Traffic Creator, updated for 2026. Please read carefully to understand our policies.`}
-                keywords={`traffic creator ${type} 2026, ${type} policy, legal ${type}, traffic generator legal`}
+                title={`${getTitle()} (Updated 2024) - Traffic Bot`}
+                description={`Official ${getTitle()} for Traffic Bot, updated for 2024. Please read carefully to understand our policies.`}
+                keywords={`traffic bot ${type} 2024, ${type} policy, legal ${type}, traffic generator legal`}
                 type="article"
             />
             {/* Header */}
@@ -172,7 +318,7 @@ const Legal: React.FC<LegalProps> = ({ type, onBack }) => {
                     </Link>
                     <div className="flex items-center gap-2">
                         <span className="text-xl font-black text-[#ff4d00] tracking-tight">TRAFFIC</span>
-                        <span className="text-[10px] font-bold bg-black text-white px-1.5 py-0.5 rounded-sm uppercase tracking-wide">Creator</span>
+                        <span className="text-[10px] font-bold bg-black text-white px-1.5 py-0.5 rounded-sm uppercase tracking-wide">Bot</span>
                     </div>
                 </div>
             </div>
@@ -190,9 +336,9 @@ const Legal: React.FC<LegalProps> = ({ type, onBack }) => {
             {/* Footer */}
             <footer className="bg-black text-white py-12 px-6 mt-20">
                 <div className="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-                    <div className="text-xl font-black text-white tracking-tight">TRAFFIC CREATOR</div>
+                    <div className="text-xl font-black text-white tracking-tight">TRAFFIC BOT</div>
                     <div className="text-xs text-gray-600">
-                        © 2025 Traffic Creator Inc.
+                        © 2024 EasyTrafficBot UG
                     </div>
                 </div>
             </footer>

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { User, Transaction, Project, Ticket, AdminUserDetails } from '../../../types';
+import { User, Transaction, Project, Ticket, AdminUserDetails, BalanceAdjustmentLog } from '../../../types';
 import { db } from '../../../services/db';
 import {
     DollarSign, Layers, Award, Zap, Plus, Minus, Send,
     RefreshCw, AlertTriangle, Shield, Key, Download, Trash2,
-    LogIn, Tag, FileText, Users, ChevronRight
+    LogIn, Tag, FileText, Users, ChevronRight, History, Globe, Monitor
 } from 'lucide-react';
 import CustomSelect from '../../CustomSelect';
 
@@ -18,6 +18,7 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ userId, onNavigateToProject, 
     const [details, setDetails] = useState<AdminUserDetails | null>(null);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [projects, setProjects] = useState<Project[]>([]);
+    const [adjustments, setAdjustments] = useState<BalanceAdjustmentLog[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [bonusHitsAmount, setBonusHitsAmount] = useState('');
@@ -33,14 +34,16 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ userId, onNavigateToProject, 
         setLoading(true);
         setError(null);
         try {
-            const [detailsData, trxData, projData] = await Promise.all([
+            const [detailsData, trxData, projData, adjData] = await Promise.all([
                 db.getUserDetails(userId),
                 db.getUserTransactions(userId),
-                db.getUserProjects(userId)
+                db.getUserProjects(userId),
+                db.getBalanceAdjustments(userId)
             ]);
             setDetails(detailsData);
             setTransactions(trxData);
             setProjects(projData);
+            setAdjustments(adjData);
         } catch (e) {
             console.error('Failed to load user data:', e);
             setError('Failed to load user data. Please try again.');
@@ -397,6 +400,98 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ userId, onNavigateToProject, 
                                     <td className="px-6 py-3 text-xs font-bold">{trx.hits ? trx.hits.toLocaleString() : '-'}</td>
                                     <td className={`px-6 py-3 text-xs font-bold text-right ${trx.type === 'credit' ? 'text-green-600' : 'text-gray-900'}`}>
                                         {trx.type === 'credit' ? '+' : '-'}€{trx.amount.toFixed(2)}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+            </div>
+
+            {/* Balance Adjustment History */}
+            <div className="bg-white border border-gray-200 shadow-sm">
+                <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-gray-900 flex items-center gap-2">
+                        <History size={14} /> Balance Adjustments ({adjustments.length})
+                    </h3>
+                </div>
+                {adjustments.length === 0 ? (
+                    <div className="p-8 text-center text-gray-400 text-sm">No balance adjustments found</div>
+                ) : (
+                    <table className="w-full">
+                        <thead className="bg-gray-50 border-b border-gray-100">
+                            <tr>
+                                <th className="px-6 py-3 text-[10px] font-bold text-gray-500 uppercase">Date</th>
+                                <th className="px-6 py-3 text-[10px] font-bold text-gray-500 uppercase">Admin</th>
+                                <th className="px-6 py-3 text-[10px] font-bold text-gray-500 uppercase">Type</th>
+                                <th className="px-6 py-3 text-[10px] font-bold text-gray-500 uppercase">Tier</th>
+                                <th className="px-6 py-3 text-[10px] font-bold text-gray-500 uppercase">Hits</th>
+                                <th className="px-6 py-3 text-[10px] font-bold text-gray-500 uppercase">Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                            {adjustments.slice(0, 5).map(adj => (
+                                <tr key={adj.id} className="hover:bg-gray-50">
+                                    <td className="px-6 py-3 text-xs text-gray-600 font-mono">
+                                        {adj.createdAt ? new Date(adj.createdAt).toLocaleString() : '-'}
+                                    </td>
+                                    <td className="px-6 py-3 text-xs text-gray-900">{adj.adminEmail || 'System'}</td>
+                                    <td className="px-6 py-3 text-xs font-bold uppercase">
+                                        <span className={adj.adjustmentType === 'credit' ? 'text-green-600' : 'text-red-600'}>
+                                            {adj.adjustmentType}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-3 text-xs font-bold uppercase">{adj.tier || '-'}</td>
+                                    <td className="px-6 py-3 text-xs font-bold">
+                                        <span className={adj.adjustmentType === 'credit' ? 'text-green-600' : 'text-red-600'}>
+                                            {adj.adjustmentType === 'credit' ? '+' : '-'}{adj.hits?.toLocaleString() || '0'}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-3 text-xs text-gray-600">{adj.reason || '-'}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+            </div>
+
+            {/* Login History */}
+            <div className="bg-white border border-gray-200 shadow-sm">
+                <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-gray-900 flex items-center gap-2">
+                        <Globe size={14} /> Login History
+                    </h3>
+                    {details?.user?.lastIp && (
+                        <span className="text-xs text-gray-400">Last IP: <span className="font-mono text-gray-600">{details.user.lastIp}</span></span>
+                    )}
+                </div>
+                {!details?.user?.loginHistory || details.user.loginHistory.length === 0 ? (
+                    <div className="p-8 text-center text-gray-400 text-sm">No login history found</div>
+                ) : (
+                    <table className="w-full">
+                        <thead className="bg-gray-50 border-b border-gray-100">
+                            <tr>
+                                <th className="px-6 py-3 text-[10px] font-bold text-gray-500 uppercase">Date</th>
+                                <th className="px-6 py-3 text-[10px] font-bold text-gray-500 uppercase">IP Address</th>
+                                <th className="px-6 py-3 text-[10px] font-bold text-gray-500 uppercase">Device</th>
+                                <th className="px-6 py-3 text-[10px] font-bold text-gray-500 uppercase">Type</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                            {details.user.loginHistory.map((entry, idx) => (
+                                <tr key={idx} className="hover:bg-gray-50">
+                                    <td className="px-6 py-3 text-xs text-gray-600 font-mono">{entry.date || '-'}</td>
+                                    <td className="px-6 py-3 text-xs font-mono text-gray-900">{entry.ip || '-'}</td>
+                                    <td className="px-6 py-3 text-xs text-gray-600 flex items-center gap-2">
+                                        <Monitor size={12} className="text-gray-400" />
+                                        <span className="truncate max-w-[300px]" title={entry.device}>{entry.device || '-'}</span>
+                                    </td>
+                                    <td className="px-6 py-3 text-xs">
+                                        <span className={`px-2 py-1 text-[10px] font-bold uppercase rounded ${
+                                            entry.type === 'registration' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                                        }`}>
+                                            {entry.type || 'login'}
+                                        </span>
                                     </td>
                                 </tr>
                             ))}

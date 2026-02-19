@@ -621,3 +621,13 @@ class EmailLog(Base):
     status = Column(String, default="sent")
     error_message = Column(String, nullable=True)
     sent_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class SystemSettings(Base):
+    __tablename__ = "system_settings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    settings = Column(JSON, default=dict)
+    updated_at = Column(
+        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+    )

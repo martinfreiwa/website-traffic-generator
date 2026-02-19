@@ -86,7 +86,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigate, view }) => {
 
                 <div className="flex items-center gap-2 mb-8">
                     <span className="text-3xl font-black text-[#ff4d00] tracking-tight">TRAFFIC</span>
-                    <span className="text-xs font-bold bg-black text-white px-2 py-1 rounded-sm uppercase tracking-wide">Creator</span>
+                    <span className="text-xs font-bold bg-black text-white px-2 py-1 rounded-sm uppercase tracking-wide">Bot</span>
                 </div>
 
                 {error && (

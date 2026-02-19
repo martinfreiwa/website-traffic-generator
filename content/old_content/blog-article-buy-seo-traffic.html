@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en" dir="">
+	<!-- HEAD -->
+	<head>
+		<!-- Required Meta Tags Always Come First -->
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+		<!-- Title -->
+		<title><?=$title?></title>
+		<meta name="description" content="<?=$description?>" />
+		<link rel="canonical" href="https://traffic-bot.com" />
+		<!-- Favicon -->
+		<link rel="shortcut icon" href="./favicon.ico" />
+		<!-- Font -->
+		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
+		<!-- CSS Implementing Plugins -->
+		<link rel="stylesheet" href="views/assets/vendor/bootstrap-icons/font/bootstrap-icons.css" />
+		<link rel="stylesheet" href="views/assets/vendor/hs-mega-menu/dist/hs-mega-menu.min.css" />
+		<!-- CSS Front Template -->
+		<link rel="stylesheet" href="views/assets/css/theme.min.css" />
+	</head>
+	<style>
+	
+		.container {
+			display: flex;
+			align-items: center;
+		}
+
+		.left-container {
+			flex: 1;
+			padding: 20px;
+		}
+
+		.right-container {
+			flex: 1;
+			padding: 20px;
+			text-align: center;
+		}
+	</style>
+	<style>
+		#navbarSettings {
+			overflow-y: auto;
+			max-height: 400px;
+			/* Adjust the height as needed */
+		}
+
+		#navbarSettings .nav-link {
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			font-size: clamp(12px, 1.5vw, 16px);
+			/* Adjust the font-size range as needed */
+		}
+	</style>
+	<!-- END HEAD -->
+	<!-- BODY -->
+	<body>
+		<!-- ========== HEADER ========== --> <?php include 'header-blog.php';?>
+		<!-- ========== END HEADER ========== -->
+		<!-- ========== MAIN CONTENT ========== -->
+		<main id="content" role="main">
+			<!-- Hero -->
+			<div class="bg-soft-primary mt-4" style="background-image: url(../panel/views/assets/svg/components/wave-pattern-light.svg);">
+				<div class="container mt-6" style="padding-top: 15px;bottom: 15px;">
+				  <div class="w-lg-50 mx-lg-auto mt-4">
+					<nav aria-label="breadcrumb">
+					  <ol class="breadcrumb mt-6">
+						<li class="breadcrumb-item">
+						  <a href="/blog/newsroom">Blog</a>
+						</li>
+						<li class="breadcrumb-item active" aria-current="page">Buy SEO Traffic</li>
+					  </ol>
+					</nav>
+					<h1 class="mt-4 mb-0"> <?=$title?> </h1>
+					<div class="row mt-4">
+					  <div class="col-sm-auto">
+						<p style="font-size: 14px; color: black; font-weight: 400;">Martin Freiwald</p>
+					  </div>
+					  <div class="col-sm-auto">
+						<p style="font-size: 14px; color: black; font-weight: 400;">Sept 29, 2023</p>
+					  </div>
+					  <div class="col-sm-auto">
+						<p style="font-size: 14px; color: black; font-weight: 400;">10 min read</p>
+					  </div>
+					</div>
+				  </div>
+				</div>
+			  </div>
+			  <!-- End Hero -->
+			  
+			<!-- Content -->
+			<div class="container content-space-1 content-space-md-1">
+				<div class="row">
+					<div class="col-md-4 col-lg-3 mb-3 mb-md-0">
+						<!-- Navbar -->
+						<div class="navbar-expand-md">
+						  <!-- Navbar Toggle -->
+						  <div class="d-grid">
+							<button type="button" class="navbar-toggler btn btn-white mb-3" data-bs-toggle="collapse" data-bs-target="#navbarVerticalNavMenu" aria-label="Toggle navigation" aria-expanded="false" aria-controls="navbarVerticalNavMenu">
+							  <span class="d-flex justify-content-between align-items-center">
+								<span class="text-dark">Menu</span>
+								<span class="navbar-toggler-default">
+								  <i class="bi-list"></i>
+								</span>
+								<span class="navbar-toggler-toggled">
+								  <i class="bi-x"></i>
+								</span>
+							  </span>
+							</button>
+						  </div>
+						  <!-- End Navbar Toggle -->
+						  <!-- Navbar Collapse -->
+						  <div id="navbarVerticalNavMenu" class="collapse navbar-collapse">
+							<ul id="navbarSettings" style="max-height: 900px;" class="js-sticky-block js-scrollspy nav nav-tabs nav-link-gray nav-vertical" data-hs-sticky-block-options='{"parentSelector": "#navbarVerticalNavMenu","targetSelector": "#header",
+												"breakpoint": "md",
+												"startPoint": "#navbarVerticalNavMenu",
+												"endPoint": "#stickyBlockEndPoint",
+												"stickyOffsetTop": 100
+												}'>
+							  <a class="nav-link text-black" href="" style="font-weight: 500;">TABLE OF CONTENTS</a>
+							  <li class="nav-item">
+								<a class="nav-link text-black fw-light" href="#Intro">Introduction</a>
+							  </li>
+							  <li class="nav-item">
+								<a class="nav-link text-black fw-light" href="#UnderstandSEO">Understanding SEO Traffic</a>
+							  </li>
+							  <li class="nav-item">
+								<a class="nav-link text-black fw-light" href="#OrganicVsPaid">Organic Traffic Vs. <br> Paid Traffic</a>
+							  </li>
+							  <li class="nav-item">
+								<a class="nav-link text-black fw-light" href="#OrgStudies">Organic Traffic Studies</a>
+							  </li>
+							  <li class="nav-item">
+								<a class="nav-link text-black fw-light" href="#PaidStudies">Paid Traffic Studies</a>
+							  </li>
+							  <li class="nav-item">
+								<a class="nav-link text-black fw-light" href="#ImpOfOrg">Importance <br> Organic Traffic</a>
+							  </li>
+							  <li class="nav-item">
+								<a class="nav-link text-black fw-light" href="#CTRMan">What is CTR Manipulation?</a>
+							  </li>
+							  <li class="nav-item">
+								<a class="nav-link text-black fw-light" href="#UnderstandCTR">Understanding <br> CTR Manipulation</a>
+							  </li>
+							  <li class="nav-item">
+								<a class="nav-link text-black fw-light" href="#BuyBenefits">Benefits of <br> Buying SEO Traffic</a>
+							  </li>
+							  <li class="nav-item">
+								<a class="nav-link text-black fw-light" href="#BuySafe">How to Buy SEO Traffic Safely</a>
+							  </li>
+							  <li class="nav-item">
+								<a class="nav-link text-black fw-light" href="#EvalProv">Evaluating Traffic Providers</a>
+							  </li>
+							  <li class="nav-item">
+								<a class="nav-link text-black fw-light" href="#ImplSEO">Implementing SEO Traffic</a>
+							  </li>
+							  <li class="nav-item">
+								<a class="nav-link text-black fw-light" href="#Concl">Conclusion</a>
+							  </li>
+							  <li class="nav-item">
+								<a class="nav-link text-black fw-light" href="#ShortTerm">Buying SEO Traffic <br> Short Term</a>
+							  </li>
+							  <li class="nav-item">
+								<a class="nav-link text-black fw-light" href="#LongTerm">Buying SEO Traffic <br> Long Term</a>
+							  </li>
+							  <li class="nav-item">
+								<a class="nav-link text-black fw-light" href="#FAQ">FAQ</a>
+							  </li>
+							</ul>
+						  </div>
+						  <!-- End Navbar Collapse -->
+						</div>
+						<!-- End Navbar -->
+					  </div>
+					<!-- End Col -->
+					<div class="col-md-8 col-lg-9">
+						<!-- End Row -->
+						
+						<h2 id="Intro">Introduction</h2>
+						<p class="text-black fw-light">You've heard the term, but what exactly does it mean to buy SEO traffic? And is it worth it? This article aims to delve into these questions, explain the concept, and help you make an informed decision.</p>
+						<!-- End Introduction -->
+						<!-- Understanding SEO Traffic -->
+						<h2 Id="UnderstandSEO" class="mt-7">Understanding SEO Traffic</h2>
+						<p class="text-black fw-light">Before we explore the world of buying SEO traffic, let's take a step back and understand SEO traffic itself. SEO traffic refers to the organic or natural traffic generated to a website through search engine optimization (SEO) efforts. SEO is optimizing a website's content, structure, and other factors to improve its visibility in search engine results pages (SERPs). <br>
+							<br> When a website ranks higher in the SERPs for relevant keywords, it attracts more organic traffic from search engines like Google, Bing, or Yahoo.Therefore buying SEO traffic is an excellent addition to your SEO strategy to fasten up your SEO results.
+						</p>
+						<!-- End Understanding SEO Traffic -->
+						<!-- Organic Traffic Vs. Paid Traffic -->
+						<h2 Id="OrganicVsPaid" class="mt-7">Organic Traffic Vs. Paid Traffic </h2>
+							<p class="text-black fw-light">SEO traffic can be broadly classified into two categories: organic traffic and paid traffic. Organic traffic refers to visitors who find your site naturally through search engine results, without any paid promotion.  On the other hand, when you buy SEO traffic, it's an excellent addition to your SEO strategy to fasten up your SEO results.</p>
+							<!-- Organic Traffic Studies -->
+							<h3 id="OrgStudies" class="mt-7">Organic Traffic Studies</h3>
+							<ul class="no-bullets">
+								<li class="mt-2 text-black fw-light" style="font-size: 20px;">Organic traffic is responsible for 53% of total website traffic.</li>
+								<li class="mt-2 text-black fw-light" style="font-size: 20px;">The worth of the SEO industry is over $50 billion as of 2023.</li>
+								<li class="mt-2 text-black fw-light" style="font-size: 20px;">93% of web experiences start on a search engine (mainly Google searches, images, and maps).</li>
+								<li class="mt-2 text-black fw-light" style="font-size: 20px;">SEO-generated leads have a 15% closing rate.</li>
+							</ul>
+							<h3 class="mt-7 text-center">Google CTR Per Ranking 2022</h3>
+							<p class="text-center">
+								<img class="img img-fluid" src="./views/assets/img/blog/google-ctr-ranking.webp" alt="Google crt ranking in 2023" >
+							</p>
+							<!-- End Organic Traffic Studies -->
+							<!-- Paid Traffic Studies -->
+							<h2 id="PaidStudies" class="mt-7">Paid Traffic Studies:</h2>
+							<ul class="no-bullets">
+								<li class="mt-2 text-black fw-light" style="font-size: 20px;">According to a report by eMarketer, global digital ad spending reached $455.3 billion in 2020, with paid search ads accounting for a significant portion of that spending.</li>
+								<li class="mt-2 text-black fw-light" style="font-size: 20px;">Google Ads, the largest online advertising platform, generated $147 billion in revenue in 2020.</li>
+								<li class="mt-2 text-black fw-light" style="font-size: 20px;">Conversion rates for paid traffic vary depending on several factors such as the industry, target audience, and ad quality. However, on average, paid search ads have a conversion rate of around 2-3%.</li>
+							</ul>
+							<h3 class="mt-7 text-center">Google CTR: Google Ads 2022</h3>
+							<p class="text-center">
+								<img class="img img-fluid" src="./views/assets/img/blog/google-ctr-ads.webp" alt="Google Ads crt ranking in 2023" >
+							</p>
+							<!-- End Organic Traffic Vs. Paid Traffic -->
+							<!-- Importance Of Organic Traffic-->
+							<h4 id="ImpOfOrg" class="mt-7">Importance of Organic Traffic</h4>
+							<p class="text-black fw-light">Though both organic and paid traffic have their place, organic traffic often has higher long-term value. These visitors are usually more engaged, spend more time on your site, and are more likely to convert or make a purchase.</p>
+							<!-- What Is CTR Manipulation -->
+							<h2 Id="CTRMan" class="mt-7">What is CTR Manipulation?</h2>
+							<p class="text-black fw-light">Click-through rate (CTR) manipulation refers to the <b>tactics used to artificially increase the number of clicks on search engine results</b>, advertisement, or link receives in an attempt to improve its performance metrics. <br>
+								<br>
+								<b class="text-primary">Click-through rate is a key performance indicator in digital marketing,</b> referring to the ratio of users who click on a specific link to the number of total users who view a page, email, or advertisement.
+							</p>
+							<h3>CTR manipulation can include various tactics, such as:</h3>
+							<p class="text-black fw-light">
+							<ul>
+								<p class="mb-4 text-black fw-light">
+									<b class="text-primary" style="font-weight: 400;"> Click Farms</b>
+									<br> Businesses pay 'click farms', which are large groups of low-paid workers <b>earning around $0.05 per website visit</b>. These clicks can make a website appear more popular than it actually if those clicks are purchased in a very small amount. <br> Buying larger amounts of clickfarms can hurt your site as the same person will click on your website over and over again.
+								</p>
+								<p class="mb-4 text-black fw-light">
+									<b class="text-primary" style="font-weight: 400;">Misleading Titles and Thumbnails</b>
+									<br>Certain entities employ deceptive or sensationalized headlines and thumbnails to entice users into clicking. These tactics can yield positive results when the content is genuinely engaging. However, misleading titles are ineffective as a long-term strategy if the actual content fails to deliver.
+								</p>
+								<p class="mb-4 text-black fw-light">
+									<b class="text-primary" style="font-weight: 400;">Automated Clicking Programs or Bots</b>
+									<br>These programs are designed to generate automatic clicks on ads or links. They are relatively inexpensive, with starting prices typically around $99. <br>
+									<br> However, more advanced traffic bots can <b>cost around $500</b>. It's important to note that these traffic bots often suffer from numerous glitches. While they may initially appear to be a cost-effective alternative to a traffic bot service, setting up a private traffic bot can be expensive. <br>
+									<br> The process requires a significant time investment and <b>additional costs averaging around $15 per gigabyte</b> of traffic consumed. Consequently, opting for a private traffic bot becomes a financially punishing choice. <b class="text-primary">Popular Traffic Softwares:</b> Diabolic tarffic bot, TrafficbotPro.
+								</p>
+								<p class="mb-4 text-black fw-light">
+									<b class="text-primary" style="font-weight: 400;">Paid Promotions</b>
+									<br> Some businesses pay influencers or other parties to promote their links and generate more clicks.
+								</p>
+							</ul>
+							</p>
+							<!-- End What Is CTR Manipulation -->
+							<!-- Understanding CTR Manipulation -->
+							<h2 Id="UnderstandCTR" class="mt-7">Understanding CTR Manipulation </h2>
+								<p class="text-black fw-light">CTR manipulation can have a significant impact on your SEO. A higher CTR often leads to better search engine rankings, as it signals to search engines that your content is relevant and valuable to users. Nevertheless, more than achieving a high click-through rate (CTR) alone is required to improve your ranking. Equally important is the amount of time users spend on your page, as it indicates their engagement with your content.</p>
+								<p class="text-black fw-light">When purchasing SEO Traffic from click farms, users often visit your website briefly before quickly leaving, which can negatively impact your ranking.</p>
+								<!-- End Understanding CTR Manipulation -->
+								<!-- Benefits of Buying SEO Traffic -->
+								<h2 id="BuyBenefits" class="mt-7">Benefits of Buying SEO Traffic</h2>
+								<p class="text-black fw-light">Now that we've explored the concept of SEO traffic and CTR manipulation, let's look at why you might consider buying SEO traffic.</p>
+								<!-- End Benefits of Buying SEO Traffic -->
+								<h3 class="mt-4">Improved Search Engine Ranking </h3>
+								<p class="text-black fw-light">One of the most notable benefits is improved site ranking. When you buy SEO traffic, you’re essentially paying for a guaranteed number of visitors to your site. This influx of traffic can <b>boost your site's ranking on search engine result pages (SERPs).</b>
+								</p>
+								<h3 class="mt-4">Increased Engagement</h3>
+								<p class="text-black fw-light">One of the most notable benefits is improved site ranking. When you buy SEO traffic, you're paying for a guaranteed number of visitors to your site, <b>improving your Click Through Rate (CTR).</b> This can significantly boost your site's ranking on search engine result pages (SERPs). </p>
+								<h3 class="mt-4">Higher Conversion Rates </h3>
+									<p class="text-black fw-light">More traffic can also lead to higher conversion rates. After all, the more visitors you have, the higher your chances of turning those visitors into customers.</p>
+									<h2 id="BuySafe" class="mt-7">How to Buy SEO Traffic Safely</h2>
+									<p class="text-black fw-light">Purchasing SEO traffic isn't without its risks. It's crucial to ensure you buy high-quality, targeted traffic that aligns with your business goals. Therefore I will give you some tips to look out for when purchasing SEO traffic.</p>
+									<h2 id="EvalProv" class="mt-4">Evaluating Traffic Providers </h2>
+										<p class="text-black fw-light">Not all traffic providers are created equal. Some provide high-quality traffic that can genuinely benefit your SEO efforts, while others may deliver low-quality traffic that can harm your site's reputation and SEO.</p>
+										<h4>When selecting a traffic provider, it's vital to assess the level of support they offer. Consider the following aspects: </h4>
+										<ul>
+											<p class="text-black fw-light">
+												<b class="text-primary" style="font-size: 20px; font-weight: 400;">Communication Channels</b>
+												<br> Look for providers that offer multiple channels for support, such as <b>email, live chat, or phone</b>. A responsive support team is crucial to address any queries or concerns promptly. <br>
+												<br>
+												<b class="text-success" style="font-size: 20px; font-weight: 400;">Recommendation:</b>
+												<br> Before you purchase any SEO Traffic, contact the support via chat and ask them a simple question. Most SEO traffic providers will not respond fast, have no answers to your questions, or you will face a chatbot.
+											</p>
+											<p class="text-black fw-light">
+												<b class="text-primary" style="font-size: 20px; font-weight: 400;">Technical Assistance <br>
+												</b>Ensure the provider offers technical assistance to help integrate their traffic services with your website effectively. This can include guidance on analytics, tracking tools, or troubleshooting issues that may arise during implementation.
+											</p>
+											<p class="text-black fw-light">
+												<b class="text-primary" style="font-size: 20px; font-weight: 400;">Customization and Targeting <br>
+												</b>Evaluate whether the traffic provider offers customization options based on your specific goals. Some providers allow you to <b>target traffic based on geographical location,</b> demographics, or interests, which can enhance the effectiveness of your marketing efforts.
+											</p>
+											<p class="text-black fw-light">
+												<b class="text-primary" style="font-size: 20px; font-weight: 400;">Reputable Reviews and Testimonials <br>
+												</b>Research customer reviews and testimonials to gain insights into the experiences of previous clients. Positive feedback regarding the support system can indicate a reliable traffic provider.
+											</p>
+										</ul>
+										<h2  class="mt-7">Helpfull Review & Comparions</h2>
+										<ul class="no-bullets">
+											<li class="mt-4" style="font-size: 20px; font-weight: 400;">
+												<a href="https://medium.com/p/e31d5fe615fe">Best Traffic Bot 2023 | Top 3 Traffic Bot</a>
+											</li>
+											<li class="mt-4" style="font-size: 20px; font-weight: 400;">
+												<a href="https://nucularreview.medium.com/buy-the-best-seo-traffic-for-your-website-in-2023-90e86a43c4cb">Buy the Best SEO Traffic for Your Website In 2023 </a>
+											</li>
+											<li class="mt-4" style="font-size: 20px; font-weight: 400;">
+												<a href="https://traffic-bot.com/blog/traffic-bot-comparisons">SEO Traffic Bots Comparisons</a>
+											</li>
+										</ul>
+										<h2 id="ImplSEO" class="mt-7">Implementing SEO Traffic into Your Strategy</h2>
+										<p class="text-black fw-light">Once you've chosen a provider, it's time to incorporate the bought traffic into your SEO strategy. Remember, buying SEO traffic should complement your existing SEO efforts, not replace them.</p>
+										<!-- Conclusion -->
+										<h2 id="Concl" class="mt-7">Conclusion: Is Buying SEO Traffic Worth It?</h2>
+										<p class="text-black fw-light">The answer isn't black and white. It depends on your specific situation and goals. If done correctly and with the right provider, buying SEO traffic can give your website a significant boost. But it's essential to keep in mind that it's just one piece of the puzzle. A well-rounded, comprehensive SEO strategy is the key to sustainable, long-term success.</p>
+										<!-- Short Term -->
+										<h3 id="ShortTerm">Buying SEO Traffic - Short Term</h3>
+										<p class="text-black fw-light">Trying to enhance your rankings for a particular keyword by acquiring SEO traffic in a brief timeframe (such as a few days) is generally ineffective and should not be your main focus. Instead, aim to purchase SEO traffic for a minimum of 30 days to achieve initial results.</p>
+										<!-- Long Term -->
+										<h3 id="LongTerm">Buying SEO Traffic - Long Term</h3>
+										<p class="text-black fw-light">Incorporating SEO traffic into your existing strategy over an extended period is the recommended approach for achieving meaningful outcomes. Investing in SEO traffic for at least 30 days should be your objective to witness the initial impact on your rankings. This timeframe allows for the necessary optimization and data analysis to determine the effectiveness of your SEO efforts.</p>
+										<!-- End Conclusion -->
+										<!-- FAQ -->
+										<h2 id="FAQ" class="mt-7 mb-6">Frequently Asked Questions</h2>
+										<ul>
+											<h3 class="mt-4">Is buying SEO traffic safe?</h3>
+											<p class="text-black fw-light">Yes, provided you buy from a reputable provider and ensure that the traffic aligns with your target audience.</p>
+											<h3 class="mt-4">Does bought SEO traffic convert?</h3>
+											<p class="text-black fw-light">It can, but it largely depends on the quality of the traffic and how well it aligns with your offering. </p>
+											<h3 class="mt-4">Can buying SEO traffic improve my site's ranking?</h3>
+											<p class="text-black fw-light">Yes, an increase in traffic can improve your site's ranking. However, other factors, such as content relevance and quality, also play a significant role.</p>
+											<h3 class="mt-4">What is CTR manipulation, and why does it matter?</h3>
+											<p class="text-black fw-light">CTR manipulation involves techniques to improve your click-through rate. A higher CTR can positively influence your site's SEO performance.</p>
+											<h3 class="mt-4">Can I rely solely on bought SEO traffic for my website's success?</h3>
+											<p class="text-black fw-light">No, buying SEO traffic should complement, not replace, your existing SEO efforts. It's one tool in your toolbox, not the entire kit.</p>
+										</ul>
+										<!-- End Content Three-->
+										<!-- End Author Profile -->
+										<!-- End Sticky End Point -->
+										<div id="stickyBlockEndPoint"></div>
+										<!-- End Col -->
+					</div>
+					<!-- End Row -->
+				</div>
+				<!-- End Content -->
+		</main>
+		<!-- ========== END MAIN CONTENT ========== -->
+		<!-- ========== FOOTER ========== -->
+		<!-- ========== END FOOTER ========== -->
+		<!-- ========== SECONDARY CONTENTS ========== -->
+		<!-- Go To -->
+		<a class="js-go-to go-to position-fixed" href="javascript:;" style="visibility: hidden" data-hs-go-to-options='{
+         "offsetTop": 700,
+         "position": {
+         "init": {
+         "right": "2rem"
+         },
+         "show": {
+         "bottom": "2rem"
+         },
+         "hide": {
+         "bottom": "-2rem"
+         }
+         }
+         }'>
+			<i class="bi-chevron-up"></i>
+		</a>
+		<!-- ========== END SECONDARY CONTENTS ========== -->
+		<!-- JS Global Compulsory  -->
+		<script src="views/assets/vendor/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+		<!-- JS Implementing Plugins -->
+		<script src="views/assets/vendor/hs-header/dist/hs-header.min.js"></script>
+		<script src="views/assets/vendor/hs-mega-menu/dist/hs-mega-menu.min.js"></script>
+		<script src="views/assets/vendor/hs-show-animation/dist/hs-show-animation.min.js"></script>
+		<script src="views/assets/vendor/hs-go-to/dist/hs-go-to.min.js"></script>
+		<script src="views/assets/vendor/hs-sticky-block/dist/hs-sticky-block.min.js"></script>
+		<script src="views/assets/vendor/hs-scrollspy/dist/hs-scrollspy.min.js"></script>
+		<!-- JS Front -->
+		<script src="views/assets/js/theme.min.js"></script>
+		<!-- JS Plugins Init. -->
+		<script>
+			(function() {
+				// INITIALIZATION OF HEADER
+				// =======================================================
+				new HSHeader("#header").init();
+				// INITIALIZATION OF MEGA MENU
+				// =======================================================
+				new HSMegaMenu(".js-mega-menu", {
+					desktop: {
+						position: "left",
+					},
+				});
+				// INITIALIZATION OF SHOW ANIMATIONS
+				// =======================================================
+				new HSShowAnimation(".js-animation-link");
+				// INITIALIZATION OF BOOTSTRAP VALIDATION
+				// =======================================================
+				HSBsValidation.init(".js-validate", {
+					onSubmit: (data) => {
+						data.event.preventDefault();
+						alert("Submited");
+					},
+				});
+				// INITIALIZATION OF BOOTSTRAP DROPDOWN
+				// =======================================================
+				HSBsDropdown.init();
+				// INITIALIZATION OF GO TO
+				// =======================================================
+				new HSGoTo(".js-go-to");
+				// INITIALIZATION OF STICKY BLOCKS
+				// =======================================================
+				new HSStickyBlock(".js-sticky-block", {
+					targetSelector: document.getElementById("header").classList.contains("navbar-fixed") ? "#header" : null,
+				});
+				// SCROLLSPY
+				// =======================================================
+				new bootstrap.ScrollSpy(document.body, {
+					target: "#navbarSettings",
+					offset: 10,
+				});
+				new HSScrollspy("#navbarVerticalNavMenu", {
+					breakpoint: "lg",
+				});
+			})();
+		</script>
+	</body>
+	<!-- END BODY -->
+</html>

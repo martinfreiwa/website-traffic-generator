@@ -107,32 +107,105 @@ def run_column_migrations():
                     logger.warning(f"Could not create {table_name}: {e}")
 
         users_cols = [
+            ("email", "VARCHAR(255)"),
             ("name", "VARCHAR(255)"),
+            ("password_hash", "VARCHAR(255)"),
+            ("role", "VARCHAR(255)"),
+            ("balance", "FLOAT DEFAULT 0.0"),
             ("balance_economy", "FLOAT DEFAULT 0.0"),
             ("balance_professional", "FLOAT DEFAULT 0.0"),
             ("balance_expert", "FLOAT DEFAULT 0.0"),
+            ("api_key", "VARCHAR(255)"),
+            ("affiliate_code", "VARCHAR(255)"),
+            ("referred_by", "VARCHAR(255)"),
+            ("status", "VARCHAR(255)"),
+            ("created_at", "TIMESTAMP"),
+            ("token_version", "INTEGER DEFAULT 1"),
+            ("phone", "VARCHAR(255)"),
+            ("company", "VARCHAR(255)"),
+            ("vat_id", "VARCHAR(255)"),
+            ("address", "VARCHAR(255)"),
+            ("city", "VARCHAR(255)"),
+            ("country", "VARCHAR(255)"),
+            ("zip", "VARCHAR(255)"),
+            ("website", "VARCHAR(255)"),
+            ("display_name", "VARCHAR(255)"),
+            ("bio", "TEXT"),
+            ("job_title", "VARCHAR(255)"),
+            ("public_profile", "BOOLEAN DEFAULT FALSE"),
+            ("two_factor_enabled", "BOOLEAN DEFAULT FALSE"),
+            ("email_frequency", "VARCHAR(255)"),
+            ("login_notification_enabled", "BOOLEAN DEFAULT FALSE"),
+            ("newsletter_sub", "BOOLEAN DEFAULT FALSE"),
+            ("sound_effects", "BOOLEAN DEFAULT TRUE"),
+            ("developer_mode", "BOOLEAN DEFAULT FALSE"),
+            ("api_whitelist", "JSONB"),
+            ("webhook_secret", "VARCHAR(255)"),
+            ("accessibility", "JSONB"),
+            ("social_links", "JSONB"),
+            ("login_history", "JSONB DEFAULT '[]'::jsonb"),
+            ("recovery_email", "VARCHAR(255)"),
+            ("timezone", "VARCHAR(255)"),
+            ("language", "VARCHAR(255)"),
+            ("theme_accent_color", "VARCHAR(255)"),
+            ("skills_badges", "JSONB"),
+            ("referral_code", "VARCHAR(255)"),
+            ("support_pin", "VARCHAR(255)"),
+            ("date_format", "VARCHAR(255)"),
+            ("number_format", "VARCHAR(255)"),
+            ("require_password_reset", "BOOLEAN DEFAULT FALSE"),
+            ("avatar_url", "VARCHAR(255)"),
+            ("plan", "VARCHAR(255)"),
             ("shadow_banned", "BOOLEAN DEFAULT FALSE"),
             ("is_verified", "BOOLEAN DEFAULT FALSE"),
+            ("verification_token", "VARCHAR(255)"),
+            ("verification_token_expires", "TIMESTAMP"),
+            ("password_reset_token", "VARCHAR(255)"),
+            ("password_reset_token_expires", "TIMESTAMP"),
             ("notes", "TEXT"),
             ("tags", "JSONB"),
             ("ban_reason", "VARCHAR(255)"),
-            ("last_ip", "VARCHAR(100)"),
+            ("last_ip", "VARCHAR(255)"),
             ("last_active", "TIMESTAMP"),
+            ("api_key_last_used", "TIMESTAMP"),
+            ("password_changed_at", "TIMESTAMP"),
+            ("stripe_customer_id", "VARCHAR(255)"),
+            ("stripe_subscription_id", "VARCHAR(255)"),
+            ("subscription_status", "VARCHAR(255)"),
+            ("subscription_plan", "VARCHAR(255)"),
+            ("subscription_current_period_end", "TIMESTAMP"),
+            ("gamification_xp", "INTEGER DEFAULT 0"),
+            ("gamification_level", "INTEGER DEFAULT 1"),
+            ("gamification_total_spent", "FLOAT DEFAULT 0.0"),
+            ("gamification_permanent_discount", "INTEGER DEFAULT 0"),
+            ("gamification_claimed_levels", "JSONB DEFAULT '[]'::jsonb"),
+            ("streak_days", "INTEGER DEFAULT 0"),
+            ("streak_last_date", "TIMESTAMP"),
+            ("streak_best", "INTEGER DEFAULT 0"),
+            ("last_daily_bonus", "TIMESTAMP"),
+            ("benefit_balance", "FLOAT DEFAULT 0.0"),
+            ("total_benefits_claimed", "FLOAT DEFAULT 0.0"),
+            ("benefit_requests_count", "INTEGER DEFAULT 0"),
+            ("account_locked", "BOOLEAN DEFAULT FALSE"),
+            ("lock_reason", "VARCHAR(255)"),
+            ("locked_at", "TIMESTAMP"),
         ]
 
         for col_name, col_type in users_cols:
             add_column_if_missing("users", col_name, col_type)
 
         user_sessions_cols = [
+            ("user_id", "VARCHAR(255)"),
             ("session_token", "VARCHAR(255)"),
-            ("ip_address", "VARCHAR(100)"),
-            ("user_agent", "TEXT"),
-            ("device", "VARCHAR(50)"),
-            ("browser", "VARCHAR(50)"),
+            ("ip_address", "VARCHAR(255)"),
+            ("user_agent", "VARCHAR(255)"),
+            ("device", "VARCHAR(255)"),
+            ("browser", "VARCHAR(255)"),
             ("current_page", "VARCHAR(255)"),
             ("total_visits", "INTEGER DEFAULT 1"),
-            ("status", "VARCHAR(50) DEFAULT 'active'"),
+            ("status", "VARCHAR(255) DEFAULT 'active'"),
             ("last_active", "TIMESTAMP"),
+            ("created_at", "TIMESTAMP"),
             ("expires_at", "TIMESTAMP"),
         ]
 
@@ -140,12 +213,16 @@ def run_column_migrations():
             add_column_if_missing("user_sessions", col_name, col_type)
 
         tickets_cols = [
-            ("category", "VARCHAR(100) DEFAULT 'general'"),
-            ("type", "VARCHAR(100) DEFAULT 'ticket'"),
-            ("priority", "VARCHAR(50) DEFAULT 'low'"),
+            ("user_id", "VARCHAR(255)"),
+            ("subject", "VARCHAR(255)"),
+            ("status", "VARCHAR(255) DEFAULT 'open'"),
+            ("priority", "VARCHAR(255) DEFAULT 'low'"),
+            ("type", "VARCHAR(255) DEFAULT 'ticket'"),
+            ("category", "VARCHAR(255) DEFAULT 'general'"),
             ("project_id", "VARCHAR(255)"),
-            ("attachment_urls", "JSONB"),
-            ("messages", "JSONB"),
+            ("attachment_urls", "JSONB DEFAULT '[]'::jsonb"),
+            ("messages", "JSONB DEFAULT '[]'::jsonb"),
+            ("created_at", "TIMESTAMP"),
             ("updated_at", "TIMESTAMP"),
         ]
 
@@ -153,15 +230,408 @@ def run_column_migrations():
             add_column_if_missing("tickets", col_name, col_type)
 
         traffic_log_cols = [
+            ("project_id", "VARCHAR(255)"),
+            ("timestamp", "TIMESTAMP"),
+            ("url", "VARCHAR(255)"),
+            ("event_type", "VARCHAR(255)"),
+            ("status", "VARCHAR(255)"),
+            ("country", "VARCHAR(255)"),
+            ("ip", "VARCHAR(255)"),
+            ("proxy", "VARCHAR(255)"),
             ("session_duration", "FLOAT"),
             ("pages_viewed", "INTEGER DEFAULT 1"),
-            ("device_type", "VARCHAR(50)"),
-            ("traffic_source", "VARCHAR(100)"),
+            ("device_type", "VARCHAR(255)"),
+            ("traffic_source", "VARCHAR(255)"),
             ("bounced", "BOOLEAN DEFAULT FALSE"),
         ]
 
         for col_name, col_type in traffic_log_cols:
             add_column_if_missing("traffic_log", col_name, col_type)
+
+        projects_cols = [
+            ("user_id", "VARCHAR(255)"),
+            ("name", "VARCHAR(255)"),
+            ("status", "VARCHAR(255) DEFAULT 'active'"),
+            ("plan_type", "VARCHAR(255) DEFAULT 'Custom'"),
+            ("tier", "VARCHAR(255)"),
+            ("daily_limit", "INTEGER DEFAULT 0"),
+            ("total_target", "INTEGER DEFAULT 0"),
+            ("hits_today", "INTEGER DEFAULT 0"),
+            ("total_hits", "INTEGER DEFAULT 0"),
+            ("start_at", "TIMESTAMP"),
+            ("expires_at", "TIMESTAMP"),
+            ("settings", "JSONB"),
+            ("created_at", "TIMESTAMP"),
+            ("priority", "INTEGER DEFAULT 0"),
+            ("force_stop_reason", "VARCHAR(255)"),
+            ("is_hidden", "BOOLEAN DEFAULT FALSE"),
+            ("internal_tags", "JSONB DEFAULT '[]'::jsonb"),
+            ("notes", "TEXT"),
+            ("is_flagged", "BOOLEAN DEFAULT FALSE"),
+        ]
+
+        for col_name, col_type in projects_cols:
+            add_column_if_missing("projects", col_name, col_type)
+
+        transactions_cols = [
+            ("user_id", "VARCHAR(255)"),
+            ("type", "VARCHAR(255)"),
+            ("amount", "FLOAT"),
+            ("description", "VARCHAR(255)"),
+            ("status", "VARCHAR(255) DEFAULT 'completed'"),
+            ("tier", "VARCHAR(255)"),
+            ("reference", "VARCHAR(255)"),
+            ("hits", "INTEGER"),
+            ("created_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in transactions_cols:
+            add_column_if_missing("transactions", col_name, col_type)
+
+        proxies_cols = [
+            ("url", "VARCHAR(255)"),
+            ("country", "VARCHAR(255)"),
+            ("state", "VARCHAR(255)"),
+            ("city", "VARCHAR(255)"),
+            ("is_active", "BOOLEAN DEFAULT TRUE"),
+            ("created_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in proxies_cols:
+            add_column_if_missing("proxies", col_name, col_type)
+
+        project_stats_cols = [
+            ("project_id", "VARCHAR(255)"),
+            ("hour", "TIMESTAMP"),
+            ("total_visitors", "INTEGER DEFAULT 0"),
+            ("successful_hits", "INTEGER DEFAULT 0"),
+            ("failed_hits", "INTEGER DEFAULT 0"),
+            ("bounce_count", "INTEGER DEFAULT 0"),
+            ("avg_session_duration", "FLOAT DEFAULT 0.0"),
+            ("desktop_visitors", "INTEGER DEFAULT 0"),
+            ("mobile_visitors", "INTEGER DEFAULT 0"),
+            ("tablet_visitors", "INTEGER DEFAULT 0"),
+            ("organic_visitors", "INTEGER DEFAULT 0"),
+            ("social_visitors", "INTEGER DEFAULT 0"),
+            ("direct_visitors", "INTEGER DEFAULT 0"),
+            ("referral_visitors", "INTEGER DEFAULT 0"),
+            ("created_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in project_stats_cols:
+            add_column_if_missing("project_stats", col_name, col_type)
+
+        notifications_cols = [
+            ("user_id", "VARCHAR(255)"),
+            ("title", "VARCHAR(255)"),
+            ("message", "TEXT"),
+            ("read", "BOOLEAN DEFAULT FALSE"),
+            ("created_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in notifications_cols:
+            add_column_if_missing("notifications", col_name, col_type)
+
+        ticket_messages_cols = [
+            ("ticket_id", "VARCHAR(255)"),
+            ("sender_id", "VARCHAR(255)"),
+            ("message", "TEXT"),
+            ("created_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in ticket_messages_cols:
+            add_column_if_missing("ticket_messages", col_name, col_type)
+
+        stripe_products_cols = [
+            ("stripe_product_id", "VARCHAR(255)"),
+            ("name", "VARCHAR(255)"),
+            ("factor", "FLOAT"),
+            ("quality_label", "VARCHAR(255)"),
+            ("features", "JSONB"),
+            ("active", "BOOLEAN DEFAULT TRUE"),
+            ("created_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in stripe_products_cols:
+            add_column_if_missing("stripe_products", col_name, col_type)
+
+        activity_logs_cols = [
+            ("user_id", "VARCHAR(255)"),
+            ("action_type", "VARCHAR(255)"),
+            ("action_detail", "JSONB"),
+            ("ip_address", "VARCHAR(255)"),
+            ("user_agent", "VARCHAR(255)"),
+            ("created_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in activity_logs_cols:
+            add_column_if_missing("activity_logs", col_name, col_type)
+
+        token_blacklist_cols = [
+            ("token", "VARCHAR(500)"),
+            ("user_id", "VARCHAR(255)"),
+            ("reason", "VARCHAR(255)"),
+            ("expires_at", "TIMESTAMP"),
+            ("blacklisted_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in token_blacklist_cols:
+            add_column_if_missing("token_blacklist", col_name, col_type)
+
+        user_notification_prefs_cols = [
+            ("user_id", "VARCHAR(255)"),
+            ("email_marketing", "BOOLEAN DEFAULT TRUE"),
+            ("email_transactional", "BOOLEAN DEFAULT TRUE"),
+            ("email_alerts", "BOOLEAN DEFAULT TRUE"),
+            ("browser_notifications", "BOOLEAN DEFAULT TRUE"),
+            ("newsletter_sub", "BOOLEAN DEFAULT FALSE"),
+            ("email_frequency", "VARCHAR(255) DEFAULT 'instant'"),
+            ("updated_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in user_notification_prefs_cols:
+            add_column_if_missing("user_notification_prefs", col_name, col_type)
+
+        impersonation_logs_cols = [
+            ("admin_id", "VARCHAR(255)"),
+            ("target_user_id", "VARCHAR(255)"),
+            ("action", "VARCHAR(255)"),
+            ("ip_address", "VARCHAR(255)"),
+            ("created_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in impersonation_logs_cols:
+            add_column_if_missing("impersonation_logs", col_name, col_type)
+
+        balance_adjustment_logs_cols = [
+            ("user_id", "VARCHAR(255)"),
+            ("admin_id", "VARCHAR(255)"),
+            ("adjustment_type", "VARCHAR(255)"),
+            ("tier", "VARCHAR(255)"),
+            ("amount", "FLOAT DEFAULT 0.0"),
+            ("hits", "INTEGER"),
+            ("reason", "VARCHAR(255)"),
+            ("notes", "VARCHAR(255)"),
+            ("created_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in balance_adjustment_logs_cols:
+            add_column_if_missing("balance_adjustment_logs", col_name, col_type)
+
+        email_logs_cols = [
+            ("user_id", "VARCHAR(255)"),
+            ("email_type", "VARCHAR(255)"),
+            ("to_email", "VARCHAR(255)"),
+            ("subject", "VARCHAR(255)"),
+            ("status", "VARCHAR(255) DEFAULT 'sent'"),
+            ("error_message", "VARCHAR(255)"),
+            ("sent_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in email_logs_cols:
+            add_column_if_missing("email_logs", col_name, col_type)
+
+        affiliate_relations_cols = [
+            ("user_id", "VARCHAR(255)"),
+            ("referrer_l1_id", "VARCHAR(255)"),
+            ("referrer_l2_id", "VARCHAR(255)"),
+            ("referrer_l3_id", "VARCHAR(255)"),
+            ("created_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in affiliate_relations_cols:
+            add_column_if_missing("affiliate_relations", col_name, col_type)
+
+        affiliate_earnings_cols = [
+            ("referrer_id", "VARCHAR(255)"),
+            ("referee_id", "VARCHAR(255)"),
+            ("transaction_id", "VARCHAR(255)"),
+            ("amount", "FLOAT"),
+            ("status", "VARCHAR(255) DEFAULT 'pending'"),
+            ("tier", "INTEGER DEFAULT 1"),
+            ("created_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in affiliate_earnings_cols:
+            add_column_if_missing("affiliate_earnings", col_name, col_type)
+
+        affiliate_tiers_cols = [
+            ("user_id", "VARCHAR(255)"),
+            ("tier_level", "INTEGER DEFAULT 1"),
+            ("tier_name", "VARCHAR(255) DEFAULT 'Bronze Starter'"),
+            ("commission_rate_l1", "FLOAT DEFAULT 0.15"),
+            ("commission_rate_l2", "FLOAT DEFAULT 0.05"),
+            ("commission_rate_l3", "FLOAT DEFAULT 0.02"),
+            ("total_referrals_l1", "INTEGER DEFAULT 0"),
+            ("total_referrals_l2", "INTEGER DEFAULT 0"),
+            ("total_referrals_l3", "INTEGER DEFAULT 0"),
+            ("total_earnings", "FLOAT DEFAULT 0.0"),
+            ("pending_payout", "FLOAT DEFAULT 0.0"),
+            ("lifetime_payout", "FLOAT DEFAULT 0.0"),
+            ("last_tier_update", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in affiliate_tiers_cols:
+            add_column_if_missing("affiliate_tiers", col_name, col_type)
+
+        benefit_requests_cols = [
+            ("user_id", "VARCHAR(255)"),
+            ("benefit_type", "VARCHAR(255)"),
+            ("benefit_category", "VARCHAR(255)"),
+            ("url", "VARCHAR(255)"),
+            ("description", "TEXT"),
+            ("screenshot_url", "VARCHAR(255)"),
+            ("claimed_value", "FLOAT DEFAULT 0.0"),
+            ("approved_value", "FLOAT"),
+            ("status", "VARCHAR(255) DEFAULT 'pending'"),
+            ("admin_notes", "TEXT"),
+            ("fraud_flagged", "BOOLEAN DEFAULT FALSE"),
+            ("fraud_reason", "VARCHAR(255)"),
+            ("submitted_at", "TIMESTAMP"),
+            ("reviewed_at", "TIMESTAMP"),
+            ("reviewed_by", "VARCHAR(255)"),
+        ]
+
+        for col_name, col_type in benefit_requests_cols:
+            add_column_if_missing("benefit_requests", col_name, col_type)
+
+        payout_requests_cols = [
+            ("user_id", "VARCHAR(255)"),
+            ("amount", "FLOAT"),
+            ("method", "VARCHAR(255)"),
+            ("payout_details", "JSONB"),
+            ("status", "VARCHAR(255) DEFAULT 'pending'"),
+            ("admin_notes", "TEXT"),
+            ("requested_at", "TIMESTAMP"),
+            ("processed_at", "TIMESTAMP"),
+            ("processed_by", "VARCHAR(255)"),
+            ("transaction_hash", "VARCHAR(255)"),
+        ]
+
+        for col_name, col_type in payout_requests_cols:
+            add_column_if_missing("payout_requests", col_name, col_type)
+
+        benefit_types_cols = [
+            ("type", "VARCHAR(255)"),
+            ("category", "VARCHAR(255)"),
+            ("name", "VARCHAR(255)"),
+            ("value", "FLOAT DEFAULT 0.0"),
+            ("requirements", "JSONB DEFAULT '{}'::jsonb"),
+            ("active", "BOOLEAN DEFAULT TRUE"),
+            ("display_order", "INTEGER DEFAULT 0"),
+            ("created_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in benefit_types_cols:
+            add_column_if_missing("benefit_types", col_name, col_type)
+
+        conversion_settings_cols = [
+            ("social_proof_enabled", "BOOLEAN DEFAULT FALSE"),
+            ("social_proof_position", "VARCHAR(255) DEFAULT 'bottom-right'"),
+            ("social_proof_delay", "INTEGER DEFAULT 5"),
+            ("social_proof_show_simulated", "BOOLEAN DEFAULT TRUE"),
+            ("exit_intent_enabled", "BOOLEAN DEFAULT FALSE"),
+            ("exit_intent_headline", "VARCHAR(255)"),
+            ("exit_intent_subtext", "VARCHAR(255)"),
+            ("exit_intent_coupon_code", "VARCHAR(255)"),
+            ("promo_bar_enabled", "BOOLEAN DEFAULT FALSE"),
+            ("promo_bar_message", "VARCHAR(255)"),
+            ("promo_bar_button_text", "VARCHAR(255)"),
+            ("promo_bar_button_url", "VARCHAR(255)"),
+            ("promo_bar_background_color", "VARCHAR(255)"),
+            ("promo_bar_text_color", "VARCHAR(255)"),
+            ("promo_bar_countdown_end", "TIMESTAMP"),
+            ("updated_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in conversion_settings_cols:
+            add_column_if_missing("conversion_settings", col_name, col_type)
+
+        loyalty_settings_cols = [
+            ("enabled", "BOOLEAN DEFAULT FALSE"),
+            ("points_per_dollar", "FLOAT DEFAULT 1.0"),
+            ("redemption_rate", "FLOAT DEFAULT 0.01"),
+            ("bonus_signup_points", "INTEGER DEFAULT 100"),
+            ("updated_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in loyalty_settings_cols:
+            add_column_if_missing("loyalty_settings", col_name, col_type)
+
+        referral_settings_cols = [
+            ("enabled", "BOOLEAN DEFAULT FALSE"),
+            ("referrer_reward_type", "VARCHAR(255) DEFAULT 'percentage'"),
+            ("referrer_reward_value", "FLOAT DEFAULT 10.0"),
+            ("referee_reward_type", "VARCHAR(255) DEFAULT 'percentage'"),
+            ("referee_reward_value", "FLOAT DEFAULT 15.0"),
+            ("updated_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in referral_settings_cols:
+            add_column_if_missing("referral_settings", col_name, col_type)
+
+        faqs_cols = [
+            ("question", "VARCHAR(255)"),
+            ("answer", "TEXT"),
+            ("category", "VARCHAR(255) DEFAULT 'general'"),
+            ("display_order", "INTEGER DEFAULT 0"),
+            ("is_active", "BOOLEAN DEFAULT TRUE"),
+            ("created_at", "TIMESTAMP"),
+            ("updated_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in faqs_cols:
+            add_column_if_missing("faqs", col_name, col_type)
+
+        coupons_cols = [
+            ("code", "VARCHAR(255)"),
+            ("discount_type", "VARCHAR(255) DEFAULT 'percentage'"),
+            ("discount_value", "FLOAT"),
+            ("min_purchase", "FLOAT DEFAULT 0.0"),
+            ("max_uses", "INTEGER"),
+            ("used_count", "INTEGER DEFAULT 0"),
+            ("max_uses_per_user", "INTEGER DEFAULT 1"),
+            ("plan_restriction", "VARCHAR(255)"),
+            ("duration", "VARCHAR(255) DEFAULT 'once'"),
+            ("expires_at", "TIMESTAMP"),
+            ("is_active", "BOOLEAN DEFAULT TRUE"),
+            ("created_by", "VARCHAR(255)"),
+            ("created_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in coupons_cols:
+            add_column_if_missing("coupons", col_name, col_type)
+
+        marketing_campaigns_cols = [
+            ("name", "VARCHAR(255)"),
+            ("campaign_type", "VARCHAR(255) DEFAULT 'ad_tracking'"),
+            ("status", "VARCHAR(255) DEFAULT 'active'"),
+            ("clicks", "INTEGER DEFAULT 0"),
+            ("conversions", "INTEGER DEFAULT 0"),
+            ("revenue", "FLOAT DEFAULT 0.0"),
+            ("spend", "FLOAT DEFAULT 0.0"),
+            ("start_date", "TIMESTAMP"),
+            ("end_date", "TIMESTAMP"),
+            ("created_at", "TIMESTAMP"),
+            ("updated_at", "TIMESTAMP"),
+        ]
+
+        for col_name, col_type in marketing_campaigns_cols:
+            add_column_if_missing("marketing_campaigns", col_name, col_type)
+
+        broadcasts_cols = [
+            ("title", "VARCHAR(255)"),
+            ("message", "VARCHAR(255)"),
+            ("type", "VARCHAR(255) DEFAULT 'info'"),
+            ("is_active", "BOOLEAN DEFAULT TRUE"),
+            ("created_at", "TIMESTAMP"),
+            ("expires_at", "TIMESTAMP"),
+            ("action_url", "VARCHAR(255)"),
+            ("action_text", "VARCHAR(255)"),
+        ]
+
+        for col_name, col_type in broadcasts_cols:
+            add_column_if_missing("broadcasts", col_name, col_type)
 
         tables_to_create = [
             (
@@ -239,6 +709,10 @@ def run_column_migrations():
             (
                 "broadcasts",
                 """id VARCHAR(255) PRIMARY KEY, title VARCHAR(255), message TEXT, type VARCHAR(50), link VARCHAR(255), is_active BOOLEAN DEFAULT FALSE, start_date TIMESTAMP, end_date TIMESTAMP, created_at TIMESTAMP""",
+            ),
+            (
+                "system_settings",
+                """id SERIAL PRIMARY KEY, settings JSONB DEFAULT '{}'::jsonb, updated_at TIMESTAMP""",
             ),
         ]
 
@@ -1163,6 +1637,15 @@ async def get_current_user_optional(
 @app.post("/auth/register", response_model=UserResponse)
 @limiter.limit("5/minute")
 def register(request: Request, user: UserCreate, db: Session = Depends(get_db)):
+    # Check if registrations are allowed
+    settings_row = db.query(models.SystemSettings).first()
+    if settings_row and settings_row.settings:
+        allow_registrations = settings_row.settings.get("allowRegistrations", True)
+        if not allow_registrations:
+            raise HTTPException(
+                status_code=403, detail="New registrations are currently disabled"
+            )
+
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -1190,6 +1673,15 @@ def register(request: Request, user: UserCreate, db: Session = Depends(get_db)):
         verification_token_expires=verification_token_expires,
         is_verified=True,
         affiliate_code=f"REF-{user.email[:3].upper()}-{secrets.token_hex(3).upper()}",
+        last_ip=request.client.host,
+        login_history=[
+            {
+                "date": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                "ip": request.client.host,
+                "device": "Registration",
+                "type": "registration",
+            }
+        ],
     )
     db.add(new_user)
     db.commit()
@@ -4743,6 +5235,7 @@ def get_user_details_admin(
         created_at=db_user.created_at,
         last_ip=db_user.last_ip,
         last_active=db_user.last_active,
+        login_history=db_user.login_history or [],
     )
 
     prefs_response = None
@@ -5359,6 +5852,113 @@ def regenerate_api_key(
     db.commit()
 
     return {"status": "success", "api_key": new_api_key}
+
+
+@app.get("/admin/users/{user_id}/export")
+def export_user_data(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    transactions = (
+        db.query(models.Transaction).filter(models.Transaction.user_id == user_id).all()
+    )
+    projects = db.query(models.Project).filter(models.Project.user_id == user_id).all()
+    tickets = db.query(models.Ticket).filter(models.Ticket.user_id == user_id).all()
+    balance_adjustments = (
+        db.query(models.BalanceAdjustmentLog)
+        .filter(models.BalanceAdjustmentLog.user_id == user_id)
+        .all()
+    )
+
+    export_data = {
+        "user": {
+            "id": db_user.id,
+            "email": db_user.email,
+            "name": db_user.name,
+            "role": db_user.role,
+            "balance": db_user.balance,
+            "balance_economy": db_user.balance_economy,
+            "balance_professional": db_user.balance_professional,
+            "balance_expert": db_user.balance_expert,
+            "plan": db_user.plan,
+            "status": db_user.status,
+            "is_verified": db_user.is_verified,
+            "created_at": db_user.created_at.isoformat()
+            if db_user.created_at
+            else None,
+            "last_active": db_user.last_active.isoformat()
+            if db_user.last_active
+            else None,
+            "last_ip": db_user.last_ip,
+            "login_history": db_user.login_history,
+        },
+        "transactions": [
+            {
+                "id": t.id,
+                "type": t.type,
+                "amount": t.amount,
+                "tier": t.tier,
+                "hits": t.hits,
+                "description": t.description,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+            }
+            for t in transactions
+        ],
+        "projects": [
+            {
+                "id": p.id,
+                "name": p.name,
+                "status": p.status,
+                "plan_type": p.plan_type,
+                "daily_limit": p.daily_limit,
+                "total_hits": p.total_hits,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+            }
+            for p in projects
+        ],
+        "tickets": [
+            {
+                "id": t.id,
+                "subject": t.subject,
+                "status": t.status,
+                "priority": t.priority,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+            }
+            for t in tickets
+        ],
+        "balance_adjustments": [
+            {
+                "id": a.id,
+                "adjustment_type": a.adjustment_type,
+                "tier": a.tier,
+                "hits": a.hits,
+                "reason": a.reason,
+                "created_at": a.created_at.isoformat() if a.created_at else None,
+            }
+            for a in balance_adjustments
+        ],
+        "exported_at": datetime.utcnow().isoformat(),
+        "exported_by": current_user.email,
+    }
+
+    from admin_utils import log_activity
+
+    log_activity(
+        user_id=user_id,
+        action_type="data_exported",
+        action_detail={"by_admin": current_user.id},
+        ip_address=current_user.last_ip,
+    )
+
+    return export_data
 
 
 @app.post("/admin/impersonate/{user_id}")

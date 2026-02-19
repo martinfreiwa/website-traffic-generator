@@ -36,7 +36,7 @@ const fetchWithAuth = async (url: string, options: any = {}) => {
 const fillMissingDays = (stats: { date: string; visitors: number; pageviews: number }[], days: number = 30): { date: string; visitors: number; pageviews: number }[] => {
     const result: { date: string; visitors: number; pageviews: number }[] = [];
     const statsMap = new Map(stats.map(s => [s.date, s]));
-    
+
     for (let i = days - 1; i >= 0; i--) {
         const d = new Date();
         d.setDate(d.getDate() - i);
@@ -75,7 +75,7 @@ export const db = {
                 throw new Error('Failed to fetch user');
             }
             const userData = await response.json();
-            
+
             const mappedUser: User = {
                 id: userData.id,
                 email: userData.email,
@@ -121,7 +121,7 @@ export const db = {
                 requirePasswordReset: userData.require_password_reset,
                 avatarUrl: userData.avatar_url,
             };
-            
+
             db.setCurrentUser(mappedUser);
             return mappedUser;
         } catch (e) {
@@ -482,7 +482,7 @@ export const db = {
             const errData = await response.json().catch(() => ({}));
             throw new Error(errData.detail || "Failed to create project");
         }
-        
+
         const createdProject = await response.json();
         await db.syncProjects();
         return createdProject;
@@ -490,7 +490,7 @@ export const db = {
 
     updateProject: async (project: Project) => {
         const dailyLimit = project.settings?.scheduleTrafficAmount || project.customTarget?.dailyLimit || 0;
-        
+
         const payload = {
             name: project.name,
             settings: project.settings,
@@ -815,7 +815,7 @@ export const db = {
     getTickets: (filters?: { status?: string; category?: string; search?: string }): Ticket[] => {
         const data = localStorage.getItem('modus_tickets_cache');
         let tickets: Ticket[] = data ? JSON.parse(data) : [];
-        
+
         if (filters) {
             if (filters.status) {
                 tickets = tickets.filter(t => t.status === filters.status);
@@ -825,14 +825,14 @@ export const db = {
             }
             if (filters.search) {
                 const searchLower = filters.search.toLowerCase();
-                tickets = tickets.filter(t => 
+                tickets = tickets.filter(t =>
                     t.subject.toLowerCase().includes(searchLower) ||
                     t.lastMessage?.toLowerCase().includes(searchLower) ||
                     t.messages?.some(m => m.text.toLowerCase().includes(searchLower))
                 );
             }
         }
-        
+
         return tickets;
     },
 
@@ -843,7 +843,7 @@ export const db = {
         if (filters?.category) params.append('category', filters.category);
         if (filters?.search) params.append('search', filters.search);
         if (params.toString()) url += `?${params.toString()}`;
-        
+
         const response = await fetchWithAuth(url);
         if (!response.ok) return;
         const data = await response.json();
@@ -897,14 +897,14 @@ export const db = {
     uploadTicketAttachment: async (file: File): Promise<{ url: string; filename: string }> => {
         const formData = new FormData();
         formData.append('file', file);
-        
+
         const token = localStorage.getItem('tgp_token');
         const response = await fetch(`${API_BASE_URL}/tickets/upload`, {
             method: 'POST',
             headers: token ? { 'Authorization': `Bearer ${token}` } : {},
             body: formData
         });
-        
+
         if (!response.ok) throw new Error("Failed to upload file");
         return await response.json();
     },
@@ -943,7 +943,7 @@ export const db = {
     // System Settings
     getSystemSettings: (): SystemSettings => {
         const data = localStorage.getItem('modus_settings_cache');
-        return data ? JSON.parse(data) : { siteName: 'Traffic Creator', maintenanceMode: false, allowRegistrations: true, supportEmail: 'support@traffic.com', minDeposit: 10 };
+        return data ? JSON.parse(data) : { siteName: 'Traffic Creator', maintenanceMode: false, allowRegistrations: true, supportEmail: 'support@traffic-creator.com', minDeposit: 10 };
     },
 
     syncSettings: async () => {
@@ -976,7 +976,7 @@ export const db = {
             if (data.session_token) {
                 localStorage.setItem('modus_session_token', data.session_token);
             }
-        }).catch(() => {});
+        }).catch(() => { });
     },
 
     getTicketById: (id: string): Ticket | undefined => {
@@ -1096,7 +1096,7 @@ export const db = {
         }
 
         const updatedUser = await response.json();
-        
+
         // Map the response back to frontend User type and update localStorage
         const mappedUser: User = {
             id: updatedUser.id,
@@ -1143,7 +1143,7 @@ export const db = {
             requirePasswordReset: updatedUser.require_password_reset,
             avatarUrl: updatedUser.avatar_url,
         };
-        
+
         db.setCurrentUser(mappedUser);
         return mappedUser;
     },
@@ -1463,7 +1463,7 @@ export const db = {
             duration: coupon.duration || 'once',
             expires_at: coupon.expiryDate || null
         };
-        
+
         if (coupon.id) {
             await fetchWithAuth(`${API_BASE_URL}/admin/coupons/${coupon.id}`, {
                 method: 'PUT',
@@ -1841,7 +1841,7 @@ export const db = {
             try {
                 const errorData = await response.json();
                 errorMsg = errorData.detail || errorMsg;
-            } catch {}
+            } catch { }
             throw new Error(errorMsg);
         }
     },
@@ -1861,7 +1861,7 @@ export const db = {
             try {
                 const errorData = await response.json();
                 errorMsg = errorData.detail || errorMsg;
-            } catch {}
+            } catch { }
             throw new Error(errorMsg);
         }
     },
@@ -2444,7 +2444,7 @@ export const db = {
     },
 
     getBenefitsHistory: async (status?: string): Promise<any[]> => {
-        const url = status 
+        const url = status
             ? `${API_BASE_URL}/admin/benefits/history?status=${status}`
             : `${API_BASE_URL}/admin/benefits/history`;
         const response = await fetchWithAuth(url);

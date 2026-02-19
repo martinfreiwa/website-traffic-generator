@@ -30,7 +30,7 @@ const Sidebar: React.FC<SidebarProps> = ({ menuSections, currentView, onNavigate
         </div>
         <div>
           <h1 className="text-xl font-black text-white tracking-tighter leading-none">TRAFFIC</h1>
-          <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">Creator OS</p>
+          <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">Bot OS</p>
         </div>
       </div>
 
