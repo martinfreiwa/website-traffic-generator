@@ -3,8 +3,11 @@ steps:
     args: [
       'build',
       '--no-cache',
+      '--pull',
       '-t',
       'europe-west1-docker.pkg.dev/$PROJECT_ID/trafficgen/trafficgen:${_SHORT_SHA}',
+      '-t',
+      'europe-west1-docker.pkg.dev/$PROJECT_ID/trafficgen/trafficgen:latest',
       '.'
     ]
 
