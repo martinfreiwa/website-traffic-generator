@@ -1,0 +1,20 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="1200" height="630" fill="url(#paint0_linear)"/>
+<g style="mix-blend-mode:overlay" opacity="0.5">
+<path d="M1200 0H0V630H1200V0Z" fill="url(#paint1_radial)"/>
+</g>
+<text x="600" y="300" font-family="Inter, system-ui, sans-serif" font-weight="800" font-size="72" fill="white" text-anchor="middle" dominant-baseline="middle" style="text-shadow: 0 4px 20px rgba(0,0,0,0.25)">
+Organicvisit Review
+</text>
+<text x="600" y="380" font-family="Inter, system-ui, sans-serif" font-weight="600" font-size="48" fill="#94A3B8" text-anchor="middle" dominant-baseline="middle">2026</text>
+<defs>
+<linearGradient id="paint0_linear" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
+<stop stop-color="#0F172A"/>
+<stop offset="1" stop-color="#334155"/>
+</linearGradient>
+<radialGradient id="paint1_radial" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(600 315) rotate(90) scale(400 800)">
+<stop stop-color="#FF4D00" stop-opacity="0.3"/>
+<stop offset="1" stop-color="#FF4D00" stop-opacity="0"/>
+</radialGradient>
+</defs>
+</svg>

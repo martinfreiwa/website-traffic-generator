@@ -235,9 +235,18 @@ Questions? Contact us at support@traffic-creator.com"""
     )
 
 
-def send_welcome_email(email: str, name: str = "User") -> dict:
+def send_welcome_email(email: str, name: str = "User", password: str = None) -> dict:
     frontend_url = get_frontend_url()
     display_name = name if name and name != "User" else email.split("@")[0]
+    password_section = ""
+
+    if password:
+        password_section = f"""
+                                        <tr>
+                                            <td style="padding: 10px 0; border-bottom: 1px solid #E5E7EB;">
+                                                <p style="margin: 0; font-size: 14px; font-weight: 500; color: #374151;">Password: <strong style="color: #ff4d00;">{password}</strong></p>
+                                            </td>
+                                        </tr>"""
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -272,28 +281,14 @@ def send_welcome_email(email: str, name: str = "User") -> dict:
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 30px;">
                                 <tr>
                                     <td style="background-color: #F9FAFB; border-radius: 12px; padding: 24px;">
-                                        <p style="margin: 0 0 16px 0; font-size: 14px; font-weight: 700; color: #111827; text-transform: uppercase; letter-spacing: 0.5px;">Your Next Steps</p>
+                                        <p style="margin: 0 0 16px 0; font-size: 14px; font-weight: 700; color: #111827; text-transform: uppercase; letter-spacing: 0.5px;">Your Account Details</p>
                                         <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                                             <tr>
                                                 <td style="padding: 10px 0; border-bottom: 1px solid #E5E7EB;">
-                                                    <p style="margin: 0; font-size: 14px; font-weight: 500; color: #374151;">Create your first traffic project</p>
+                                                    <p style="margin: 0; font-size: 14px; font-weight: 500; color: #374151;">Email: <strong>{email}</strong></p>
                                                 </td>
                                             </tr>
-                                            <tr>
-                                                <td style="padding: 10px 0; border-bottom: 1px solid #E5E7EB;">
-                                                    <p style="margin: 0; font-size: 14px; font-weight: 500; color: #374151;">Configure geo-targeting for specific countries</p>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td style="padding: 10px 0; border-bottom: 1px solid #E5E7EB;">
-                                                    <p style="margin: 0; font-size: 14px; font-weight: 500; color: #374151;">Choose from various traffic sources</p>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td style="padding: 10px 0;">
-                                                    <p style="margin: 0; font-size: 14px; font-weight: 500; color: #374151;">Analyze your traffic statistics in real-time</p>
-                                                </td>
-                                            </tr>
+                                            {password_section}
                                         </table>
                                     </td>
                                 </tr>

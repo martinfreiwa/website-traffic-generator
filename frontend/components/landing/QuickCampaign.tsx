@@ -21,14 +21,12 @@ const QuickCampaign: React.FC<QuickCampaignProps> = ({ onSuccess }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  const timeOptions = [
-    { value: 15, label: '15 seconds' },
-    { value: 30, label: '30 seconds' },
-    { value: 60, label: '1 minute' },
-    { value: 120, label: '2 minutes' },
-    { value: 180, label: '3 minutes' },
-    { value: 300, label: '5 minutes' }
-  ];
+  const formatTimeOnPage = (seconds: number): string => {
+    if (seconds < 60) return `${seconds} seconds`;
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return secs > 0 ? `${mins}m ${secs}s` : `${mins} minute${mins > 1 ? 's' : ''}`;
+  };
 
   const validateForm = () => {
     if (!email || !email.includes('@')) {
@@ -55,7 +53,6 @@ const QuickCampaign: React.FC<QuickCampaignProps> = ({ onSuccess }) => {
     setIsSubmitting(true);
 
     try {
-      const timeOnPageLabel = timeOptions.find(t => t.value === timeOnPage)?.label || '30 seconds';
       const deviceSplit = { desktop: 60, mobile: 30, tablet: 10 };
 
       const response = await fetch(`${API_BASE_URL}/quick-campaign`, {
@@ -68,7 +65,7 @@ const QuickCampaign: React.FC<QuickCampaignProps> = ({ onSuccess }) => {
           total_visitors: visitors,
           settings: {
             bounce_rate: bounceRate,
-            time_on_page: `${timeOnPage} seconds`,
+            time_on_page: formatTimeOnPage(timeOnPage),
             device_split: deviceSplit
           }
         })

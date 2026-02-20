@@ -1,9 +1,19 @@
 User-agent: *
 Allow: /
-Disallow: /admin
-Disallow: /dashboard
-Disallow: /login
-Disallow: /signup
-Disallow: /forgot
+# Block Admin & Dashboard areas to save crawl budget
+Disallow: /dashboard/
+Disallow: /admin/
+Disallow: /auth/
+Disallow: /api/
+# Block internal search parameters to prevent duplicate content issues
+Disallow: /*?q=
+Disallow: /*?sort=
+Disallow: /*?filter=
 
-Sitemap: http://localhost:3000/sitemap.xml
+# Explicitly allow Googlebot to crawl CSS/JS to render pages correctly
+User-agent: Googlebot
+Allow: /*.js
+Allow: /*.css
+
+# Sitemap Location
+Sitemap: https://traffic-creator.com/sitemap.xml

@@ -86,25 +86,33 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
 
   const refreshData = async () => {
     try {
-      const [usersData, projectsData, transactionsData, ticketsData, settingsData, statsData] = await Promise.all([
+      // Sync all data from backend
+      const [usersData, transactionsData, statsData] = await Promise.all([
         db.syncUsers(),
-        db.getAdminProjects(),
-        db.getAllTransactionsAdmin(),
-        db.getTickets(),
-        db.getSystemSettings(),
-        db.getAdminStats()
+        db.syncAllTransactions(), // Ensure transactions are synced
+        db.getAdminStats(),
+        db.syncAdminProjects(),   // Sync projects (returns void)
+        db.syncTickets(),         // Sync tickets (returns void)
+        db.syncSettings(),        // Sync settings (returns void)
+        db.syncAlerts()           // Sync broadcasts/alerts (returns void)
       ]);
 
-      setUsers(usersData);
-      setProjects(projectsData);
-      setTransactions(transactionsData);
-      setTickets(ticketsData);
-      if (settingsData) setSettings(settingsData);
+      // Update state with returned data
+      setUsers(usersData || []);
+      setTransactions(transactionsData || []);
       if (statsData) setStats(statsData);
 
-      // These might still be sync or handled separately
-      setPricing(db.getPricing());
+      // Update state from cache for void-returning syncs
+      setProjects(db.getAdminProjects());
+      setTickets(db.getTickets());
       setAlerts(db.getAlerts());
+
+      const settingsData = db.getSystemSettings();
+      if (settingsData) setSettings(settingsData);
+
+      // Pricing requires settings to be loaded
+      setPricing(db.getPricing());
+
     } catch (e) {
       console.error("Failed to refresh admin data:", e);
     }
@@ -214,6 +222,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
             'admin-marketing': 'marketing',
             'admin-coupons': 'coupons',
             'admin-conversion': 'conversion',
+            'admin-benefits': 'benefits',
             'admin-bank-transfers': 'bank-transfers'
           };
           navigate(`/admin/${idToPath[id] || ''}`);

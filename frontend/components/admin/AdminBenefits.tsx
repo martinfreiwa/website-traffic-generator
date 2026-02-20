@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Clock, ExternalLink, AlertTriangle, Users, DollarSign, Gift, Trash2, Edit, Plus } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, ExternalLink, AlertTriangle, Users, DollarSign, Gift, Trash2, Edit, Plus, Save } from 'lucide-react';
 import { db } from '../../services/db';
 
 interface PendingBenefit {
@@ -14,7 +14,7 @@ interface PendingBenefit {
 }
 
 const AdminBenefits: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'pending' | 'types' | 'history'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'types' | 'history' | 'signup'>('pending');
   const [pendingBenefits, setPendingBenefits] = useState<PendingBenefit[]>([]);
   const [benefitTypes, setBenefitTypes] = useState<any[]>([]);
   const [historyBenefits, setHistoryBenefits] = useState<any[]>([]);
@@ -22,6 +22,10 @@ const AdminBenefits: React.FC = () => {
   const [selectedBenefit, setSelectedBenefit] = useState<PendingBenefit | null>(null);
   const [reviewForm, setReviewForm] = useState({ approvedValue: '', adminNotes: '', fraudFlagged: false, fraudReason: '' });
   const [processing, setProcessing] = useState(false);
+  
+  // Signup credits settings
+  const [signupCredits, setSignupCredits] = useState<number>(0);
+  const [savingCredits, setSavingCredits] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -29,18 +33,43 @@ const AdminBenefits: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const [pending, types, history] = await Promise.all([
+      const [pending, types, history, settingsRes] = await Promise.all([
         db.getPendingBenefits().catch(() => []),
         fetch(`${window.location.origin}/benefits/types`).then(r => r.json()).catch(() => []),
-        db.getBenefitsHistory().catch(() => [])
+        db.getBenefitsHistory().catch(() => []),
+        fetch(`${window.location.origin}/settings`).then(r => r.json()).catch(() => ({ settings: {} }))
       ]);
       setPendingBenefits(pending);
       setBenefitTypes(types);
       setHistoryBenefits(history);
+      
+      // Load signup credits from settings
+      const settings = settingsRes.settings || {};
+      setSignupCredits(settings.newUserSignupCredits || 0);
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveSignupCredits = async () => {
+    setSavingCredits(true);
+    try {
+      const currentSettingsRes = await fetch(`${window.location.origin}/settings`).then(r => r.json()).catch(() => ({ settings: {} }));
+      const currentSettings = currentSettingsRes.settings || {};
+      const newSettings = { ...currentSettings, newUserSignupCredits: signupCredits };
+      
+      await fetch(`${window.location.origin}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings: newSettings })
+      });
+      alert('Signup credits saved successfully!');
+    } catch (e: any) {
+      alert(e.message || 'Failed to save');
+    } finally {
+      setSavingCredits(false);
     }
   };
 
@@ -99,6 +128,9 @@ const AdminBenefits: React.FC = () => {
           </button>
           <button onClick={() => setActiveTab('history')} className={`px-4 py-2 text-xs font-bold uppercase ${activeTab === 'history' ? 'bg-[#ff4d00] text-white' : 'bg-gray-200'}`}>
             History
+          </button>
+          <button onClick={() => setActiveTab('signup')} className={`px-4 py-2 text-xs font-bold uppercase ${activeTab === 'signup' ? 'bg-[#ff4d00] text-white' : 'bg-gray-200'}`}>
+            Signup Credits
           </button>
         </div>
       </div>
@@ -247,6 +279,71 @@ const AdminBenefits: React.FC = () => {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Signup Credits Tab */}
+      {activeTab === 'signup' && (
+        <div className="bg-white border border-gray-200">
+          <div className="p-6 border-b border-gray-200">
+            <h3 className="text-lg font-bold text-gray-900">New User Signup Credits</h3>
+            <p className="text-sm text-gray-500 mt-1">Configure how many credits new users receive for free when they register</p>
+          </div>
+          <div className="p-6">
+            <div className="max-w-md">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Signup Credits Amount
+              </label>
+              <div className="flex items-center gap-4">
+                <div className="relative flex-1">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <DollarSign size={18} className="text-gray-400" />
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={signupCredits}
+                    onChange={(e) => setSignupCredits(parseFloat(e.target.value) || 0)}
+                    className="pl-10 pr-4 py-2 w-full border border-gray-300 focus:ring-2 focus:ring-[#ff4d00] focus:border-transparent"
+                    placeholder="0.00"
+                  />
+                </div>
+                <span className="text-gray-500">credits</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Set to 0 to disable signup credits. New users will not receive any free credits upon registration.
+              </p>
+              
+              <div className="mt-6 flex items-center gap-4">
+                <button
+                  onClick={handleSaveSignupCredits}
+                  disabled={savingCredits}
+                  className="px-4 py-2 bg-[#ff4d00] text-white font-bold uppercase text-xs flex items-center gap-2 hover:bg-[#e64600] disabled:opacity-50"
+                >
+                  {savingCredits ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Save size={16} />
+                  )}
+                  {savingCredits ? 'Saving...' : 'Save Settings'}
+                </button>
+              </div>
+
+              <div className="mt-8 p-4 bg-blue-50 border border-blue-200">
+                <h4 className="text-sm font-bold text-blue-900 flex items-center gap-2">
+                  <Users size={16} />
+                  How it works
+                </h4>
+                <ul className-2 text-xs="mt text-blue-800 space-y-1">
+                  <li>• When a new user registers, they will automatically receive {signupCredits} credits</li>
+                  <li>• Credits are added to their account balance immediately</li>
+                  <li>• A transaction record is created for tracking</li>
+                  <li>• This setting applies to all new registrations</li>
+                </ul>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

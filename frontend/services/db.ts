@@ -1,8 +1,18 @@
 /// <reference types="vite/client" />
 import { Project, PriceClass, ProjectSettings, Transaction, User, Ticket, SystemSettings, Notification, TrafficLog, SystemAlert, LiveVisitor, Broadcast, AdminStats, Coupon, MarketingCampaign, ConversionSettings, ActivityLog, UserSession, ImpersonationLog, BalanceAdjustmentLog, EmailLog, UserNotificationPrefs, UserReferral, AdminUserDetails } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin;
+export const API_BASE_URL = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+const SSO_TARGET_DOMAIN = import.meta.env.VITE_SSO_TARGET_DOMAIN || '';
 
+const isSsoEnabled = (): boolean => {
+    if (!SSO_TARGET_DOMAIN || typeof window === 'undefined') return false;
+    try {
+        const ssoOrigin = new URL(SSO_TARGET_DOMAIN).origin;
+        return window.location.origin !== ssoOrigin;
+    } catch {
+        return false;
+    }
+};
 
 const getStorageItem = (key: string) => {
     if (typeof localStorage !== 'undefined') {
@@ -231,10 +241,96 @@ export const db = {
         };
 
         db.setCurrentUser(mappedUser);
+        
+        if (isSsoEnabled()) {
+            const currentPath = window.location.pathname + window.location.search;
+            const ssoUrl = `${SSO_TARGET_DOMAIN}/sso?token=${encodeURIComponent(data.access_token)}&return=${encodeURIComponent(currentPath)}`;
+            window.location.href = ssoUrl;
+        }
+        
         return mappedUser;
     },
 
-    register: async (name: string, email: string, pass: string) => {
+    validateSsoToken: async (token: string): Promise<{ valid: boolean; user?: User; token?: string }> => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/auth/validate-sso`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token })
+            });
+            
+            if (!response.ok) {
+                return { valid: false };
+            }
+            
+            const data = await response.json();
+            if (!data.valid || !data.user) {
+                return { valid: false };
+            }
+            
+            const userData = data.user;
+            const mappedUser: User = {
+                id: userData.id,
+                email: userData.email,
+                name: userData.email?.split('@')[0] || userData.name || 'User',
+                role: userData.role,
+                balance: userData.balance,
+                balanceEconomy: userData.balance_economy,
+                balanceProfessional: userData.balance_professional,
+                balanceExpert: userData.balance_expert,
+                status: 'active',
+                joinedDate: userData.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
+                projectsCount: userData.projects_count || 0,
+                apiKey: userData.api_key,
+                isVerified: userData.is_verified ?? false,
+                phone: userData.phone,
+                company: userData.company,
+                vatId: userData.vat_id,
+                address: userData.address,
+                city: userData.city,
+                country: userData.country,
+                zip: userData.zip,
+                website: userData.website,
+                displayName: userData.display_name,
+                bio: userData.bio,
+                jobTitle: userData.job_title,
+                publicProfile: userData.public_profile,
+                twoFactorEnabled: userData.two_factor_enabled,
+                emailFrequency: userData.email_frequency,
+                loginNotificationEnabled: userData.login_notification_enabled,
+                newsletterSub: userData.newsletter_sub,
+                soundEffects: userData.sound_effects,
+                developerMode: userData.developer_mode,
+                apiWhitelist: userData.api_whitelist,
+                webhookSecret: userData.webhook_secret,
+                accessibility: userData.accessibility,
+                socialLinks: userData.social_links,
+                loginHistory: userData.login_history,
+                recoveryEmail: userData.recovery_email,
+                timezone: userData.timezone,
+                language: userData.language,
+                themeAccentColor: userData.theme_accent_color,
+                skillsBadges: userData.skills_badges,
+                referralCode: userData.referral_code,
+                supportPin: userData.support_pin,
+                dateFormat: userData.date_format,
+                numberFormat: userData.number_format,
+                requirePasswordReset: userData.require_password_reset,
+                gamificationXp: userData.gamification_xp,
+                gamificationLevel: userData.gamification_level,
+                gamificationTotalSpent: userData.gamification_total_spent,
+                gamificationPermanentDiscount: userData.gamification_permanent_discount,
+                streakDays: userData.streak_days,
+                streakBest: userData.streak_best
+            };
+            
+            return { valid: true, user: mappedUser, token };
+        } catch {
+            return { valid: false };
+        }
+    },
+
+    register: async (name: string, email: string, pass: string): Promise<User | void> => {
         const response = await fetch(`${API_BASE_URL}/auth/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -244,7 +340,12 @@ export const db = {
             const err = await response.json();
             throw new Error(err.detail || 'Registration failed');
         }
-        return await response.json();
+        
+        if (isSsoEnabled()) {
+            return db.login(email, pass);
+        }
+        
+        await response.json();
     },
 
     verifyEmail: async (code: string) => {
@@ -524,6 +625,13 @@ export const db = {
         await fetchWithAuth(`${API_BASE_URL}/projects/${id}`, {
             method: 'DELETE'
         });
+        await db.syncProjects();
+        return db.getProjects();
+    },
+
+    cloneProject: async (id: string) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/projects/${id}/clone`, { method: 'POST' });
+        if (!response.ok) throw new Error('Failed to clone project');
         await db.syncProjects();
         return db.getProjects();
     },
@@ -937,6 +1045,11 @@ export const db = {
 
     markNotificationRead: async (id: string) => {
         await fetchWithAuth(`${API_BASE_URL}/notifications/${id}/read`, { method: 'PUT' });
+        await db.syncNotifications();
+    },
+
+    markAllNotificationsRead: async () => {
+        await fetchWithAuth(`${API_BASE_URL}/notifications/mark-all-read`, { method: 'PUT' });
         await db.syncNotifications();
     },
 

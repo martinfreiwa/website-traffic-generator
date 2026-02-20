@@ -14,7 +14,7 @@ user_id_ctx: ContextVar[str] = ContextVar("user_id", default="")
 _sentry_initialized = False
 _logging_initialized = False
 
-LOGS_DIR = os.path.join(os.path.dirname(__file__), "logs")
+LOGS_DIR = os.environ.get("LOGS_DIR", os.path.join(os.path.dirname(__file__), "logs"))
 ERROR_LOG_FILE = os.path.join(LOGS_DIR, "errors.log")
 
 
@@ -54,19 +54,25 @@ def init_logging(log_level: str = "INFO"):
     if _logging_initialized:
         return
 
-    os.makedirs(LOGS_DIR, exist_ok=True)
+    try:
+        os.makedirs(LOGS_DIR, exist_ok=True)
+    except (OSError, PermissionError):
+        pass
 
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, log_level.upper(), logging.INFO))
 
     root_logger.handlers.clear()
 
-    file_handler = RotatingFileHandler(
-        ERROR_LOG_FILE, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
-    )
-    file_handler.setLevel(logging.ERROR)
-    file_handler.setFormatter(JSONFormatter())
-    root_logger.addHandler(file_handler)
+    try:
+        file_handler = RotatingFileHandler(
+            ERROR_LOG_FILE, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
+        )
+        file_handler.setLevel(logging.ERROR)
+        file_handler.setFormatter(JSONFormatter())
+        root_logger.addHandler(file_handler)
+    except (OSError, PermissionError):
+        pass
 
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(getattr(logging, log_level.upper(), logging.INFO))

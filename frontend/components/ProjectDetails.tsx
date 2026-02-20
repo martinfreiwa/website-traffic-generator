@@ -286,6 +286,19 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
         }
     };
 
+    const handleCloneProject = async () => {
+        if (!project) return;
+        if (!confirm(`Clone "${project.name}"? A copy will be created with status "paused".`)) return;
+        try {
+            await db.cloneProject(project.id);
+            if (onUpdate) onUpdate();
+            navigate('/dashboard/campaigns');
+        } catch (error) {
+            console.error("Failed to clone project:", error);
+            alert("Failed to clone project. Please try again.");
+        }
+    };
+
     const handleDeleteProject = async () => {
         if (!project) return;
         if (!confirm(`Are you sure you want to delete "${project.name}"? This action cannot be undone.`)) return;
@@ -515,7 +528,10 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
                             <Lock size={14} /> Read Only
                         </div>
                     )}
-                    <button className="flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider text-gray-600 hover:text-[#ff4d00] hover:bg-orange-50 border border-gray-200 hover:border-[#ff4d00] transition-colors">
+                    <button
+                        onClick={handleCloneProject}
+                        className="flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider text-gray-600 hover:text-[#ff4d00] hover:bg-orange-50 border border-gray-200 hover:border-[#ff4d00] transition-colors"
+                    >
                         <Copy size={14} className="text-[#ff4d00]" /> Clone
                     </button>
                     <button 

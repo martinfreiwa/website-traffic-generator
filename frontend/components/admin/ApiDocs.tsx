@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { FileCode, Terminal, Play, CheckCircle, AlertCircle, Trash2, Copy, Send, Database, Zap, Key, Activity, Clock, Server } from 'lucide-react';
+import { API_BASE_URL } from '../../services/db';
 
 const ApiDocs: React.FC = () => {
     const [testEndpoint, setTestEndpoint] = useState('GET /stats');
@@ -37,7 +38,7 @@ const ApiDocs: React.FC = () => {
     const handleRunTest = async () => {
         setIsTesting(true);
         const [method, path] = testEndpoint.split(' ');
-        const baseUrl = 'http://localhost:8001';
+        const baseUrl = API_BASE_URL;
 
         const startTime = performance.now();
         addLog('req', `${method} ${path}\nPayload: ${testPayload}`);

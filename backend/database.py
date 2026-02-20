@@ -11,6 +11,7 @@ db_host = os.getenv("DB_HOST", "")
 db_port = os.getenv("DB_PORT", "5432")
 
 if db_host and db_user and db_password:
+    print(f"Connecting using Direct TCP to {db_host}")
     SQLALCHEMY_DATABASE_URL = (
         f"postgresql+psycopg2://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
     )
@@ -21,10 +22,14 @@ if db_host and db_user and db_password:
         pool_recycle=1800,
         pool_pre_ping=True,
     )
-elif cloud_sql_connection_name and db_user and db_password:
+elif cloud_sql_connection_name:
+    print(f"Connecting using Cloud SQL Socket: {cloud_sql_connection_name}")
+    if not db_password:
+        print("WARNING: DB_PASSWORD is not set or is empty!")
+
     SQLALCHEMY_DATABASE_URL = (
-        f"postgresql+psycopg2://{db_user}:{db_password}@/trafficgen"
-        f"?host=/cloudsql/{cloud_sql_connection_name}"
+        f"postgresql+psycopg2://{db_user}:{db_password}@/{db_name}"
+        f"?host=/cloudsql/{cloud_sql_connection_name}&connect_timeout=10"
     )
     engine = create_engine(
         SQLALCHEMY_DATABASE_URL,
@@ -34,6 +39,7 @@ elif cloud_sql_connection_name and db_user and db_password:
         pool_pre_ping=True,
     )
 else:
+    print("Connecting using SQLite Fallback")
     db_url = os.getenv("DATABASE_URL", "sqlite:///./traffic_nexus.db")
     connect_args = {}
     if "sqlite" in db_url:

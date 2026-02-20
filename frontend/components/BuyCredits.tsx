@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { db } from '../services/db';
+import { db, API_BASE_URL } from '../services/db';
 import { TIERS, PRICING_MATRIX, VOLUME_STEPS, BULK_OPTIONS, TierId, TierDefinition } from '../constants/pricing';
 import {
     Check, CreditCard, Zap, Shield, Wallet, ArrowRight, Lock,
@@ -237,7 +237,7 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
             formData.append('notes', `Bank transfer for ${totalVisitors.toLocaleString()} ${selectedTier.name} visitors - Ref: ${transferReference}`);
 
             const token = localStorage.getItem('tgp_token');
-            const response = await fetch('http://127.0.0.1:8001/bank-transfer/proof', {
+            const response = await fetch(`${API_BASE_URL}/bank-transfer/proof`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`

@@ -1,10 +1,9 @@
 #!/bin/bash
 set -e
 
-PROJECT_ID=$(gcloud config get-value project)
-SERVICE_NAME="traffic-gen-pro"
-REGION="us-central1"
-IMAGE_TAG="gcr.io/$PROJECT_ID/$SERVICE_NAME"
+PROJECT_ID="traffic-creator-487516"
+REGION="europe-west1"
+SERVICE_NAME="trafficgen"
 
 echo "=================================================="
 echo "DEPLOYING TO GOOGLE CLOUD RUN"
@@ -13,43 +12,42 @@ echo "Service: $SERVICE_NAME"
 echo "Region:  $REGION"
 echo "=================================================="
 
-# 1. Create Production Env Config for Frontend (Force relative/same-origin API)
-echo "Step 1: Configuring frontend for production build..."
-# Setting VITE_API_URL to empty string ensures the frontend code uses window.location.origin
+# 1. Configure frontend for production
+echo "Step 1: Configuring frontend for production..."
 echo "VITE_API_URL=" > frontend/.env.production
 
 # 2. Build Frontend
 echo "Step 2: Building frontend..."
 cd frontend
-# Installing dependencies just in case
-npm install --legacy-peer-deps
 npm run build
 cd ..
 
-# 3. Prepare Backend Static Files
-echo "Step 3: Copying frontend build to backend/static..."
-# Ensure clean slate
-rm -rf backend/static
-mkdir -p backend/static
-# Copy build artifacts
-cp -r frontend/dist/* backend/static/
+# 3. Clean old static files and copy new build
+echo "Step 3: Cleaning old static files and copying new build..."
+rm -rf backend/static/assets/*
+rm -f backend/static/index.html
+rsync -av --delete frontend/dist/ backend/static/
 
-# 4. Build and Submit Container
-echo "Step 4: Building and pushing container to Container Registry..."
-cd backend
-gcloud builds submit --tag $IMAGE_TAG .
-
-# 5. Deploy to Cloud Run
-echo "Step 5: Deploying service to Cloud Run..."
-# Note: We set a default secret key. You should update this in the Cloud Console for security.
-gcloud run deploy $SERVICE_NAME \
-  --image $IMAGE_TAG \
-  --platform managed \
-  --region $REGION \
+# 4. Deploy to Cloud Run
+echo "Step 4: Deploying to Cloud Run..."
+gcloud beta run deploy $SERVICE_NAME \
+  --source=./backend \
+  --region=$REGION \
   --allow-unauthenticated \
-  --set-env-vars JWT_SECRET_KEY="prod_secret_key_generated_during_deploy",ACCESS_TOKEN_EXPIRE_MINUTES="1440"
+  --memory=512Mi \
+  --cpu=1 \
+  --port=8080 \
+  --min-instances=1 \
+  --max-instances=3 \
+  --set-env-vars=ENVIRONMENT=production,LOG_LEVEL=INFO,ALLOWED_ORIGINS=https://traffic-creator.com
+
+# 5. Update traffic to latest revision
+echo "Step 5: Updating traffic to latest revision..."
+LATEST_REVISION=$(gcloud beta run revisions list --service=$SERVICE_NAME --region=$REGION --format="value(metadata.name)" | head -1)
+echo "Latest revision: $LATEST_REVISION"
+gcloud beta run services update-traffic $SERVICE_NAME --region=$REGION --to-revisions=$LATEST_REVISION=100
 
 echo "=================================================="
 echo "DEPLOYMENT SUCCESSFUL!"
-echo "Your service should be live shortly."
+echo "URL: https://traffic-creator.com"
 echo "=================================================="

@@ -320,6 +320,7 @@ class Ticket(Base):
 
     user = relationship("User")
     project = relationship("Project", foreign_keys=[project_id])
+    ticket_messages = relationship("TicketMessage", back_populates="ticket")
 
 
 class TicketMessage(Base):
@@ -331,7 +332,7 @@ class TicketMessage(Base):
     message = Column(Text)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
-    ticket = relationship("Ticket")
+    ticket = relationship("Ticket", back_populates="ticket_messages")
 
 
 class Notification(Base):
@@ -631,3 +632,27 @@ class SystemSettings(Base):
     updated_at = Column(
         DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
     )
+
+
+class BlogArticle(Base):
+    __tablename__ = "blog_articles"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    slug = Column(String, unique=True, index=True, nullable=False)
+    title = Column(String, nullable=False)
+    excerpt = Column(Text, nullable=True)
+    content = Column(Text, nullable=False)
+    author = Column(String, default="Martin Freiwald")
+    role = Column(String, default="Traffic Expert")
+    date = Column(String, nullable=True)
+    read_time = Column(String, nullable=True)
+    image = Column(String, nullable=True)
+    category = Column(String, default="General")
+    tags = Column(JSON, default=list)
+    seo_description = Column(Text, nullable=True)
+    is_published = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(
+        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+    )
+

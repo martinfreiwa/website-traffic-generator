@@ -3,7 +3,7 @@ import {
     User, Lock, Bell, Save, Camera, Mail, Phone, MapPin, Building2, Globe, Hash,
     Shield, CheckCircle2, AlertTriangle, Clock
 } from 'lucide-react';
-import { db } from '../services/db';
+import { db, API_BASE_URL } from '../services/db';
 import { User as UserType, PaymentMethod } from '../types';
 
 type ProfileTab = 'contact' | 'security' | 'notifications';
@@ -183,7 +183,7 @@ const Profile: React.FC = () => {
                         <div className="relative inline-block mb-6 group">
                             <div className="w-32 h-32 bg-gray-100 rounded-full flex items-center justify-center border-4 border-white shadow-lg mx-auto overflow-hidden">
                                 {user.avatarUrl ? (
-                                    <img src={`http://127.0.0.1:8001${user.avatarUrl}`} alt={user.name} className="w-full h-full object-cover" />
+                                    <img src={`${API_BASE_URL}${user.avatarUrl}`} alt={user.name} className="w-full h-full object-cover" />
                                 ) : (
                                     <span className="text-4xl font-black text-gray-300">
                                         {user.name.split(' ').map(n => n[0]).join('')}

@@ -53,7 +53,7 @@ const Header: React.FC<HeaderProps> = ({ title, onMobileMenuClick, isAdmin = fal
   };
 
   const handleMarkAllRead = async () => {
-    // db.markAllNotificationsRead(isAdmin ? 'admin' : 'u1');
+    await db.markAllNotificationsRead();
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   };
 

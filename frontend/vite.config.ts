@@ -28,6 +28,8 @@ export default defineConfig(({ mode }) => {
         '/start': 'http://localhost:8000',
         '/stop': 'http://localhost:8000',
         '/proxy': 'http://localhost:8000',
+        '/api/blog': 'http://localhost:8000',
+        '/img': 'http://localhost:8000',
       },
     },
     plugins: [react()],

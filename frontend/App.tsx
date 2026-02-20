@@ -16,6 +16,7 @@ import PricingPage from './components/PricingPage';
 import CookieConsent from './components/CookieConsent';
 import VerifyEmail from './components/VerifyEmail';
 import ResetPassword from './components/ResetPassword';
+import SSOHandler from './components/SSOHandler';
 import { db } from './services/db';
 
 interface ErrorBoundaryProps {
@@ -141,6 +142,7 @@ const App: React.FC = () => {
                 <Route path="/forgot" element={<Auth view="forgot" onLogin={handleLogin} onNavigate={(v) => navigate(`/${v}`)} />} />
                 <Route path="/verify-email" element={<VerifyEmail />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/sso" element={<SSOHandler />} />
 
                 {/* Protected Routes */}
                 <Route path="/dashboard/*" element={
@@ -178,7 +180,7 @@ const App: React.FC = () => {
                 <Route path="/landing2" element={<ConversionLandingPage onLogin={() => navigate('/login')} onNavigate={(page) => navigate(`/${page}`)} />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-            <ChatWidget />
+            {/* <ChatWidget /> */}
             <CookieConsent />
         </ErrorBoundary>
     );

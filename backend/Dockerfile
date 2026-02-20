@@ -24,8 +24,8 @@ RUN pip install sse-starlette # Ensure this is present if missed in reqs
 COPY . .
 
 # Expose port (Cloud Run uses PORT env var, default 8080)
-ENV PORT=8000
-EXPOSE 8000
+ENV PORT=8080
+EXPOSE 8080
 
 # Start application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}"]

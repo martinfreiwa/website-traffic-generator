@@ -150,23 +150,8 @@ class TrafficScheduler:
         self.is_running = True
 
         # Log startup status
-        db = SessionLocal()
-        try:
-            active_count = (
-                db.query(models.Project)
-                .filter(models.Project.status == "active")
-                .count()
-            )
-            proxy_count = (
-                db.query(models.Proxy).filter(models.Proxy.is_active == True).count()
-            )
-            logger.info(
-                f"Scheduler startup: {active_count} active projects, {proxy_count} active proxies"
-            )
-        except Exception as e:
-            logger.error(f"Failed to check startup status: {e}")
-        finally:
-            db.close()
+        # Removed blocking DB check to prevent startup hang
+        logger.info("Scheduler starting background loop...")
 
         self._task = asyncio.create_task(self._loop())
         logger.info("Enhanced Traffic Scheduler started with Precise Pacing")

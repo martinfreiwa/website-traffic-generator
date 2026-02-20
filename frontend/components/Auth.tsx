@@ -45,7 +45,14 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigate, view }) => {
                     throw new Error('Password must be at least 6 characters long');
                 }
 
-                await db.register(name, email, password);
+                const userData = await db.register(name, email, password);
+                
+                if (userData && userData.role) {
+                    await db.syncAll();
+                    onLogin(userData.role);
+                    return;
+                }
+
                 navigate(`/verify-email?email=${encodeURIComponent(email)}`);
                 return;
 

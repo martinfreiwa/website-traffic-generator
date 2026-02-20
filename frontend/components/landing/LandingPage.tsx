@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import SEO from '../SEO';
 import { Link } from 'react-router-dom';
-import { ArrowRight, BarChart3, Globe, ShieldCheck, ChevronDown, ChevronUp, Target, Clock, Code, TrendingUp, BarChart2, Bitcoin, Briefcase, Search, Zap, AlertTriangle, Cpu, Activity, Moon, Radio, MapPin, Link2, Check, Star, Sparkles, Users, Calculator } from 'lucide-react';
+import { ArrowRight, BarChart3, Globe, ShieldCheck, ChevronDown, ChevronUp, Target, Clock, Code, TrendingUp, BarChart2, Bitcoin, Briefcase, Search, Zap, AlertTriangle, Cpu, Activity, Moon, Radio, MapPin, Link2, Check, Star, Sparkles, Users, Calculator, Flame, Trophy, Calendar, Gift, UserPlus, ArrowUpRight, Medal, Crown, MousePointer } from 'lucide-react';
 import QuickCampaign from './QuickCampaign';
 import { TIERS, PRICING_MATRIX, formatPrice, formatCPM, getCPM, TierId } from '../../constants/pricing';
 
@@ -14,7 +14,7 @@ interface LandingPageProps {
 const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [pricingMode, setPricingMode] = useState<'business' | 'agency'>('business');
-  const [selectedTier, setSelectedTier] = useState<TierId>('professional');
+  const [selectedTier, setSelectedTier] = useState<TierId>('economy');
 
   const toggleFaq = (index: number) => {
     setOpenFaq(openFaq === index ? null : index);
@@ -168,6 +168,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
             <div className="hidden md:flex gap-8 text-sm font-bold uppercase tracking-wide text-gray-500">
               <a href="#problem" className="hover:text-[#ff4d00] transition-colors">The Problem</a>
               <a href="#features" className="hover:text-[#ff4d00] transition-colors">Features</a>
+              <a href="#streak-bonus" className="hover:text-[#ff4d00] transition-colors">Unlimited Free Traffic</a>
               <Link to="/pricing" className="hover:text-[#ff4d00] transition-colors uppercase">Pricing</Link>
             </div>
             <Link
@@ -287,6 +288,108 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
       {/* Quick Campaign Section */}
       <section id="quick-campaign" className="py-24 px-6 bg-orange-50/50">
         <QuickCampaign />
+      </section>
+
+      {/* Daily Streak Bonus Section */}
+      <section id="streak-bonus" className="py-24 px-6 bg-[#FAFAFA]">
+        <div className="max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-orange-50 border border-orange-100 text-[#ff4d00] text-xs font-bold uppercase tracking-wider mb-6 animate-in fade-in slide-in-from-bottom-4">
+              <Flame size={14} className="fill-[#ff4d00]" />
+              100% Free Forever
+            </div>
+            <h2 className="text-4xl md:text-5xl font-black text-gray-900 mb-6 tracking-tight">
+              Get Up to 20,000 <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#ff4d00] to-orange-500">Free Hits Daily</span>
+            </h2>
+            <p className="text-xl text-gray-500 max-w-2xl mx-auto">
+              Just log in and claim. No credit card. No purchase. Just free traffic.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+            {/* 30-Day Streak Card - Main Visual */}
+            <div className="lg:col-span-8 bg-white rounded-3xl p-8 border border-gray-100 shadow-xl shadow-orange-500/5 overflow-hidden relative">
+              {/* Header for card */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                    <Trophy className="text-[#ff4d00]" size={24} />
+                    30-Day Streak
+                  </h3>
+                  <p className="text-gray-500 text-sm mt-1">free hits per month — that's real traffic to your website</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-4xl font-black text-gray-900">342,000</div>
+                  <div className="text-sm font-medium text-[#ff4d00]">monthly potential</div>
+                </div>
+              </div>
+
+              {/* Streak Steps */}
+              <div className="space-y-3">
+                {[
+                  { days: 'Day 1-2', amount: '1,000', icon: MousePointer },
+                  { days: 'Day 3-4', amount: '2,000', icon: Users },
+                  { days: 'Day 5-6', amount: '3,000', icon: TrendingUp },
+                  { days: 'Day 7-13', amount: '10,000', icon: Zap, highlight: true },
+                  { days: 'Day 14-29', amount: '15,000', icon: Flame, highlight: true },
+                  { days: 'Day 30+', amount: '20,000', icon: Trophy, highlight: true, last: true }
+                ].map((step, i) => (
+                  <div key={i} className={`flex items-center justify-between p-4 rounded-2xl border transition-all hover:scale-[1.01] ${step.highlight ? 'bg-orange-50/50 border-orange-100' : 'bg-gray-50/50 border-gray-100'}`}>
+                    <div className="flex items-center gap-4">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${step.highlight ? 'bg-white text-[#ff4d00] shadow-sm' : 'bg-white text-gray-400'}`}>
+                        <step.icon size={20} />
+                      </div>
+                      <span className={`font-bold ${step.highlight ? 'text-gray-900' : 'text-gray-500'}`}>{step.days}</span>
+                    </div>
+                    <div className="text-right">
+                      <div className={`text-xl font-black ${step.last ? 'text-[#ff4d00]' : 'text-gray-900'}`}>{step.amount}</div>
+                      <div className="text-xs text-gray-400 font-medium">hits/day</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Right Column - Stats and Value */}
+            <div className="lg:col-span-4 space-y-6">
+              {/* Yearly Potential */}
+              <div className="bg-black text-white rounded-3xl p-8 relative overflow-hidden flex flex-col justify-between group h-min min-h-[300px]">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-[#ff4d00]/30 rounded-full blur-3xl group-hover:bg-[#ff4d00]/50 transition-colors duration-500"></div>
+                <div className="relative z-10">
+                  <div className="w-12 h-12 bg-gray-800 rounded-2xl flex items-center justify-center mb-6 border border-gray-700 text-[#ff4d00]">
+                    <Calendar size={24} />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-300">Yearly Potential</h3>
+                  <div className="text-4xl lg:text-5xl font-black mt-3 tracking-tight">7,042,000</div>
+                </div>
+                <p className="text-gray-400 text-sm font-medium relative z-10 mt-6">
+                  free hits per year with consistent daily claims
+                </p>
+              </div>
+
+              {/* Value Calculation */}
+              <div className="bg-[#FFF1EB] rounded-3xl p-8 flex flex-col justify-center h-min min-h-[220px]">
+                <div className="mb-4">
+                  <span className="text-[#ff4d00] font-bold text-sm uppercase tracking-wider">What's it worth?</span>
+                </div>
+                <div className="text-5xl font-black text-gray-900 mb-2">€700+</div>
+                <p className="text-gray-600 font-medium">in value based on our standard CPM pricing</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Social Proof Banner */}
+          <div className="max-w-3xl mx-auto mt-12 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-300">
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 flex items-center justify-center gap-3 shadow-lg hover:-translate-y-1 transition-transform cursor-default">
+              <span className="text-2xl">🎉</span>
+              <p className="font-bold text-gray-900">
+                <span className="text-[#ff4d00]">12,847 users</span> claimed their free bonus today
+              </p>
+            </div>
+          </div>
+
+        </div>
       </section>
 
       {/* THE PROBLEM SECTION - DARK THEME */}
@@ -461,11 +564,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
                   <button
                     key={tier.id}
                     onClick={() => setSelectedTier(tier.id)}
-                    className={`px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all ${
-                      selectedTier === tier.id
+                    className={`px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all ${selectedTier === tier.id
                         ? 'bg-[#ff4d00] text-white'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    } ${tier.popular ? 'ring-2 ring-[#ff4d00]/30' : ''}`}
+                      } ${tier.popular ? 'ring-2 ring-[#ff4d00]/30' : ''}`}
                   >
                     {tier.name}
                     {tier.popular && <span className="ml-2 text-[10px]">★</span>}
@@ -480,9 +582,14 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
                   { volume: 1000000, name: "Business", desc: "Impact domain authority", highlight: true, badge: "Best Value", badgeColor: "bg-green-500" },
                   { volume: 10000000, name: "Enterprise", desc: "Competitive niches" },
                 ].map((p, i) => {
-                  const price = PRICING_MATRIX[selectedTier][p.volume]?.[1] || 0;
-                  const cpm = getCPM(selectedTier, p.volume, 1);
+                  const tierPricing = PRICING_MATRIX[selectedTier]?.[p.volume];
+                  const price = tierPricing?.[1] ?? null;
+                  const cpm = price !== null ? getCPM(selectedTier, p.volume, 1) : 0;
                   const tier = TIERS.find(t => t.id === selectedTier);
+                  
+                  if (price === null) {
+                    return null;
+                  }
                   return (
                     <div key={i} className={`relative group transition-all duration-500 ${p.highlight ? 'md:-mt-4 md:mb-4' : ''}`}>
                       <div className={`h-full flex flex-col bg-white transition-all duration-300 rounded-2xl ${p.highlight ? 'border-2 border-[#ff4d00] shadow-2xl shadow-[#ff4d00]/20 scale-105 z-10' : 'border border-gray-100 hover:border-[#ff4d00]/50 hover:shadow-xl'} p-6`}>
@@ -491,7 +598,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
                             {p.badge}
                           </div>
                         )}
-                        
+
                         <div className="mb-4">
                           <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">{p.name}</h3>
                           <div className="flex items-baseline gap-1">
@@ -529,7 +636,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20"></div>
                 <div className="absolute top-0 right-0 w-64 h-64 bg-[#ff4d00]/20 rounded-full blur-3xl"></div>
                 <div className="absolute bottom-0 left-0 w-48 h-48 bg-[#ff4d00]/10 rounded-full blur-3xl"></div>
-                
+
                 <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
                   <div className="flex items-center gap-6">
                     <div className="w-16 h-16 bg-[#ff4d00] rounded-2xl flex items-center justify-center shadow-lg shadow-[#ff4d00]/30">
@@ -568,7 +675,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
                           <Star size={10} /> Best Value
                         </div>
                       )}
-                      
+
                       <div className="mb-6">
                         <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400 mb-2">{p.name}</h3>
                         <div className="flex items-baseline gap-1">
@@ -723,7 +830,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
             <Link to="/legal/terms" className="hover:text-white uppercase">Terms of Service</Link>
           </div>
           <div className="text-xs text-white/60">
-            © 2025 Traffic Creator Inc.
+            © 2026 Traffic Creator Inc.
           </div>
         </div>
       </footer>

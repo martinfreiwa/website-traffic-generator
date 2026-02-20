@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../services/db';
+import { db, API_BASE_URL } from '../../services/db';
 import { CheckCircle, XCircle, Clock, Eye, ExternalLink, FileText, AlertCircle, RefreshCw, Download } from 'lucide-react';
 
 interface BankTransferProof {
@@ -141,7 +141,7 @@ const AdminBankTransfers: React.FC = () => {
                                     <td className="px-6 py-4 text-right">
                                         <div className="flex items-center gap-2 justify-end">
                                             <a
-                                                href={`http://127.0.0.1:8001${transfer.file_url}`}
+                                                href={`${API_BASE_URL}${transfer.file_url}`}
                                                 download={transfer.file_name}
                                                 className="text-gray-400 hover:text-[#ff4d00] transition-colors"
                                                 title="Download"
@@ -216,13 +216,13 @@ const AdminBankTransfers: React.FC = () => {
                                                     <FileText size={32} className="text-red-500" />
                                                     <div>
                                                         <p className="text-sm font-bold">{selectedTransfer.file_name}</p>
-                                                        <a href={`http://127.0.0.1:8001${selectedTransfer.file_url}`} target="_blank" rel="noopener noreferrer" className="text-xs text-[#ff4d00] hover:underline flex items-center gap-1">
+                                                        <a href={`${API_BASE_URL}${selectedTransfer.file_url}`} target="_blank" rel="noopener noreferrer" className="text-xs text-[#ff4d00] hover:underline flex items-center gap-1">
                                                             Open PDF <ExternalLink size={10} />
                                                         </a>
                                                     </div>
                                                 </div>
                                                 <a 
-                                                    href={`http://127.0.0.1:8001${selectedTransfer.file_url}`}
+                                                    href={`${API_BASE_URL}${selectedTransfer.file_url}`}
                                                     download={selectedTransfer.file_name}
                                                     className="bg-black text-white px-4 py-2 text-xs font-bold uppercase tracking-wider hover:bg-[#ff4d00] transition-colors flex items-center gap-2"
                                                 >
@@ -231,9 +231,9 @@ const AdminBankTransfers: React.FC = () => {
                                             </div>
                                         ) : (
                                             <div className="space-y-3">
-                                                <img src={`http://127.0.0.1:8001${selectedTransfer.file_url}`} alt="Proof" className="w-full h-auto max-h-64 object-contain" />
+                                                <img src={`${API_BASE_URL}${selectedTransfer.file_url}`} alt="Proof" className="w-full h-auto max-h-64 object-contain" />
                                                 <a 
-                                                    href={`http://127.0.0.1:8001${selectedTransfer.file_url}`}
+                                                    href={`${API_BASE_URL}${selectedTransfer.file_url}`}
                                                     download={selectedTransfer.file_name}
                                                     className="inline-flex items-center gap-2 bg-black text-white px-4 py-2 text-xs font-bold uppercase tracking-wider hover:bg-[#ff4d00] transition-colors"
                                                 >

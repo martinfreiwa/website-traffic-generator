@@ -529,7 +529,7 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ projects, balance, onNavi
                             </div>
                             <div className="flex gap-1.5 h-1.5 mb-3">
                                 {[1, 2, 3, 4, 5, 6, 7].map(i => (
-                                    <div key={i} className={`${i <= ((gamification?.streak_days || 0) % 7 || (gamification?.streak_days || 0) >= 7 ? 7 : 0) ? 'bg-[#ff4d00]' : 'bg-gray-800'} flex-1 rounded-full`}></div>
+                                    <div key={i} className={`${i <= Math.min((gamification?.streak_days || 0), 7) ? 'bg-[#ff4d00]' : 'bg-gray-800'} flex-1 rounded-full`}></div>
                                 ))}
                             </div>
                             <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
@@ -590,7 +590,7 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ projects, balance, onNavi
                             )}
                         </div>
                         {transactions.length > 0 && (
-                            <button onClick={() => db.getTransactions()} className="w-full py-3 bg-gray-50 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:text-[#ff4d00] transition-colors border-t border-gray-100">
+                            <button onClick={() => window.location.href = '/dashboard/balance'} className="w-full py-3 bg-gray-50 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:text-[#ff4d00] transition-colors border-t border-gray-100">
                                 View Full Wallet
                             </button>
                         )}
