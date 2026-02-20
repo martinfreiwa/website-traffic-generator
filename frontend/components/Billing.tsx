@@ -127,15 +127,11 @@ const Billing: React.FC = () => {
                     <h2 className="text-3xl font-black text-gray-900 uppercase tracking-tight">Billing & Payments</h2>
                 </div>
                 <div className="flex items-center gap-4">
-                    <div className="bg-white border border-gray-200 px-6 py-3 shadow-sm">
-                        <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Wallet Balance</div>
-                        <div className="text-2xl font-black text-gray-900">{formatCurrency(user?.balance || 0)}</div>
-                    </div>
                     <button
                         onClick={() => window.location.href = '/dashboard/buy-credits'}
                         className="bg-[#ff4d00] text-white px-6 py-4 text-xs font-bold uppercase tracking-widest hover:bg-black transition-colors flex items-center gap-2"
                     >
-                        <Wallet size={14} /> Top Up
+                        <Wallet size={14} /> Buy Credits
                     </button>
                 </div>
             </div>
@@ -176,7 +172,7 @@ const Billing: React.FC = () => {
                         <div className="text-center py-6">
                             <p className="text-sm text-gray-500 mb-4">No active subscription</p>
                             <a
-                                href="/pricing"
+                                href="/dashboard/buy-credits"
                                 className="inline-block bg-[#ff4d00] text-white px-6 py-2 text-xs font-bold uppercase tracking-widest hover:bg-black transition-colors"
                             >
                                 View Plans
@@ -265,9 +261,8 @@ const Billing: React.FC = () => {
                                             )}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-sm ${
-                                                t.type === 'debit' ? 'bg-orange-50 text-[#ff4d00]' : 'bg-green-50 text-green-700'
-                                            }`}>
+                                            <span className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-sm ${t.type === 'debit' ? 'bg-orange-50 text-[#ff4d00]' : 'bg-green-50 text-green-700'
+                                                }`}>
                                                 {t.type === 'debit' ? <ArrowUpRight size={10} /> : <ArrowDownLeft size={10} />}
                                                 {t.type}
                                             </span>

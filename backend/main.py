@@ -1322,6 +1322,235 @@ class AdminUserDetailsResponse(BaseModel):
     notification_prefs: Optional[UserNotificationPrefsResponse] = None
 
 
+class UserWithSpamScore(BaseModel):
+    id: str
+    email: str
+    name: Optional[str] = None
+    role: str
+    balance: float
+    balance_economy: float = 0.0
+    balance_professional: float = 0.0
+    balance_expert: float = 0.0
+    api_key: Optional[str] = None
+    affiliate_code: Optional[str] = None
+    status: Optional[str] = "active"
+    plan: Optional[str] = "free"
+    shadow_banned: bool = False
+    is_verified: bool = False
+    notes: Optional[str] = None
+    tags: Optional[List[str]] = []
+    ban_reason: Optional[str] = None
+    created_at: Optional[datetime] = None
+    last_ip: Optional[str] = None
+    last_active: Optional[datetime] = None
+    projects_count: int = 0
+    spam_score: int = 0
+    ip_shared_with_count: int = 0
+    affiliate_earnings: float = 0.0
+
+    class Config:
+        from_attributes = True
+
+
+class FraudAlertResponse(BaseModel):
+    id: str
+    type: str
+    ip: Optional[str] = None
+    user_ids: List[str] = []
+    user_emails: List[str] = []
+    affiliate_earnings: float = 0.0
+    has_affiliate_relation: bool = False
+    detected_at: datetime
+    risk_level: str = "medium"
+
+
+class UserStatsResponse(BaseModel):
+    total_users: int
+    active_users_24h: int
+    active_users_7d: int
+    new_users_today: int
+    new_users_7d: int
+    new_users_30d: int
+    high_risk_users: int
+    fraud_alerts_count: int
+
+
+TEMP_EMAIL_DOMAINS = [
+    "tempmail",
+    "guerrilla",
+    "10minutemail",
+    "throwaway",
+    "mailinator",
+    "fakeinbox",
+    "temp-mail",
+    "dispostable",
+    "mailnesia",
+    "tempail",
+    "mohmal",
+    "yopmail",
+    "guerrillamail",
+    "sharklasers",
+    "grr",
+    "pokemail",
+    "spam4",
+    "tempr.email",
+    "emailfake",
+    "maildrop",
+]
+
+
+def calculate_spam_score(user, db: Session) -> int:
+    score = 0
+
+    if not user.is_verified:
+        score += 20
+
+    user_projects = (
+        db.query(models.Project).filter(models.Project.user_id == user.id).count()
+    )
+    if user_projects == 0:
+        score += 15
+
+    total_balance = (
+        (user.balance or 0)
+        + (user.balance_economy or 0)
+        + (user.balance_professional or 0)
+        + (user.balance_expert or 0)
+    )
+    if total_balance == 0:
+        score += 10
+
+    if not user.last_active:
+        score += 15
+
+    if user.email:
+        email_domain = user.email.split("@")[-1].lower() if "@" in user.email else ""
+        for temp_domain in TEMP_EMAIL_DOMAINS:
+            if temp_domain in email_domain:
+                score += 25
+                break
+
+    if user.last_ip:
+        same_ip_count = (
+            db.query(models.User)
+            .filter(models.User.last_ip == user.last_ip, models.User.id != user.id)
+            .count()
+        )
+        if same_ip_count >= 1:
+            score += 30
+
+    if user.created_at:
+        hours_since_creation = (
+            datetime.utcnow() - user.created_at
+        ).total_seconds() / 3600
+        if hours_since_creation < 24:
+            score += 10
+
+    user_transactions = (
+        db.query(models.Transaction)
+        .filter(
+            models.Transaction.user_id == user.id, models.Transaction.type == "credit"
+        )
+        .count()
+    )
+    if user_transactions == 0:
+        score += 10
+
+    return min(score, 100)
+
+
+def detect_ip_sharing(ip_address: str, db: Session) -> List[models.User]:
+    if not ip_address:
+        return []
+    return db.query(models.User).filter(models.User.last_ip == ip_address).all()
+
+
+def get_affiliate_earnings_for_user(user_id: str, db: Session) -> float:
+    tier = (
+        db.query(models.AffiliateTier)
+        .filter(models.AffiliateTier.user_id == user_id)
+        .first()
+    )
+    if tier:
+        return float(tier.total_earnings or 0)
+    return 0.0
+
+
+def check_affiliate_relation_between_users(user_ids: List[str], db: Session) -> bool:
+    for user_id in user_ids:
+        relations = (
+            db.query(models.AffiliateRelation)
+            .filter(
+                (models.AffiliateRelation.user_id == user_id)
+                | (models.AffiliateRelation.referrer_l1_id == user_id)
+                | (models.AffiliateRelation.referrer_l2_id == user_id)
+                | (models.AffiliateRelation.referrer_l3_id == user_id)
+            )
+            .all()
+        )
+
+        for rel in relations:
+            other_ids = [
+                rel.user_id,
+                rel.referrer_l1_id,
+                rel.referrer_l2_id,
+                rel.referrer_l3_id,
+            ]
+            for other_id in other_ids:
+                if other_id and other_id in user_ids and other_id != user_id:
+                    return True
+    return False
+
+
+def detect_all_fraud_alerts(db: Session) -> List[Dict[str, Any]]:
+    alerts = []
+
+    ip_groups = (
+        db.query(models.User.last_ip, func.count(models.User.id).label("count"))
+        .filter(models.User.last_ip != None, models.User.last_ip != "")
+        .group_by(models.User.last_ip)
+        .having(func.count(models.User.id) >= 2)
+        .all()
+    )
+
+    for ip_group in ip_groups:
+        ip = ip_group.last_ip
+        users = db.query(models.User).filter(models.User.last_ip == ip).all()
+
+        user_ids = [u.id for u in users]
+        user_emails = [u.email for u in users]
+
+        total_affiliate_earnings = sum(
+            get_affiliate_earnings_for_user(u.id, db) for u in users
+        )
+
+        has_affiliate_relation = check_affiliate_relation_between_users(user_ids, db)
+
+        risk_level = "low"
+        if has_affiliate_relation and total_affiliate_earnings > 0:
+            risk_level = "high"
+        elif total_affiliate_earnings > 0:
+            risk_level = "medium"
+        elif len(users) >= 3:
+            risk_level = "medium"
+
+        alerts.append(
+            {
+                "id": f"ip_{ip}",
+                "type": "ip_sharing",
+                "ip": ip,
+                "user_ids": user_ids,
+                "user_emails": user_emails,
+                "affiliate_earnings": total_affiliate_earnings,
+                "has_affiliate_relation": has_affiliate_relation,
+                "detected_at": datetime.utcnow(),
+                "risk_level": risk_level,
+            }
+        )
+
+    return alerts
+
+
 class BalanceAdjustRequest(BaseModel):
     adjustment_type: str  # 'credit', 'debit'
     tier: str  # 'economy', 'professional', 'expert', 'general'
@@ -1407,6 +1636,8 @@ class QuickCampaignResponse(BaseModel):
     success: bool
     project_id: str
     message: str
+    access_token: Optional[str] = None
+    generated_password: Optional[str] = None
 
 
 class TrafficStart(BaseModel):
@@ -2938,6 +3169,27 @@ def create_quick_campaign(campaign: QuickCampaignCreate, db: Session = Depends(g
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
 
+    from urllib.parse import urlparse
+    from sqlalchemy import cast, String
+
+    domain = urlparse(campaign.target_url).netloc
+    if domain.startswith("www."):
+        domain = domain[4:]
+    if not domain:
+        domain = campaign.target_url
+
+    existing_project = (
+        db.query(models.Project)
+        .filter(cast(models.Project.settings, String).like(f"%{domain}%"))
+        .first()
+    )
+
+    if existing_project:
+        raise HTTPException(
+            status_code=400,
+            detail="This domain is already registered in our system. Free campaigns are only available for new domains. Please upgrade to a paid plan for this domain.",
+        )
+
     try:
         generated_password = "".join(
             secrets.choice(string.ascii_letters + string.digits) for _ in range(12)
@@ -3039,10 +3291,15 @@ def create_quick_campaign(campaign: QuickCampaignCreate, db: Session = Depends(g
             f"QUICK CAMPAIGN CREATED: email={campaign.email}, project_id={db_project.id}, project_name={campaign.project_name}, target_url={campaign.target_url}, ga4_tid={tid or 'Not found'}, visitors={total_visitors}, expires={expires_at}"
         )
 
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_user_access_token(new_user, access_token_expires)
+
         return {
             "success": True,
             "project_id": db_project.id,
             "message": "Campaign started! Check your email for login credentials.",
+            "access_token": access_token,
+            "generated_password": generated_password,
         }
     except HTTPException:
         raise
@@ -3543,6 +3800,31 @@ def get_benefit_balance(
     )
 
 
+@app.post("/benefits/upload-screenshot")
+async def upload_benefit_screenshot(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(get_current_user),
+):
+    import os
+    import shutil
+    import uuid
+    
+    if current_user.account_locked:
+        raise HTTPException(status_code=403, detail="Account is locked")
+
+    upload_dir = f"static/benefit_screenshots/{current_user.id}"
+    os.makedirs(upload_dir, exist_ok=True)
+    
+    file_ext = file.filename.split(".")[-1]
+    filename = f"{uuid.uuid4()}.{file_ext}"
+    file_path = os.path.join(upload_dir, filename)
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    return {"url": f"/{file_path}"}
+
+
 @app.post("/benefits/submit", response_model=BenefitRequestResponse)
 def submit_benefit(
     benefit: BenefitRequestCreate,
@@ -3565,6 +3847,40 @@ def submit_benefit(
         raise HTTPException(
             status_code=400, detail="This URL is already pending review"
         )
+        
+    benefit_db_type = db.query(models.BenefitType).filter(
+        models.BenefitType.type == benefit.benefit_type,
+        models.BenefitType.category == benefit.benefit_category
+    ).first()
+    
+    if benefit_db_type and benefit_db_type.requirements:
+        reqs = benefit_db_type.requirements
+        max_claims = reqs.get("max_claims", 0)
+        
+        if max_claims > 0:
+            freq = reqs.get("frequency", "all_time") # daily, weekly, monthly, all_time
+            query = db.query(models.BenefitRequest).filter(
+                models.BenefitRequest.user_id == current_user.id,
+                models.BenefitRequest.benefit_type == benefit.benefit_type,
+                models.BenefitRequest.benefit_category == benefit.benefit_category,
+                models.BenefitRequest.status != "rejected"
+            )
+            
+            now = datetime.utcnow()
+            if freq == "daily":
+                start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                query = query.filter(models.BenefitRequest.submitted_at >= start_date)
+            elif freq == "weekly":
+                start_date = now - timedelta(days=now.weekday())
+                start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+                query = query.filter(models.BenefitRequest.submitted_at >= start_date)
+            elif freq == "monthly":
+                start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                query = query.filter(models.BenefitRequest.submitted_at >= start_date)
+                
+            past_claims = query.count()
+            if past_claims >= max_claims:
+                raise HTTPException(status_code=400, detail=f"Limit reached. You can only claim this {max_claims} time(s) {freq}.")
 
     db_benefit = models.BenefitRequest(
         user_id=current_user.id,
@@ -3614,6 +3930,7 @@ def get_pending_benefits(
                 "benefit_category": b.benefit_category,
                 "url": b.url,
                 "description": b.description,
+                "screenshot_url": b.screenshot_url,
                 "claimed_value": b.claimed_value,
                 "submitted_at": b.submitted_at.isoformat() if b.submitted_at else None,
             }
@@ -3657,6 +3974,7 @@ def get_benefits_history(
                 "benefit_category": b.benefit_category,
                 "url": b.url,
                 "description": b.description,
+                "screenshot_url": b.screenshot_url,
                 "claimed_value": b.claimed_value,
                 "approved_value": b.approved_value,
                 "status": b.status,
@@ -5313,13 +5631,128 @@ def get_admin_stats(
     }
 
 
-@app.get("/admin/users", response_model=List[UserResponse])
+@app.get("/admin/users/stats", response_model=UserStatsResponse)
+def get_user_stats(
+    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    now = datetime.utcnow()
+    day_ago = now - timedelta(days=1)
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+
+    total_users = db.query(models.User).count()
+
+    active_users_24h = (
+        db.query(models.User).filter(models.User.last_active >= day_ago).count()
+    )
+
+    active_users_7d = (
+        db.query(models.User).filter(models.User.last_active >= week_ago).count()
+    )
+
+    new_users_today = (
+        db.query(models.User).filter(models.User.created_at >= day_ago).count()
+    )
+
+    new_users_7d = (
+        db.query(models.User).filter(models.User.created_at >= week_ago).count()
+    )
+
+    new_users_30d = (
+        db.query(models.User).filter(models.User.created_at >= month_ago).count()
+    )
+
+    all_users = db.query(models.User).all()
+    high_risk_users = sum(1 for u in all_users if calculate_spam_score(u, db) >= 60)
+
+    fraud_alerts = detect_all_fraud_alerts(db)
+    fraud_alerts_count = len(
+        [a for a in fraud_alerts if a["risk_level"] in ["medium", "high"]]
+    )
+
+    return UserStatsResponse(
+        total_users=total_users,
+        active_users_24h=active_users_24h,
+        active_users_7d=active_users_7d,
+        new_users_today=new_users_today,
+        new_users_7d=new_users_7d,
+        new_users_30d=new_users_30d,
+        high_risk_users=high_risk_users,
+        fraud_alerts_count=fraud_alerts_count,
+    )
+
+
+@app.get("/admin/fraud-alerts", response_model=List[FraudAlertResponse])
+def get_fraud_alerts(
+    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    alerts = detect_all_fraud_alerts(db)
+    return [FraudAlertResponse(**alert) for alert in alerts]
+
+
+@app.get("/admin/users", response_model=List[UserWithSpamScore])
 def get_all_users(
     db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
 ):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
-    return db.query(models.User).all()
+
+    users = db.query(models.User).order_by(models.User.created_at.desc()).all()
+
+    result = []
+    for user in users:
+        spam_score = calculate_spam_score(user, db)
+
+        ip_shared_count = 0
+        if user.last_ip:
+            ip_shared_count = (
+                db.query(models.User)
+                .filter(models.User.last_ip == user.last_ip, models.User.id != user.id)
+                .count()
+            )
+
+        affiliate_earnings = get_affiliate_earnings_for_user(user.id, db)
+
+        projects_count = (
+            db.query(models.Project).filter(models.Project.user_id == user.id).count()
+        )
+
+        result.append(
+            UserWithSpamScore(
+                id=user.id,
+                email=user.email,
+                name=user.name,
+                role=user.role,
+                balance=user.balance or 0,
+                balance_economy=user.balance_economy or 0,
+                balance_professional=user.balance_professional or 0,
+                balance_expert=user.balance_expert or 0,
+                api_key=user.api_key,
+                affiliate_code=user.affiliate_code,
+                status=user.status or "active",
+                plan=user.plan or "free",
+                shadow_banned=user.shadow_banned or False,
+                is_verified=user.is_verified or False,
+                notes=user.notes,
+                tags=user.tags or [],
+                ban_reason=user.ban_reason,
+                created_at=user.created_at,
+                last_ip=user.last_ip,
+                last_active=user.last_active,
+                projects_count=projects_count,
+                spam_score=spam_score,
+                ip_shared_with_count=ip_shared_count,
+                affiliate_earnings=affiliate_earnings,
+            )
+        )
+
+    return result
 
 
 @app.put("/admin/users/{user_id}")
@@ -9546,6 +9979,101 @@ async def import_blog_articles(
 
 
 ADMIN_RESET_SECRET = "tc-admin-reset-2025"
+
+
+@app.get("/admin/cleanup")
+async def admin_cleanup(
+    secret: str = None,
+    db: Session = Depends(get_db),
+):
+    from fastapi.responses import JSONResponse
+
+    if secret != ADMIN_RESET_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid secret key")
+
+    from passlib.context import CryptContext
+
+    pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+
+    # Make support@traffic-creator.com admin, demote all others
+    db.query(models.User).filter(
+        models.User.role == "admin", models.User.email != "support@traffic-creator.com"
+    ).update({"role": "user"})
+    db.commit()
+
+    # Create or reset support@traffic-creator.com as admin
+    support_user = (
+        db.query(models.User)
+        .filter(models.User.email == "support@traffic-creator.com")
+        .first()
+    )
+
+    if support_user:
+        support_user.role = "admin"
+        support_user.password_hash = pwd_context.hash("TrafficAdmin2025!")
+        support_user.status = "active"
+    else:
+        support_user = models.User(
+            email="support@traffic-creator.com",
+            password_hash=pwd_context.hash("TrafficAdmin2025!"),
+            role="admin",
+            status="active",
+        )
+        db.add(support_user)
+
+    db.commit()
+
+    return JSONResponse(
+        content={
+            "success": True,
+            "message": "Admin cleanup complete. Only support@traffic-creator.com is admin with password: TrafficAdmin2025!",
+        },
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
+
+
+@app.get("/admin/create-user")
+async def admin_create_user(
+    email: str,
+    secret: str = None,
+    password: str = None,
+    role: str = "user",
+    db: Session = Depends(get_db),
+):
+    from fastapi.responses import JSONResponse
+
+    if secret != ADMIN_RESET_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid secret key")
+
+    if not password:
+        raise HTTPException(status_code=400, detail="password is required")
+
+    existing = db.query(models.User).filter(models.User.email == email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="User already exists")
+
+    from passlib.context import CryptContext
+
+    pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+
+    user = models.User(
+        email=email,
+        password_hash=pwd_context.hash(password),
+        role=role,
+        status="active",
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return JSONResponse(
+        content={
+            "success": True,
+            "message": f"User created: {email}",
+            "user_id": str(user.id),
+        },
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
 
 
 @app.get("/admin/reset-password")

@@ -9,6 +9,7 @@ interface PendingBenefit {
   benefit_category: string;
   url: string;
   description?: string;
+  screenshot_url?: string;
   claimed_value: number;
   submitted_at: string;
 }
@@ -22,10 +23,14 @@ const AdminBenefits: React.FC = () => {
   const [selectedBenefit, setSelectedBenefit] = useState<PendingBenefit | null>(null);
   const [reviewForm, setReviewForm] = useState({ approvedValue: '', adminNotes: '', fraudFlagged: false, fraudReason: '' });
   const [processing, setProcessing] = useState(false);
-  
+
   // Signup credits settings
   const [signupCredits, setSignupCredits] = useState<number>(0);
   const [savingCredits, setSavingCredits] = useState(false);
+
+  const [editingType, setEditingType] = useState<any | null>(null);
+  const [reqsStr, setReqsStr] = useState('');
+  const [savingType, setSavingType] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -35,14 +40,16 @@ const AdminBenefits: React.FC = () => {
     try {
       const [pending, types, history, settingsRes] = await Promise.all([
         db.getPendingBenefits().catch(() => []),
-        fetch(`${window.location.origin}/benefits/types`).then(r => r.json()).catch(() => []),
+        fetch(`${window.location.origin}/admin/benefit-types`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        }).then(r => r.json()).catch(() => []),
         db.getBenefitsHistory().catch(() => []),
         fetch(`${window.location.origin}/settings`).then(r => r.json()).catch(() => ({ settings: {} }))
       ]);
       setPendingBenefits(pending);
       setBenefitTypes(types);
       setHistoryBenefits(history);
-      
+
       // Load signup credits from settings
       const settings = settingsRes.settings || {};
       setSignupCredits(settings.newUserSignupCredits || 0);
@@ -59,7 +66,7 @@ const AdminBenefits: React.FC = () => {
       const currentSettingsRes = await fetch(`${window.location.origin}/settings`).then(r => r.json()).catch(() => ({ settings: {} }));
       const currentSettings = currentSettingsRes.settings || {};
       const newSettings = { ...currentSettings, newUserSignupCredits: signupCredits };
-      
+
       await fetch(`${window.location.origin}/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -70,6 +77,61 @@ const AdminBenefits: React.FC = () => {
       alert(e.message || 'Failed to save');
     } finally {
       setSavingCredits(false);
+    }
+  };
+
+  const handleEditType = (bt: any) => {
+    setEditingType(bt);
+    setReqsStr(JSON.stringify(bt.requirements || {}, null, 2));
+  };
+
+  const handleAddType = () => {
+    setEditingType({ type: '', category: '', name: '', value: 0, active: true, display_order: 0 });
+    setReqsStr('{\n  "description": "",\n  "max_claims": 0,\n  "frequency": "all_time"\n}');
+  };
+
+  const handleSaveType = async () => {
+    setSavingType(true);
+    try {
+      let reqs = {};
+      try {
+        reqs = JSON.parse(reqsStr);
+      } catch (err) {
+        throw new Error("Invalid JSON in requirements");
+      }
+
+      const payload = { ...editingType, requirements: reqs };
+      const typeId = payload.id;
+      delete payload.id;
+      delete payload.created_at;
+
+      let url = `${window.location.origin}/admin/benefit-types`;
+      let method = 'POST';
+      if (typeId) {
+        url += `/${typeId}`;
+        method = 'PUT';
+      }
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || 'Failed to save');
+      }
+
+      setEditingType(null);
+      await loadData();
+    } catch (err: any) {
+      alert('Error: ' + err.message);
+    } finally {
+      setSavingType(false);
     }
   };
 
@@ -160,6 +222,11 @@ const AdminBenefits: React.FC = () => {
                       <a href={benefit.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline flex items-center gap-1">
                         {benefit.url} <ExternalLink size={12} />
                       </a>
+                      {benefit.screenshot_url && (
+                        <a href={benefit.screenshot_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-500 hover:underline flex items-center gap-1 mt-1">
+                          View Screenshot <ExternalLink size={12} />
+                        </a>
+                      )}
                       {benefit.description && <p className="text-sm text-gray-500 mt-2">{benefit.description}</p>}
                       <div className="text-xs text-gray-400 mt-2">Submitted: {new Date(benefit.submitted_at).toLocaleString()}</div>
                     </div>
@@ -185,7 +252,7 @@ const AdminBenefits: React.FC = () => {
         <div className="bg-white border border-gray-200">
           <div className="p-4 border-b border-gray-200 flex items-center justify-between">
             <h3 className="font-bold">Benefit Types Configuration</h3>
-            <button className="px-3 py-1 bg-[#ff4d00] text-white text-xs font-bold uppercase flex items-center gap-1">
+            <button onClick={handleAddType} className="px-3 py-1 bg-[#ff4d00] text-white text-xs font-bold uppercase flex items-center gap-1 hover:bg-[#e64600]">
               <Plus size={14} /> Add Type
             </button>
           </div>
@@ -213,7 +280,7 @@ const AdminBenefits: React.FC = () => {
                     </span>
                   </td>
                   <td className="p-4 text-right">
-                    <button className="p-1 text-gray-400 hover:text-[#ff4d00]"><Edit size={16} /></button>
+                    <button onClick={() => handleEditType(bt)} className="p-1 text-gray-400 hover:text-[#ff4d00]"><Edit size={16} /></button>
                   </td>
                 </tr>
               ))}
@@ -256,14 +323,13 @@ const AdminBenefits: React.FC = () => {
                         {b.approved_value ? `€${b.approved_value}` : '-'}
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-sm ${
-                          b.status === 'approved' ? 'bg-green-100 text-green-700' :
-                          b.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                          'bg-gray-100 text-gray-500'
-                        }`}>
+                        <span className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-sm ${b.status === 'approved' ? 'bg-green-100 text-green-700' :
+                            b.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                              'bg-gray-100 text-gray-500'
+                          }`}>
                           {b.status === 'approved' ? <CheckCircle size={10} /> :
-                           b.status === 'rejected' ? <XCircle size={10} /> :
-                           <Clock size={10} />}
+                            b.status === 'rejected' ? <XCircle size={10} /> :
+                              <Clock size={10} />}
                           {b.status}
                         </span>
                         {b.fraud_flagged && (
@@ -314,7 +380,7 @@ const AdminBenefits: React.FC = () => {
               <p className="text-xs text-gray-500 mt-2">
                 Set to 0 to disable signup credits. New users will not receive any free credits upon registration.
               </p>
-              
+
               <div className="mt-6 flex items-center gap-4">
                 <button
                   onClick={handleSaveSignupCredits}
@@ -352,7 +418,7 @@ const AdminBenefits: React.FC = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white max-w-lg w-full p-6">
             <h3 className="text-xl font-bold mb-4">Review Benefit Request</h3>
-            
+
             <div className="bg-gray-50 p-4 mb-4">
               <div className="flex justify-between mb-2">
                 <span className="text-sm text-gray-500">User:</span>
@@ -366,18 +432,23 @@ const AdminBenefits: React.FC = () => {
                 <span className="text-sm text-gray-500">Claimed:</span>
                 <span className="text-sm font-bold text-[#ff4d00]">€{selectedBenefit.claimed_value}</span>
               </div>
-              <div className="mt-2 pt-2 border-t">
+              <div className="mt-2 pt-2 border-t flex flex-col gap-2">
                 <a href={selectedBenefit.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">
-                  View Submission ↗
+                  View Link ↗
                 </a>
+                {selectedBenefit.screenshot_url && (
+                  <a href={selectedBenefit.screenshot_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">
+                    View Screenshot ↗
+                  </a>
+                )}
               </div>
             </div>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Approved Value (€)</label>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   className="w-full border p-3"
                   value={reviewForm.approvedValue}
                   onChange={(e) => setReviewForm({ ...reviewForm, approvedValue: e.target.value })}
@@ -385,7 +456,7 @@ const AdminBenefits: React.FC = () => {
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Admin Notes</label>
-                <textarea 
+                <textarea
                   className="w-full border p-3"
                   rows={3}
                   value={reviewForm.adminNotes}
@@ -393,8 +464,8 @@ const AdminBenefits: React.FC = () => {
                 />
               </div>
               <div className="flex items-center gap-2">
-                <input 
-                  type="checkbox" 
+                <input
+                  type="checkbox"
                   id="fraud"
                   checked={reviewForm.fraudFlagged}
                   onChange={(e) => setReviewForm({ ...reviewForm, fraudFlagged: e.target.checked })}
@@ -406,8 +477,8 @@ const AdminBenefits: React.FC = () => {
               {reviewForm.fraudFlagged && (
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Fraud Reason</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     className="w-full border p-3 border-red-300"
                     value={reviewForm.fraudReason}
                     onChange={(e) => setReviewForm({ ...reviewForm, fraudReason: e.target.value })}
@@ -429,6 +500,57 @@ const AdminBenefits: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Editing Benefit Type Modal */}
+      {editingType && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-bold mb-4">{editingType.id ? 'Edit Benefit Type' : 'Add Benefit Type'}</h3>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Type</label>
+                  <input type="text" className="w-full border p-2" value={editingType.type} onChange={(e) => setEditingType({ ...editingType, type: e.target.value })} placeholder="e.g. youtube, blog" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Category</label>
+                  <input type="text" className="w-full border p-2" value={editingType.category} onChange={(e) => setEditingType({ ...editingType, category: e.target.value })} placeholder="e.g. viral, premium" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Name</label>
+                <input type="text" className="w-full border p-2" value={editingType.name} onChange={(e) => setEditingType({ ...editingType, name: e.target.value })} placeholder="e.g. YouTube Video" />
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Value (€)</label>
+                  <input type="number" step="0.01" className="w-full border p-2" value={editingType.value} onChange={(e) => setEditingType({ ...editingType, value: parseFloat(e.target.value) || 0 })} />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Display Order</label>
+                  <input type="number" className="w-full border p-2" value={editingType.display_order} onChange={(e) => setEditingType({ ...editingType, display_order: parseInt(e.target.value) || 0 })} />
+                </div>
+                <div className="flex items-center pt-6">
+                  <input type="checkbox" id="bt-active" checked={editingType.active} onChange={(e) => setEditingType({ ...editingType, active: e.target.checked })} className="mr-2" />
+                  <label htmlFor="bt-active" className="text-sm font-bold">Active</label>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Requirements (JSON)</label>
+                <textarea className="w-full border p-2 font-mono text-sm" rows={6} value={reqsStr} onChange={(e) => setReqsStr(e.target.value)} />
+                <p className="text-xs text-gray-400 mt-1">Requires valid JSON. Common fields: "description", "max_claims", "frequency" ("all_time", "daily", "weekly", "monthly").</p>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => setEditingType(null)} className="flex-1 border py-3 text-xs font-bold uppercase">Cancel</button>
+              <button onClick={handleSaveType} disabled={savingType} className="flex-1 bg-[#ff4d00] text-white py-3 text-xs font-bold uppercase disabled:opacity-50">
+                {savingType ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

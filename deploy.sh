@@ -39,7 +39,9 @@ gcloud beta run deploy $SERVICE_NAME \
   --port=8080 \
   --min-instances=1 \
   --max-instances=3 \
-  --set-env-vars=ENVIRONMENT=production,LOG_LEVEL=INFO,ALLOWED_ORIGINS=https://traffic-creator.com
+  --set-env-vars=ENVIRONMENT=production,LOG_LEVEL=INFO,ALLOWED_ORIGINS=https://traffic-creator.com,CLOUD_SQL_CONNECTION_NAME=traffic-creator-487516:europe-west1:trafficgen-db,DB_USER=trafficgen_user,DB_NAME=trafficgen,RESEND_API_KEY=YOUR_RESEND_API_KEY,STRIPE_SECRET_KEY=YOUR_STRIPE_SECRET_KEY \
+  --set-secrets=DB_PASSWORD=db-password:latest \
+  --set-cloudsql-instances=traffic-creator-487516:europe-west1:trafficgen-db
 
 # 5. Update traffic to latest revision
 echo "Step 5: Updating traffic to latest revision..."

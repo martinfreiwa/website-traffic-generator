@@ -5,13 +5,14 @@ import { TIERS, PRICING_MATRIX, VOLUME_STEPS, BULK_OPTIONS, TierId, TierDefiniti
 import {
     Check, CreditCard, Zap, Shield, Wallet, ArrowRight, Lock,
     Loader2, Landmark, Smartphone, Calculator, Star, Sliders,
-    Layers, AlertCircle, ShoppingCart, Percent, Copy, Upload, FileText, Info, CheckCircle
+    Layers, AlertCircle, ShoppingCart, Percent, Copy, Upload, FileText, Info, CheckCircle, Bitcoin, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { QRCodeSVG } from 'qrcode.react';
 
 // Initialize Stripe with the provided Publishable Key
-const stripePromise = loadStripe("pk_test_51ST5n8JLE5bW6f8EIM08iRjnjfGIHo84FmVCqEoHAFQ4KFa2dVBAH4BPuLoZhvQaBWJ2Ody3F0YgYyAl0OdJEsbr00mnzqV12v");
+const stripePromise = loadStripe("pk_live_51ST5n8JLE5bW6f8EX9PlyQhzw3NNyU4DUGc2YNvdUWM8eDVJBh2U0gKQylFvHAe32IuWDka1uQwaVsSvU4186txw00lanUMTEu");
 
 interface BuyCreditsProps {
     onBack: () => void;
@@ -81,6 +82,48 @@ const BANK_DETAILS: Record<string, BankDetails> = {
 
 type Currency = 'USD' | 'EUR' | 'GBP' | 'AUD' | 'RON';
 
+interface CryptoDetails {
+    name: string;
+    network: string;
+    address: string;
+    note: string;
+}
+
+const CRYPTO_DETAILS: Record<string, CryptoDetails> = {
+    'ETH (ERC20)': {
+        name: 'Ethereum (ETH)',
+        network: 'Ethereum (ERC20)',
+        address: '0x4F692276Ed837aa458245f4184B4331bE3142233',
+        note: 'Send only ETH to this address on the Ethereum network.'
+    },
+    'USDC (ERC20)': {
+        name: 'USD Coin (USDC)',
+        network: 'Ethereum (ERC20)',
+        address: '0x4F692276Ed837aa458245f4184B4331bE3142233',
+        note: 'Send only USDC to this address on the Ethereum network.'
+    },
+    'USDT (ERC20)': {
+        name: 'Tether (USDT)',
+        network: 'Ethereum (ERC20)',
+        address: '0x4F692276Ed837aa458245f4184B4331bE3142233',
+        note: 'Send only USDT to this address on the Ethereum network.'
+    },
+    'USDT (TRC20)': {
+        name: 'Tether (USDT)',
+        network: 'Tron (TRC20)',
+        address: 'TBvarbCL58BtFLnytADapLHmNDvuif3eo9',
+        note: 'Send only USDT to this address on the Tron network.'
+    },
+    'BTC (Bitcoin)': {
+        name: 'Bitcoin (BTC)',
+        network: 'Bitcoin',
+        address: 'bc1qurxk796p6kwuem3usaqamy74yesh6tlu97m3ju',
+        note: 'Send only BTC to this address on the Bitcoin network.'
+    }
+};
+
+type CryptoCurrency = keyof typeof CRYPTO_DETAILS;
+
 const CheckoutForm = ({ amount, onSuccess, onError }: { amount: number, onSuccess: (pid: string) => void, onError: (msg: string) => void }) => {
     const stripe = useStripe();
     const elements = useElements();
@@ -133,23 +176,25 @@ const CheckoutForm = ({ amount, onSuccess, onError }: { amount: number, onSucces
 const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
     const navigate = useNavigate();
     const [step, setStep] = useState(1);
-    const [selectedTier, setSelectedTier] = useState<TierDefinition>(TIERS[1]);
-    const [volumeIndex, setVolumeIndex] = useState(1);
+    const [selectedTier, setSelectedTier] = useState<TierDefinition>(TIERS[0]); // Default Economy
+    const [volumeIndex, setVolumeIndex] = useState(0); // Default 60k
     const [bulkPack, setBulkPack] = useState(1);
     const [balance, setBalance] = useState(0);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [paymentMethod, setPaymentMethod] = useState<'card' | 'bank' | 'apple'>('card');
+    const [paymentMethod, setPaymentMethod] = useState<'card' | 'bank' | 'crypto'>('card');
     const [clientSecret, setClientSecret] = useState("");
     const [selectedCurrency, setSelectedCurrency] = useState<Currency>('USD');
+    const [selectedCrypto, setSelectedCrypto] = useState<CryptoCurrency>('USDT (TRC20)');
     const [proofFile, setProofFile] = useState<File | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [uploadSuccess, setUploadSuccess] = useState(false);
     const [copied, setCopied] = useState<string | null>(null);
     const [transferReference, setTransferReference] = useState<string>('');
+    const [openFaq, setOpenFaq] = useState<number | null>(null);
 
     useEffect(() => {
         setBalance(db.getBalance());
-        if (paymentMethod === 'bank' && step === 2 && !transferReference) {
+        if ((paymentMethod === 'bank' || paymentMethod === 'crypto') && step === 2 && !transferReference) {
             const user = db.getCurrentUser();
             const userId = user?.id?.substring(0, 8).toUpperCase() || 'XXXXX';
             const timestamp = Date.now().toString(36).toUpperCase();
@@ -233,8 +278,8 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
             formData.append('amount', totalPrice.toString());
             formData.append('tier', selectedTier.id);
             formData.append('hits', totalVisitors.toString());
-            formData.append('currency', selectedCurrency);
-            formData.append('notes', `Bank transfer for ${totalVisitors.toLocaleString()} ${selectedTier.name} visitors - Ref: ${transferReference}`);
+            formData.append('currency', paymentMethod === 'crypto' ? selectedCrypto : selectedCurrency);
+            formData.append('notes', `${paymentMethod === 'crypto' ? 'Crypto' : 'Bank'} transfer for ${totalVisitors.toLocaleString()} ${selectedTier.name} visitors - Ref: ${transferReference}`);
 
             const token = localStorage.getItem('tgp_token');
             const response = await fetch(`${API_BASE_URL}/bank-transfer/proof`, {
@@ -366,6 +411,52 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
         );
     };
 
+    const renderCryptoDetails = (crypto: CryptoCurrency) => {
+        const details = CRYPTO_DETAILS[crypto];
+
+        return (
+            <div className="space-y-2 font-mono text-sm">
+                <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-gray-500">Asset:</span>
+                    <span className="font-bold">{details.name}</span>
+                </div>
+
+                <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-gray-500">Network:</span>
+                    <span className="font-bold">{details.network}</span>
+                </div>
+
+                <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-gray-500">Address:</span>
+                    <div className="flex items-center gap-2">
+                        <span className="font-bold break-all max-w-[200px] sm:max-w-none">{details.address}</span>
+                        <button onClick={() => copyToClipboard(details.address, 'crypto_address')} className="text-gray-400 hover:text-[#ff4d00] flex-shrink-0">
+                            {copied === 'crypto_address' ? <CheckCircle size={14} className="text-green-500" /> : <Copy size={14} />}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="py-4 flex justify-center border-b border-gray-100">
+                    <div className="p-4 bg-white border border-gray-100 shadow-sm rounded-lg">
+                        <QRCodeSVG value={details.address} size={150} fgColor="#000000" bgColor="#FFFFFF" />
+                    </div>
+                </div>
+
+                <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-gray-500">Reference / Tx Hash:</span>
+                    <div className="flex items-center gap-2">
+                        <span className="font-bold text-[#ff4d00]">Required</span>
+                    </div>
+                </div>
+
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded text-blue-800">
+                    <p className="text-xs font-bold">{details.note}</p>
+                    <p className="text-xs mt-1">Please pay the exact invoice amount or higher. After making the payment, please upload a screenshot or mention your transaction hash as proof.</p>
+                </div>
+            </div>
+        );
+    };
+
     if (isProcessing && step === 1) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[500px] text-center">
@@ -383,13 +474,6 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
                 <div>
                     <div className="text-[10px] font-black uppercase tracking-widest text-[#ff4d00] mb-1">Exchange & Funding</div>
                     <h2 className="text-3xl font-black text-gray-900 uppercase tracking-tight">Purchase Traffic Credits</h2>
-                </div>
-                <div className="bg-[#111] text-white px-6 py-4 flex items-center gap-6 shadow-xl border-l-4 border-[#ff4d00]">
-                    <div className="text-right">
-                        <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Active Balance</div>
-                        <div className="text-2xl font-black text-white">€{balance.toFixed(2)}</div>
-                    </div>
-                    <Wallet className="text-[#ff4d00]" size={32} />
                 </div>
             </div>
 
@@ -496,27 +580,27 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
                             <h3 className="text-xs font-black uppercase tracking-widest text-gray-900 mb-6 flex items-center gap-2">
                                 <Wallet size={14} className="text-[#ff4d00]" /> Payment Method
                             </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
                                 <button
                                     onClick={() => setPaymentMethod('card')}
-                                    className={`p-6 border-2 transition-all flex flex-col items-center gap-4 ${paymentMethod === 'card' ? 'border-[#ff4d00] bg-orange-50 shadow-lg ring-1 ring-[#ff4d00]' : 'border-gray-100 hover:border-gray-200'}`}
+                                    className={`p-4 border-2 transition-all flex flex-col items-center gap-3 text-center ${paymentMethod === 'card' ? 'border-[#ff4d00] bg-orange-50 shadow-lg ring-1 ring-[#ff4d00]' : 'border-gray-100 hover:border-gray-200'}`}
                                 >
-                                    <CreditCard size={32} className={paymentMethod === 'card' ? 'text-[#ff4d00]' : 'text-gray-300'} />
-                                    <span className="text-xs font-black uppercase tracking-widest">Credit Card (Stripe)</span>
+                                    <CreditCard size={28} className={paymentMethod === 'card' ? 'text-[#ff4d00]' : 'text-gray-300'} />
+                                    <span className="text-[10px] font-black uppercase tracking-widest">Card</span>
+                                </button>
+                                <button
+                                    onClick={() => setPaymentMethod('crypto')}
+                                    className={`p-4 border-2 transition-all flex flex-col items-center gap-3 text-center ${paymentMethod === 'crypto' ? 'border-[#ff4d00] bg-orange-50 shadow-lg' : 'border-gray-100 hover:border-gray-200'}`}
+                                >
+                                    <Bitcoin size={28} className={paymentMethod === 'crypto' ? 'text-[#ff4d00]' : 'text-gray-300'} />
+                                    <span className="text-[10px] font-black uppercase tracking-widest">Crypto</span>
                                 </button>
                                 <button
                                     onClick={() => setPaymentMethod('bank')}
-                                    className={`p-6 border-2 transition-all flex flex-col items-center gap-4 ${paymentMethod === 'bank' ? 'border-[#ff4d00] bg-orange-50 shadow-lg' : 'border-gray-100 hover:border-gray-200'}`}
+                                    className={`p-4 border-2 transition-all flex flex-col items-center gap-3 text-center ${paymentMethod === 'bank' ? 'border-[#ff4d00] bg-orange-50 shadow-lg' : 'border-gray-100 hover:border-gray-200'}`}
                                 >
-                                    <Landmark size={32} className={paymentMethod === 'bank' ? 'text-[#ff4d00]' : 'text-gray-300'} />
-                                    <span className="text-xs font-black uppercase tracking-widest">Bank Wire</span>
-                                </button>
-                                <button
-                                    onClick={() => setPaymentMethod('apple')}
-                                    className={`p-6 border-2 transition-all flex flex-col items-center gap-4 ${paymentMethod === 'apple' ? 'border-[#ff4d00] bg-orange-50 shadow-lg' : 'border-gray-100 hover:border-gray-200'}`}
-                                >
-                                    <Smartphone size={32} className={paymentMethod === 'apple' ? 'text-[#ff4d00]' : 'text-gray-300'} />
-                                    <span className="text-xs font-black uppercase tracking-widest">Apple Pay</span>
+                                    <Landmark size={28} className={paymentMethod === 'bank' ? 'text-[#ff4d00]' : 'text-gray-300'} />
+                                    <span className="text-[10px] font-black uppercase tracking-widest">Bank</span>
                                 </button>
                             </div>
                         </div>
@@ -561,10 +645,27 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
 
                                 <div className="h-px bg-gray-800 my-10"></div>
 
-                                <div className="flex justify-between items-center">
-                                    <div className="text-sm font-black uppercase tracking-widest">Total Due</div>
-                                    <div className="text-4xl font-black text-white">€{totalPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                                </div>
+                                {bulkPack > 1 ? (
+                                    <div className="space-y-3">
+                                        <div className="flex justify-between items-center text-gray-400">
+                                            <div className="text-xs font-bold uppercase tracking-widest">Original Total</div>
+                                            <div className="text-base line-through">€{(basePrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                        </div>
+                                        <div className="flex justify-between items-center text-green-400 pb-2">
+                                            <div className="text-xs font-black uppercase tracking-widest bg-green-900/40 px-2 py-1 rounded text-green-400 border border-green-800/50">Save {bulkPack === 6 ? '20%' : '40%'}</div>
+                                            <div className="text-base font-bold">-€{discountAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <div className="text-sm font-black uppercase tracking-widest">Total Due</div>
+                                            <div className="text-4xl font-black text-white">€{totalPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex justify-between items-center">
+                                        <div className="text-sm font-black uppercase tracking-widest">Total Due <span className="text-[10px] text-gray-500 block">No bulk discount applied</span></div>
+                                        <div className="text-4xl font-black text-white">€{totalPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                    </div>
+                                )}
 
                                 <button
                                     onClick={handleCreatePayment}
@@ -583,28 +684,30 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
                 </div>
             ) : (
                 /* Step 2: Payment Execution */
-                <div className="max-w-5xl mx-auto space-y-8 animate-in slide-in-from-right-8 duration-500 pb-20">
+                <div className="mx-auto space-y-8 animate-in slide-in-from-right-8 duration-500 pb-20 w-full mb-16">
                     <button onClick={() => setStep(1)} className="flex items-center gap-2 text-gray-500 hover:text-black text-sm font-bold uppercase tracking-wider mb-6">
                         <ArrowRight size={16} className="rotate-180" /> Back to Configuration
                     </button>
 
-                    <div className="bg-white border border-gray-200 p-12 md:p-20 shadow-xl min-h-[700px]">
+                    <div className="bg-white border border-gray-200 p-8 md:p-14 shadow-xl min-h-[700px] w-full">
                         <div className="text-center mb-16">
                             <h3 className="text-4xl font-black text-gray-900 uppercase tracking-tighter mb-4">Secure Checkout</h3>
                             <p className="text-gray-500 text-lg">Completing payment of <span className="font-bold text-[#ff4d00] text-xl">€{totalPrice.toFixed(2)}</span> via {paymentMethod === 'card' ? 'Stripe Secure' : paymentMethod}</p>
                         </div>
 
                         {paymentMethod === 'card' && clientSecret && (
-                            <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'stripe', variables: { colorPrimary: '#ff4d00' } } }}>
-                                <CheckoutForm
-                                    amount={totalPrice}
-                                    onSuccess={handlePaymentSuccess}
-                                    onError={(msg) => alert(msg)}
-                                />
-                            </Elements>
+                            <div className="max-w-3xl mx-auto">
+                                <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'stripe', variables: { colorPrimary: '#ff4d00' } } }}>
+                                    <CheckoutForm
+                                        amount={totalPrice}
+                                        onSuccess={handlePaymentSuccess}
+                                        onError={(msg) => alert(msg)}
+                                    />
+                                </Elements>
+                            </div>
                         )}
 
-                        {paymentMethod === 'bank' && (
+                        {(paymentMethod === 'bank' || paymentMethod === 'crypto') && (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
                                 <div className="space-y-8">
                                     <div className="bg-green-50 border-l-4 border-green-500 p-6 shadow-md">
@@ -621,34 +724,49 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
 
                                     <div>
                                         <label className="text-sm font-black uppercase tracking-widest text-gray-400 mb-4 block flex items-center gap-2">
-                                            <Layers size={14} /> Select Currency
+                                            <Layers size={14} /> {paymentMethod === 'crypto' ? 'Select Asset' : 'Select Currency'}
                                         </label>
                                         <div className="flex flex-wrap gap-4">
-                                            {(Object.keys(BANK_DETAILS) as Currency[]).map((curr) => {
-                                                const icons: Record<Currency, string> = { USD: '$', EUR: '€', GBP: '£', AUD: 'A$', RON: 'lei' };
-                                                return (
+                                            {paymentMethod === 'bank' ? (
+                                                (Object.keys(BANK_DETAILS) as Currency[]).map((curr) => {
+                                                    const icons: Record<Currency, string> = { USD: '$', EUR: '€', GBP: '£', AUD: 'A$', RON: 'lei' };
+                                                    return (
+                                                        <button
+                                                            key={curr}
+                                                            onClick={() => setSelectedCurrency(curr)}
+                                                            className={`px-6 py-3 text-base font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${selectedCurrency === curr
+                                                                ? 'bg-[#ff4d00] text-white shadow-lg'
+                                                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                                }`}
+                                                        >
+                                                            <span className="text-lg">{icons[curr]}</span>
+                                                            {curr}
+                                                        </button>
+                                                    );
+                                                })
+                                            ) : (
+                                                (Object.keys(CRYPTO_DETAILS) as CryptoCurrency[]).map((cryptoKey) => (
                                                     <button
-                                                        key={curr}
-                                                        onClick={() => setSelectedCurrency(curr)}
-                                                        className={`px-6 py-3 text-base font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${selectedCurrency === curr
+                                                        key={cryptoKey}
+                                                        onClick={() => setSelectedCrypto(cryptoKey)}
+                                                        className={`px-4 py-3 text-xs sm:text-sm font-bold uppercase tracking-wider transition-all ${selectedCrypto === cryptoKey
                                                             ? 'bg-[#ff4d00] text-white shadow-lg'
                                                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                                             }`}
                                                     >
-                                                        <span className="text-lg">{icons[curr]}</span>
-                                                        {curr}
+                                                        {cryptoKey}
                                                     </button>
-                                                );
-                                            })}
+                                                ))
+                                            )}
                                         </div>
                                     </div>
 
                                     <div className="bg-gray-50 border border-gray-200 p-8">
                                         <div className="flex items-center justify-between mb-5">
-                                            <h4 className="text-sm font-black uppercase tracking-widest text-gray-900">Bank Details ({selectedCurrency})</h4>
-                                            <span className="text-xs font-bold text-[#ff4d00] uppercase">Recommended</span>
+                                            <h4 className="text-sm font-black uppercase tracking-widest text-gray-900">{paymentMethod === 'crypto' ? 'Crypto Address' : `Bank Details (${selectedCurrency})`}</h4>
+                                            {paymentMethod === 'bank' && <span className="text-xs font-bold text-[#ff4d00] uppercase">Recommended</span>}
                                         </div>
-                                        {renderBankDetails(selectedCurrency)}
+                                        {paymentMethod === 'crypto' ? renderCryptoDetails(selectedCrypto) : renderBankDetails(selectedCurrency)}
                                     </div>
                                 </div>
 
@@ -710,16 +828,6 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
                                 </div>
                             </div>
                         )}
-
-                        {paymentMethod === 'apple' && (
-                            <div className="text-center py-16">
-                                <Smartphone size={80} className="mx-auto text-gray-200 mb-6" />
-                                <p className="text-gray-500 mb-8 text-lg">Apple Pay integration requires HTTPS on production domain.</p>
-                                <button onClick={() => handlePaymentSuccess("APPLE-SIM")} className="bg-black text-white px-10 py-4 rounded-full font-bold text-lg">
-                                    Pay with Pay (Simulated)
-                                </button>
-                            </div>
-                        )}
                     </div>
 
                     <div className="flex justify-center items-center gap-2 opacity-50">
@@ -728,6 +836,59 @@ const BuyCredits: React.FC<BuyCreditsProps> = ({ onBack, onPurchase }) => {
                     </div>
                 </div>
             )}
+
+            {/* FAQ Section */}
+            <div className="mt-20 pt-16 border-t border-gray-200">
+                <div className="text-center mb-12">
+                    <h3 className="text-3xl font-black text-gray-900 uppercase tracking-tighter mb-4">Frequently Asked Questions</h3>
+                    <p className="text-gray-500 max-w-2xl mx-auto">Everything you need to know about purchasing and using our traffic credits.</p>
+                </div>
+
+                <div className="max-w-4xl mx-auto space-y-4">
+                    {[
+                        {
+                            q: "What are traffic credits?",
+                            a: "Traffic credits are our internal currency. 1 credit equals 1 unique visitor to your website. You purchase credits in bulk and can spend them on any active projects or campaigns you create in your dashboard."
+                        },
+                        {
+                            q: "Do my credits expire?",
+                            a: "No, purchased credits never expire. They remain in your account indefinitely until you use them on campaigns. You have complete flexibility on when and how to deploy your traffic."
+                        },
+                        {
+                            q: "How fast is the delivery?",
+                            a: "Traffic delivery begins immediately after your campaign goes live. You can control the exact speed, from a slow drip (e.g., 100 visitors/day) to a massive surge, depending on your project settings."
+                        },
+                        {
+                            q: "What defines 'High Quality' vs. other tiers?",
+                            a: "Our tiers dictate the routing network and residential IP quality. Higher tiers use premium, low-fraud-score residential proxies that heavily mimic real user behavior, offering longer session times and better geographic precision."
+                        },
+                        {
+                            q: "How do Crypto/Bank payments work?",
+                            a: "For Crypto and Bank Wire, you'll transfer the exact amount to the provided details and upload a screenshot or transaction hash. Our team verifies this manually (usually within 1-12 hours) and instantly releases the credits to your account upon confirmation."
+                        }
+                    ].map((faq, index) => (
+                        <div key={index} className="border border-gray-200 bg-white overflow-hidden transition-all duration-300">
+                            <button
+                                onClick={() => setOpenFaq(openFaq === index ? null : index)}
+                                className="w-full flex justify-between items-center p-6 text-left hover:bg-gray-50 focus:outline-none"
+                            >
+                                <span className="font-bold text-gray-900 text-lg pr-8">{faq.q}</span>
+                                <div className={`flex-shrink-0 transition-transform duration-300 text-[#ff4d00] ${openFaq === index ? 'rotate-180' : ''}`}>
+                                    <ChevronDown size={20} />
+                                </div>
+                            </button>
+                            <div
+                                className={`transition-all duration-300 ease-in-out ${openFaq === index ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+                                    }`}
+                            >
+                                <div className="p-6 pt-0 text-gray-600 leading-relaxed border-t border-gray-100">
+                                    {faq.a}
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
         </div>
     );
 };

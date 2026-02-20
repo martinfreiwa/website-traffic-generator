@@ -284,6 +284,32 @@ export interface User {
   gamificationPermanentDiscount?: number;
   streakDays?: number;
   streakBest?: number;
+  spamScore?: number;
+  ipSharedWithCount?: number;
+  affiliateEarnings?: number;
+}
+
+export interface UserStats {
+  totalUsers: number;
+  activeUsers24h: number;
+  activeUsers7d: number;
+  newUsersToday: number;
+  newUsers7d: number;
+  newUsers30d: number;
+  highRiskUsers: number;
+  fraudAlertsCount: number;
+}
+
+export interface FraudAlert {
+  id: string;
+  type: string;
+  ip: string;
+  userIds: string[];
+  userEmails: string[];
+  affiliateEarnings: number;
+  hasAffiliateRelation: boolean;
+  detectedAt: string;
+  riskLevel: 'low' | 'medium' | 'high';
 }
 
 export interface LiveVisitor {

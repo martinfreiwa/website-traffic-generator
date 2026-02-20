@@ -20,6 +20,7 @@ const QuickCampaign: React.FC<QuickCampaignProps> = ({ onSuccess }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [generatedPassword, setGeneratedPassword] = useState('');
 
   const formatTimeOnPage = (seconds: number): string => {
     if (seconds < 60) return `${seconds} seconds`;
@@ -76,11 +77,22 @@ const QuickCampaign: React.FC<QuickCampaignProps> = ({ onSuccess }) => {
         throw new Error(err.detail || 'Failed to create campaign');
       }
 
+      const data = await response.json();
+
+      if (data.access_token) {
+        localStorage.setItem('token', data.access_token);
+        setGeneratedPassword(data.generated_password);
+      }
+
       setSuccess(true);
-      setTimeout(() => {
-        navigate('/dashboard');
-        if (onSuccess) onSuccess();
-      }, 2000);
+
+      // If no password generated (existing user testing?), fallback to old behavior
+      if (!data.generated_password) {
+        setTimeout(() => {
+          navigate('/dashboard');
+          if (onSuccess) onSuccess();
+        }, 2000);
+      }
     } catch (err: any) {
       setError(err.message || 'Something went wrong. Please try again.');
     } finally {
@@ -90,14 +102,56 @@ const QuickCampaign: React.FC<QuickCampaignProps> = ({ onSuccess }) => {
 
   if (success) {
     return (
-      <div className="max-w-4xl mx-auto text-center py-12">
+      <div className="max-w-4xl mx-auto text-center py-12 relative z-10">
         <div className="w-20 h-20 bg-gradient-to-br from-green-400 to-green-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl">
           <CheckCircle className="w-10 h-10 text-white" />
         </div>
-        <h3 className="text-2xl font-black text-gray-900 mb-3">Campaign Started!</h3>
-        <p className="text-gray-600">
-          Your <span className="font-bold text-[#ff4d00]">{visitors.toLocaleString()}</span> visitor campaign is running.
+        <h3 className="text-2xl font-black text-white md:text-gray-900 mb-3 drop-shadow-sm">Campaign Started!</h3>
+        <p className="text-white/90 md:text-gray-600 mb-8 max-w-lg mx-auto">
+          Your <span className="font-bold text-white md:text-[#ff4d00]">{visitors.toLocaleString()}</span> visitor campaign is running.
         </p>
+
+        {generatedPassword && (
+          <div className="bg-white p-8 rounded-2xl shadow-2xl border border-gray-100 max-w-md mx-auto transform transition-all animate-in zoom-in-95 duration-500">
+            <h4 className="text-xl font-black text-gray-900 mb-3">Your Account Details</h4>
+            <p className="text-sm font-medium text-gray-500 mb-6">We've automatically created an account for you. Please save your password below.</p>
+
+            <div className="bg-gray-50 border border-gray-200 p-5 rounded-xl flex items-center justify-between group mb-8">
+              <code className="text-[#ff4d00] font-mono font-black text-xl tracking-wider select-all">{generatedPassword}</code>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(generatedPassword);
+                  alert("Copied to clipboard!");
+                }}
+                className="text-gray-400 hover:text-[#ff4d00] text-xs font-bold uppercase tracking-widest transition-colors flex items-center gap-1"
+                title="Copy to clipboard"
+              >
+                Copy
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  navigate('/profile');
+                  if (onSuccess) onSuccess();
+                }}
+                className="w-full bg-[#ff4d00] text-white py-4 px-6 rounded-xl text-sm font-bold uppercase tracking-widest hover:bg-[#e04400] transition-colors shadow-lg hover:shadow-xl transform active:scale-[0.98]"
+              >
+                Change Password Now
+              </button>
+              <button
+                onClick={() => {
+                  navigate('/dashboard');
+                  if (onSuccess) onSuccess();
+                }}
+                className="w-full bg-gray-100 text-gray-900 py-4 px-6 rounded-xl text-sm font-bold uppercase tracking-widest hover:bg-gray-200 transition-colors transform active:scale-[0.98]"
+              >
+                Go to Dashboard
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

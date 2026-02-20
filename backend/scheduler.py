@@ -2,7 +2,7 @@ import asyncio
 import logging
 import random
 from datetime import datetime, timedelta, date
-from typing import Optional, Dict
+from typing import Optional, Dict, List, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from database import SessionLocal
@@ -429,6 +429,9 @@ class TrafficScheduler:
                 if now.hour == 0 and now.minute < 2:
                     create_daily_transactions()
 
+                if now.hour == 3 and now.minute < 2:
+                    run_daily_fraud_check()
+
             except Exception as e:
                 logger.error(f"Error in scheduler loop: {e}")
             await asyncio.sleep(60)
@@ -534,3 +537,117 @@ class TrafficScheduler:
 
 
 scheduler = TrafficScheduler()
+
+
+fraud_alerts_cache: List[Dict[str, Any]] = []
+last_fraud_check: Optional[datetime] = None
+
+
+def run_daily_fraud_check():
+    global fraud_alerts_cache, last_fraud_check
+
+    db = SessionLocal()
+    try:
+        logger.info("Running daily fraud detection check...")
+
+        ip_groups = (
+            db.query(models.User.last_ip, func.count(models.User.id).label("count"))
+            .filter(models.User.last_ip != None, models.User.last_ip != "")
+            .group_by(models.User.last_ip)
+            .having(func.count(models.User.id) >= 2)
+            .all()
+        )
+
+        alerts = []
+
+        for ip_group in ip_groups:
+            ip = ip_group.last_ip
+            users = db.query(models.User).filter(models.User.last_ip == ip).all()
+
+            user_ids = [u.id for u in users]
+            user_emails = [u.email for u in users]
+
+            total_affiliate_earnings = 0.0
+            for u in users:
+                tier = (
+                    db.query(models.AffiliateTier)
+                    .filter(models.AffiliateTier.user_id == u.id)
+                    .first()
+                )
+                if tier:
+                    total_affiliate_earnings += float(tier.total_earnings or 0)
+
+            has_affiliate_relation = False
+            for user_id in user_ids:
+                relations = (
+                    db.query(models.AffiliateRelation)
+                    .filter(
+                        (models.AffiliateRelation.user_id == user_id)
+                        | (models.AffiliateRelation.referrer_l1_id == user_id)
+                        | (models.AffiliateRelation.referrer_l2_id == user_id)
+                        | (models.AffiliateRelation.referrer_l3_id == user_id)
+                    )
+                    .all()
+                )
+
+                for rel in relations:
+                    other_ids = [
+                        rel.user_id,
+                        rel.referrer_l1_id,
+                        rel.referrer_l2_id,
+                        rel.referrer_l3_id,
+                    ]
+                    for other_id in other_ids:
+                        if other_id and other_id in user_ids and other_id != user_id:
+                            has_affiliate_relation = True
+                            break
+                    if has_affiliate_relation:
+                        break
+                if has_affiliate_relation:
+                    break
+
+            risk_level = "low"
+            if has_affiliate_relation and total_affiliate_earnings > 0:
+                risk_level = "high"
+            elif total_affiliate_earnings > 0:
+                risk_level = "medium"
+            elif len(users) >= 3:
+                risk_level = "medium"
+
+            alerts.append(
+                {
+                    "id": f"ip_{ip}",
+                    "type": "ip_sharing",
+                    "ip": ip,
+                    "user_ids": user_ids,
+                    "user_emails": user_emails,
+                    "affiliate_earnings": total_affiliate_earnings,
+                    "has_affiliate_relation": has_affiliate_relation,
+                    "detected_at": datetime.utcnow().isoformat(),
+                    "risk_level": risk_level,
+                }
+            )
+
+        fraud_alerts_cache = alerts
+        last_fraud_check = datetime.utcnow()
+
+        high_risk_count = len([a for a in alerts if a["risk_level"] == "high"])
+        logger.info(
+            f"Fraud check complete: {len(alerts)} IP groups found, {high_risk_count} high risk"
+        )
+
+    except Exception as e:
+        logger.error(f"Error in daily fraud check: {e}")
+    finally:
+        db.close()
+
+
+def get_cached_fraud_alerts() -> List[Dict[str, Any]]:
+    global fraud_alerts_cache, last_fraud_check
+
+    if not fraud_alerts_cache or not last_fraud_check:
+        run_daily_fraud_check()
+    elif (datetime.utcnow() - last_fraud_check).total_seconds() > 86400:
+        run_daily_fraud_check()
+
+    return fraud_alerts_cache

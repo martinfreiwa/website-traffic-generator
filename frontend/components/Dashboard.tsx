@@ -18,8 +18,9 @@ import PricingPage from './PricingPage';
 import Billing from './Billing';
 import Gamification from './Gamification';
 import PaymentSuccess from './PaymentSuccess';
+import FreeTraffic from './FreeTraffic';
 import { MenuSection, Project } from '../types';
-import { MessageSquare, TrendingUp, Users, CreditCard, Activity, Construction, LayoutDashboard, Layers, User, Banknote, Share2, HelpCircle, Receipt, Star } from 'lucide-react';
+import { MessageSquare, TrendingUp, Users, CreditCard, Activity, Construction, LayoutDashboard, Layers, User, Banknote, Share2, HelpCircle, Receipt, Star, Gift } from 'lucide-react';
 import { db } from '../services/db';
 
 interface DashboardProps {
@@ -46,7 +47,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     const initData = async () => {
       await db.syncProjects(); // Sync projects from Firestore
       setProjects(db.getProjects());
-      setBalance(db.getBalance());
+      setBalance(db.getMaxTierBalance());
       setLoading(false);
     };
     initData();
@@ -74,6 +75,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
       items: [
         { label: 'Dashboard', id: 'home', path: '/dashboard', icon: <LayoutDashboard size={18} /> },
         { label: 'Campaigns', id: 'campaigns', path: '/dashboard/campaigns', icon: <Layers size={18} />, active: currentPath.startsWith('campaigns') },
+        { label: 'Free Traffic', id: 'free-traffic', path: '/dashboard/free-traffic', icon: <Gift size={18} /> },
       ]
     },
     {
@@ -98,6 +100,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const getPageTitle = () => {
     if (currentPath === 'home' || currentPath === '') return 'Dashboard';
     if (currentPath.startsWith('campaigns')) return 'Campaigns';
+    if (currentPath === 'free-traffic') return 'Free Traffic';
     if (currentPath === 'billing') return 'Billing & Payments';
     if (currentPath === 'buy-credits') return 'Wallet Top-Up';
     if (currentPath === 'gamification') return 'Gamification';
@@ -261,6 +264,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
               <Route path="/affiliate" element={<Affiliate />} />
               <Route path="/support" element={<Support />} />
               <Route path="/payment-success" element={<PaymentSuccess />} />
+              <Route path="/free-traffic" element={<FreeTraffic />} />
 
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>

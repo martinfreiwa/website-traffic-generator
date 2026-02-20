@@ -1,7 +1,7 @@
-
-import React from 'react';
-import { Transaction, User, Project, Ticket, AdminStats } from '../../types';
-import { TrendingUp, Users, Layers, MessageSquare, CreditCard, Plus, ArrowUpRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Transaction, User, Project, Ticket, AdminStats, FraudAlert } from '../../types';
+import { TrendingUp, Users, Layers, MessageSquare, CreditCard, Plus, ArrowUpRight, AlertTriangle, Shield, ExternalLink } from 'lucide-react';
+import { db } from '../../services/db';
 
 interface AdminOverviewProps {
     users: User[];
@@ -56,7 +56,14 @@ const RevenueChart = ({ transactions }: { transactions: Transaction[] }) => {
 }
 
 const AdminOverview: React.FC<AdminOverviewProps> = ({ users = [], projects = [], tickets = [], transactions = [], stats, onNavigate }) => {
-    // Extensive safety checks
+    const [fraudAlerts, setFraudAlerts] = useState<FraudAlert[]>([]);
+    
+    useEffect(() => {
+        db.getFraudAlerts().then(alerts => {
+            setFraudAlerts(alerts.filter(a => a.riskLevel === 'high' || a.riskLevel === 'medium'));
+        });
+    }, []);
+
     const safeTransactions = Array.isArray(transactions) ? transactions : [];
     const safeProjects = Array.isArray(projects) ? projects : [];
     const safeUsers = Array.isArray(users) ? users : [];
@@ -72,6 +79,51 @@ const AdminOverview: React.FC<AdminOverviewProps> = ({ users = [], projects = []
     return (
         <div className="space-y-6 animate-in fade-in">
             <h2 className="text-2xl font-black uppercase tracking-tight mb-6">Admin Overview</h2>
+
+            {fraudAlerts.length > 0 && (
+                <div className="bg-red-50 border border-red-200 p-6 shadow-sm">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-sm font-black uppercase tracking-widest text-red-600 flex items-center gap-2">
+                            <AlertTriangle size={16} /> Fraud Alerts ({fraudAlerts.length})
+                        </h3>
+                        <button 
+                            onClick={() => onNavigate('admin-users')} 
+                            className="text-[10px] uppercase font-bold text-red-600 hover:text-red-800 flex items-center gap-1"
+                        >
+                            View All <ExternalLink size={10} />
+                        </button>
+                    </div>
+                    <div className="space-y-3">
+                        {fraudAlerts.slice(0, 3).map(alert => (
+                            <div key={alert.id} className="bg-white p-4 border border-red-100 flex justify-between items-center">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <Shield size={12} className={alert.riskLevel === 'high' ? 'text-red-600' : 'text-yellow-600'} />
+                                        <span className="text-xs font-bold text-gray-900">
+                                            {alert.userEmails.length} Accounts share IP: {alert.ip}
+                                        </span>
+                                        <span className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase ${
+                                            alert.riskLevel === 'high' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
+                                        }`}>
+                                            {alert.riskLevel}
+                                        </span>
+                                    </div>
+                                    <div className="text-[10px] text-gray-500">
+                                        {alert.userEmails.slice(0, 2).join(', ')}
+                                        {alert.userEmails.length > 2 && ` +${alert.userEmails.length - 2} more`}
+                                    </div>
+                                </div>
+                                {alert.affiliateEarnings > 0 && (
+                                    <div className="text-right">
+                                        <div className="text-[9px] text-gray-400 uppercase">Affiliate Earnings</div>
+                                        <div className="text-sm font-black text-red-600">€{alert.affiliateEarnings.toFixed(2)}</div>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Top Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

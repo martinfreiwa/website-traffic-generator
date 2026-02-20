@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { Project, PriceClass, ProjectSettings, Transaction, User, Ticket, SystemSettings, Notification, TrafficLog, SystemAlert, LiveVisitor, Broadcast, AdminStats, Coupon, MarketingCampaign, ConversionSettings, ActivityLog, UserSession, ImpersonationLog, BalanceAdjustmentLog, EmailLog, UserNotificationPrefs, UserReferral, AdminUserDetails } from '../types';
+import { Project, PriceClass, ProjectSettings, Transaction, User, Ticket, SystemSettings, Notification, TrafficLog, SystemAlert, LiveVisitor, Broadcast, AdminStats, Coupon, MarketingCampaign, ConversionSettings, ActivityLog, UserSession, ImpersonationLog, BalanceAdjustmentLog, EmailLog, UserNotificationPrefs, UserReferral, AdminUserDetails, UserStats, FraudAlert } from '../types';
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' ? window.location.origin : '');
 const SSO_TARGET_DOMAIN = import.meta.env.VITE_SSO_TARGET_DOMAIN || '';
@@ -653,6 +653,16 @@ export const db = {
         return db.getProjects();
     },
 
+    getMaxTierBalance: (): number => {
+        const user = db.getCurrentUser();
+        const balances = [
+            user?.balanceEconomy ?? 0,
+            user?.balanceProfessional ?? 0,
+            user?.balanceExpert ?? 0
+        ];
+        return Math.max(...balances);
+    },
+
     // Financials
     getBalance: (): number => {
         const user = db.getCurrentUser();
@@ -703,10 +713,56 @@ export const db = {
             tags: u.tags || [],
             banReason: u.ban_reason || '',
             lastIp: u.last_ip || '',
-            lastActive: u.last_active || ''
+            lastActive: u.last_active || '',
+            spamScore: u.spam_score || 0,
+            ipSharedWithCount: u.ip_shared_with_count || 0,
+            affiliateEarnings: u.affiliate_earnings || 0
         }));
         localStorage.setItem('modus_users_cache', JSON.stringify(mapped));
         return mapped;
+    },
+
+    getUserStats: async (): Promise<UserStats | null> => {
+        try {
+            const response = await fetchWithAuth(`${API_BASE_URL}/admin/users/stats`);
+            if (!response.ok) return null;
+            const data = await response.json();
+            return {
+                totalUsers: data.total_users,
+                activeUsers24h: data.active_users_24h,
+                activeUsers7d: data.active_users_7d,
+                newUsersToday: data.new_users_today,
+                newUsers7d: data.new_users_7d,
+                newUsers30d: data.new_users_30d,
+                highRiskUsers: data.high_risk_users,
+                fraudAlertsCount: data.fraud_alerts_count
+            };
+        } catch (e) {
+            console.error('Failed to fetch user stats:', e);
+            return null;
+        }
+    },
+
+    getFraudAlerts: async (): Promise<FraudAlert[]> => {
+        try {
+            const response = await fetchWithAuth(`${API_BASE_URL}/admin/fraud-alerts`);
+            if (!response.ok) return [];
+            const data = await response.json();
+            return data.map((a: any) => ({
+                id: a.id,
+                type: a.type,
+                ip: a.ip,
+                userIds: a.user_ids,
+                userEmails: a.user_emails,
+                affiliateEarnings: a.affiliate_earnings,
+                hasAffiliateRelation: a.has_affiliate_relation,
+                detectedAt: a.detected_at,
+                riskLevel: a.risk_level
+            }));
+        } catch (e) {
+            console.error('Failed to fetch fraud alerts:', e);
+            return [];
+        }
     },
 
     updateUser: async (user: User) => {

@@ -1,8 +1,10 @@
 import os
 import resend
 import logging
-from typing import Optional, List
+from typing import Optional, List, Union
 from datetime import datetime
+from database import SessionLocal
+import models
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -22,31 +24,81 @@ def get_frontend_url() -> str:
 
 
 def send_email(
-    to: str | List[str], subject: str, html: str, text: Optional[str] = None
+    to: Union[str, List[str]], subject: str, html: str, text: Optional[str] = None
 ) -> dict:
+    to_list = to if isinstance(to, list) else [to]
+    email_count = len(to_list)
+
+    db = SessionLocal()
     try:
-        params = {
-            "from": get_from_email(),
-            "to": to,
-            "subject": subject,
-            "html": html,
-        }
-        if text:
-            params["text"] = text
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        emails_sent_today = db.query(models.EmailLog).filter(models.EmailLog.sent_at >= today_start).count()
 
-        logger.info(f"📧 Attempting to send email to: {to}, subject: {subject}")
+        if emails_sent_today + email_count > 100:
+            logger.warning(f"⚠️ Daily email limit (100) reached. Sent today: {emails_sent_today}. Cannot send {email_count} more emails.")
+            return {"success": False, "error": "Daily email limit reached (max 100 emails/day)."}
 
-        response = resend.Emails.send(params)
+        logger.info(f"📧 Attempting to send {email_count} email(s), subject: {subject}")
 
-        logger.info(
-            f"✅ Email sent successfully! ID: {response.get('id', 'unknown')}, to: {to}"
-        )
-        return {"success": True, "data": response}
+        # Resend allows max 50 recipients per API call, so we chunk them
+        chunk_size = 50
+        all_responses = []
+
+        for i in range(0, len(to_list), chunk_size):
+            chunk = to_list[i:i + chunk_size]
+            params = {
+                "from": get_from_email(),
+                "to": chunk,
+                "subject": subject,
+                "html": html,
+            }
+            if text:
+                params["text"] = text
+
+            response = resend.Emails.send(params)
+            all_responses.append(response)
+
+            logger.info(
+                f"✅ Email chunk sent successfully! ID: {response.get('id', 'unknown')}, chunk size: {len(chunk)}"
+            )
+
+            # Log successfully sent emails
+            for recipient in chunk:
+                log_entry = models.EmailLog(
+                    email_type="transactional",
+                    to_email=recipient,
+                    subject=subject,
+                    status="sent",
+                    sent_at=datetime.utcnow()
+                )
+                db.add(log_entry)
+            db.commit()
+
+        return {"success": True, "data": all_responses if len(all_responses) > 1 else all_responses[0]}
+        
     except Exception as e:
         logger.error(
             f"❌ Email FAILED to send! to: {to}, subject: {subject}, error: {str(e)}"
         )
+        
+        for recipient in to_list:
+            log_entry = models.EmailLog(
+                email_type="transactional",
+                to_email=recipient,
+                subject=subject,
+                status="failed",
+                error_message=str(e),
+                sent_at=datetime.utcnow()
+            )
+            try:
+                db.add(log_entry)
+                db.commit()
+            except Exception as db_e:
+                logger.error(f"Failed to log email error: {db_e}")
+                
         return {"success": False, "error": str(e)}
+    finally:
+        db.close()
 
 
 def send_verification_email(email: str, code: str) -> dict:
