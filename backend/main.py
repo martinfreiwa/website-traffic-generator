@@ -10,7 +10,7 @@ load_dotenv()
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, String
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field, field_validator
@@ -5316,7 +5316,11 @@ def get_project_stats(
             func.date(models.TrafficLog.timestamp).label("date"),
             func.count().label("pageviews"),
             func.count(
-                func.distinct(func.coalesce(models.TrafficLog.ip, models.TrafficLog.id))
+                func.distinct(
+                    func.coalesce(
+                        models.TrafficLog.ip, func.cast(models.TrafficLog.id, String)
+                    )
+                )
             ).label("visitors"),
         )
         .filter(
