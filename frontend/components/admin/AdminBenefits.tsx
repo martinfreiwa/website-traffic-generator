@@ -41,8 +41,8 @@ const AdminBenefits: React.FC = () => {
       const [pending, types, history, settingsRes] = await Promise.all([
         db.getPendingBenefits().catch(() => []),
         fetch(`${window.location.origin}/admin/benefit-types`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-        }).then(r => r.json()).catch(() => []),
+          headers: { Authorization: `Bearer ${localStorage.getItem('tgp_token')}` }
+        }).then(r => r.json()).then(data => Array.isArray(data) ? data : []).catch(() => []),
         db.getBenefitsHistory().catch(() => []),
         fetch(`${window.location.origin}/settings`).then(r => r.json()).catch(() => ({ settings: {} }))
       ]);
@@ -116,7 +116,7 @@ const AdminBenefits: React.FC = () => {
         method,
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`
+          Authorization: `Bearer ${localStorage.getItem('tgp_token')}`
         },
         body: JSON.stringify(payload)
       });
@@ -324,8 +324,8 @@ const AdminBenefits: React.FC = () => {
                       </td>
                       <td className="px-6 py-4">
                         <span className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-sm ${b.status === 'approved' ? 'bg-green-100 text-green-700' :
-                            b.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                              'bg-gray-100 text-gray-500'
+                          b.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                            'bg-gray-100 text-gray-500'
                           }`}>
                           {b.status === 'approved' ? <CheckCircle size={10} /> :
                             b.status === 'rejected' ? <XCircle size={10} /> :
@@ -401,7 +401,7 @@ const AdminBenefits: React.FC = () => {
                   <Users size={16} />
                   How it works
                 </h4>
-                <ul className-2 text-xs="mt text-blue-800 space-y-1">
+                <ul className="mt-2 text-xs text-blue-800 space-y-1">
                   <li>• When a new user registers, they will automatically receive {signupCredits} credits</li>
                   <li>• Credits are added to their account balance immediately</li>
                   <li>• A transaction record is created for tracking</li>

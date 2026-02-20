@@ -144,11 +144,14 @@ export interface Project {
   customTarget?: CustomTarget;
   startAt?: string;
   expires: string;
+  expiresAt?: string;
   status: 'active' | 'stopped' | 'completed';
   settings?: ProjectSettings;
   stats?: ProjectStats[];
   totalHits?: number;
   hitsToday?: number;
+  dailyLimit?: number;
+  totalTarget?: number;
 
   priority?: number;
   forceStopReason?: string;
@@ -157,6 +160,10 @@ export interface Project {
   notes?: string;
   isFlagged?: boolean;
   createdAt?: string;
+
+  userEmail?: string;
+  userName?: string;
+  userBalance?: number;
 }
 
 export interface Transaction {
@@ -177,20 +184,25 @@ export interface TicketMessage {
   sender: 'user' | 'admin' | 'guest';
   text: string;
   date: string;
-  attachments?: string[]; // Array of filenames/urls
+  attachments?: string[];
+  isInternalNote?: boolean;
 }
 
 export interface Ticket {
   id: string;
   type: 'ticket' | 'chat';
   userId: string;
-  userName: string;
+  userName?: string;
+  userEmail?: string;
   guestEmail?: string;
   guestPhone?: string;
   subject: string;
-  status: 'open' | 'closed' | 'in-progress';
+  status: 'open' | 'closed' | 'in-progress' | 'pending' | 'archived';
   priority: 'low' | 'medium' | 'high';
   category?: 'general' | 'billing' | 'technical' | 'sales';
+  assigneeId?: string;
+  assigneeName?: string;
+  tags?: string[];
   projectId?: string;
   projectName?: string;
   attachmentUrls?: string[];
@@ -199,6 +211,7 @@ export interface Ticket {
   messages?: TicketMessage[];
   unread: boolean;
   updatedAt?: string;
+  slaDueAt?: string;
 }
 
 export interface PaymentMethod {
@@ -667,4 +680,108 @@ export interface AdminUserDetails {
   referralsCount: number;
   referralEarnings: number;
   notificationPrefs?: UserNotificationPrefs;
+}
+
+export interface ProxyProvider {
+  id: string;
+  name: string;
+  providerType: string;
+  username: string;
+  serviceName: string;
+  proxyHost: string;
+  httpPortStart: number;
+  httpPortEnd: number;
+  isActive: boolean;
+  sessionLifetimeMinutes: number;
+  bandwidthLimitGb?: number;
+  bandwidthUsedGb: number;
+  notificationEmail: string;
+  warnAt80: boolean;
+  warnAt50: boolean;
+  warnAt20: boolean;
+  lastSyncAt?: string;
+  createdAt: string;
+}
+
+export interface ProxyProviderConfig {
+  username: string;
+  password: string;
+  serviceName: string;
+  sessionLifetimeMinutes: number;
+  bandwidthLimitGb?: number;
+  notificationEmail: string;
+  isActive: boolean;
+  warnAt80: boolean;
+  warnAt50: boolean;
+  warnAt20: boolean;
+}
+
+export interface ProxySession {
+  id: string;
+  sessionId: string;
+  country?: string;
+  countryCode?: string;
+  state?: string;
+  city?: string;
+  ipAddress?: string;
+  isActive: boolean;
+  port: number;
+  requestCount: number;
+  createdAt: string;
+  expiresAt?: string;
+  lastUsedAt?: string;
+}
+
+export interface GeoLocation {
+  countryCode: string;
+  countryName: string;
+  states: GeoOption[];
+  cities: GeoOption[];
+}
+
+export interface GeoOption {
+  code: string;
+  name: string;
+}
+
+export interface ProxyUsageStats {
+  success: boolean;
+  bandwidthUsedGb?: number;
+  bandwidthLimitGb?: number;
+  percent?: number;
+  message?: string;
+}
+
+export interface GeoTarget {
+  id: string;
+  country: string;
+  countryCode: string;
+  state?: string;
+  stateCode?: string;
+  city?: string;
+  percent: number;
+}
+
+export interface ProxyLog {
+  id: string;
+  sessionId: string | null;
+  projectId: string | null;
+  requestUrl: string | null;
+  responseCode: number | null;
+  latencyMs: number | null;
+  errorMessage: string | null;
+  countryCode: string | null;
+  state: string | null;
+  city: string | null;
+  ipAddress: string | null;
+  success: boolean;
+  createdAt: string;
+}
+
+export interface ProxyLogStats {
+  total: number;
+  successful: number;
+  failed: number;
+  successRate: number;
+  avgLatencyMs: number;
 }

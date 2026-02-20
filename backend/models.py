@@ -253,6 +253,8 @@ class Proxy(Base):
     state = Column(String, nullable=True)
     city = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
+    provider_id = Column(String, ForeignKey("proxy_providers.id"), nullable=True)
+    proxy_type = Column(String, default="custom")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 
@@ -305,6 +307,7 @@ class Ticket(Base):
 
     id = Column(String, primary_key=True, default=generate_uuid)
     user_id = Column(String, ForeignKey("users.id"))
+    assignee_id = Column(String, ForeignKey("users.id"), nullable=True)
     subject = Column(String)
     status = Column(String, default="open")
     priority = Column(String, default="low")
@@ -313,12 +316,15 @@ class Ticket(Base):
     project_id = Column(String, ForeignKey("projects.id"), nullable=True)
     attachment_urls = Column(JSON, default=list)
     messages = Column(JSON, default=list)
+    tags = Column(JSON, default=list)
+    sla_due_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(
         DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
     )
 
-    user = relationship("User")
+    user = relationship("User", foreign_keys=[user_id])
+    assignee = relationship("User", foreign_keys=[assignee_id])
     project = relationship("Project", foreign_keys=[project_id])
     ticket_messages = relationship("TicketMessage", back_populates="ticket")
 
@@ -333,6 +339,24 @@ class TicketMessage(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     ticket = relationship("Ticket", back_populates="ticket_messages")
+
+
+class TicketTemplate(Base):
+    __tablename__ = "ticket_templates"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    title = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    category = Column(String, default="general")
+    shortcut = Column(String, nullable=True)
+    created_by = Column(String, ForeignKey("users.id"))
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(
+        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+    )
+
+    creator = relationship("User", foreign_keys=[created_by])
 
 
 class Notification(Base):
@@ -655,3 +679,92 @@ class BlogArticle(Base):
     updated_at = Column(
         DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
     )
+
+
+class ProxyProvider(Base):
+    __tablename__ = "proxy_providers"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    name = Column(String, default="Geonode Residential")
+    provider_type = Column(String, default="geonode")
+    username = Column(String, nullable=False)
+    password = Column(String, nullable=False)
+    service_name = Column(String, default="RESIDENTIAL-PREMIUM")
+    proxy_host = Column(String, default="proxy.geonode.io")
+    http_port_start = Column(Integer, default=10000)
+    http_port_end = Column(Integer, default=10900)
+    is_active = Column(Boolean, default=True)
+    session_lifetime_minutes = Column(Integer, default=30)
+    bandwidth_limit_gb = Column(Float, nullable=True)
+    bandwidth_used_gb = Column(Float, default=0.0)
+    notification_email = Column(String, default="support@traffic-creator.com")
+    warn_at_80 = Column(Boolean, default=True)
+    warn_at_50 = Column(Boolean, default=True)
+    warn_at_20 = Column(Boolean, default=True)
+    warned_at_80 = Column(Boolean, default=False)
+    warned_at_50 = Column(Boolean, default=False)
+    warned_at_20 = Column(Boolean, default=False)
+    warned_at_100 = Column(Boolean, default=False)
+    last_sync_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(
+        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+    )
+
+
+class ProxySession(Base):
+    __tablename__ = "proxy_sessions"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    provider_id = Column(String, ForeignKey("proxy_providers.id"), nullable=False)
+    session_id = Column(String, unique=True, index=True)
+    proxy_url = Column(String, nullable=False)
+    port = Column(Integer, nullable=False)
+    country = Column(String, nullable=True)
+    country_code = Column(String, nullable=True)
+    state = Column(String, nullable=True)
+    city = Column(String, nullable=True)
+    ip_address = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)
+    last_used_at = Column(DateTime, nullable=True)
+    request_count = Column(Integer, default=0)
+
+    provider = relationship("ProxyProvider", backref="sessions")
+
+
+class GeoLocationCache(Base):
+    __tablename__ = "geo_location_cache"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    provider_id = Column(String, ForeignKey("proxy_providers.id"), nullable=False)
+    country_code = Column(String, nullable=False, index=True)
+    country_name = Column(String, nullable=False)
+    states = Column(JSON, default=list)
+    cities = Column(JSON, default=list)
+    asns = Column(JSON, default=list)
+    cached_at = Column(DateTime, default=datetime.datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)
+
+
+class ProxyLog(Base):
+    __tablename__ = "proxy_logs"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    provider_id = Column(String, ForeignKey("proxy_providers.id"), nullable=False)
+    session_id = Column(String, nullable=True)
+    project_id = Column(String, ForeignKey("projects.id"), nullable=True)
+    request_url = Column(String, nullable=True)
+    response_code = Column(Integer, nullable=True)
+    latency_ms = Column(Integer, nullable=True)
+    error_message = Column(Text, nullable=True)
+    country_code = Column(String, nullable=True)
+    state = Column(String, nullable=True)
+    city = Column(String, nullable=True)
+    ip_address = Column(String, nullable=True)
+    success = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    provider = relationship("ProxyProvider", backref="logs")
+    project = relationship("Project", backref="proxy_logs")

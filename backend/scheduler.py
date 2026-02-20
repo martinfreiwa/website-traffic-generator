@@ -9,6 +9,11 @@ from database import SessionLocal
 import models
 from hit_emulator import ga_emu_engine
 from email_service import send_email, get_frontend_url
+from proxy_service import (
+    check_bandwidth_and_notify,
+    cleanup_expired_sessions,
+    get_active_provider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -381,7 +386,10 @@ class TrafficScheduler:
         self._task = None
         self._flush_task = None
         self._daily_task = None
+        self._proxy_task = None
         self._flush_counter = 0
+        self._last_proxy_cleanup = None
+        self._last_bandwidth_check = None
 
     async def start(self):
         if self.is_running:
@@ -392,14 +400,17 @@ class TrafficScheduler:
 
         self._task = asyncio.create_task(self._loop())
         self._flush_task = asyncio.create_task(self._flush_loop())
-        logger.info("SaaS Traffic Scheduler started with consumption tracking")
+        self._proxy_task = asyncio.create_task(self._proxy_maintenance_loop())
+        logger.info(
+            "SaaS Traffic Scheduler started with consumption tracking and proxy maintenance"
+        )
 
     async def stop(self):
         self.is_running = False
         flush_consumption()
         save_flush_timestamp()
 
-        for task in [self._task, self._flush_task, self._daily_task]:
+        for task in [self._task, self._flush_task, self._daily_task, self._proxy_task]:
             if task:
                 task.cancel()
                 try:
@@ -407,6 +418,38 @@ class TrafficScheduler:
                 except asyncio.CancelledError:
                     pass
         logger.info("SaaS Traffic Scheduler stopped")
+
+    async def _proxy_maintenance_loop(self):
+        while self.is_running:
+            try:
+                await asyncio.sleep(60)
+                now = datetime.utcnow()
+                db = SessionLocal()
+                try:
+                    provider = await get_active_provider(db)
+                    if provider:
+                        if (
+                            self._last_proxy_cleanup is None
+                            or (now - self._last_proxy_cleanup).total_seconds() >= 300
+                        ):
+                            await cleanup_expired_sessions(db)
+                            self._last_proxy_cleanup = now
+                            logger.debug("Proxy session cleanup completed")
+
+                        if (
+                            self._last_bandwidth_check is None
+                            or (now - self._last_bandwidth_check).total_seconds()
+                            >= 3600
+                        ):
+                            await check_bandwidth_and_notify(db, provider)
+                            self._last_bandwidth_check = now
+                            logger.debug("Proxy bandwidth check completed")
+                finally:
+                    db.close()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in proxy maintenance loop: {e}")
 
     async def _flush_loop(self):
         while self.is_running:

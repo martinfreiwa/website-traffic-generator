@@ -38,7 +38,7 @@ const DEFAULT_SETTINGS: ProjectSettings = {
     autoCrawlInner: false,
     autoCrawlExit: false,
     innerUrlCount: 0,
-    geoTargets: [{ id: '1', country: 'US', percent: 100 }], // ISO Code 'US'
+    geoTargets: [{ id: '1', country: 'United States', countryCode: 'US', percent: 100 }],
     countries: ['US'],
     trafficSource: 'Direct',
     keywords: '',

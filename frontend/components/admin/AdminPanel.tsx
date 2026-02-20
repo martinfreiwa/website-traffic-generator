@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../Sidebar';
 import { Routes, Route, useNavigate, useLocation, Navigate, useParams } from 'react-router-dom';
@@ -22,10 +21,11 @@ import AdminCoupons from './AdminCoupons';
 import AdminConversion from './AdminConversion';
 import AdminBankTransfers from './AdminBankTransfers';
 import AdminBenefits from './AdminBenefits';
+import AdminProxies from './AdminProxies';
 
 import { MenuSection, User, Project, PriceClass, Transaction, Ticket, SystemSettings, SystemAlert, AdminStats } from '../../types';
 import { db } from '../../services/db';
-import { Users, LayoutDashboard, Settings, Layers, CreditCard, MessageSquare, Megaphone, Radio, FileCode, Plus, TrendingUp, Tag, Zap, Landmark } from 'lucide-react';
+import { Users, LayoutDashboard, Settings, Layers, CreditCard, MessageSquare, Megaphone, Radio, FileCode, Plus, TrendingUp, Tag, Zap, Landmark, Server } from 'lucide-react';
 
 interface AdminPanelProps {
   onLogout: () => void;
@@ -37,28 +37,29 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Derive currentView from pathname
-  const getCurrentView = () => {
-    const path = location.pathname;
-    if (path === '/admin' || path === '/admin/') return 'admin-home';
-    if (path.startsWith('/admin/users/edit/')) return 'admin-edit-user';
-    if (path === '/admin/users') return 'admin-users';
-    if (path === '/admin/live') return 'admin-live';
-    if (path === '/admin/tickets') return 'admin-tickets';
-    if (path.startsWith('/admin/projects/edit/')) return 'admin-edit-project';
-    if (path === '/admin/projects') return 'admin-projects';
-    if (path === '/admin/projects/create') return 'admin-create-project';
-    if (path.startsWith('/admin/transactions/edit/')) return 'admin-edit-transaction';
-    if (path === '/admin/transactions') return 'admin-transactions';
-    if (path === '/admin/alerts') return 'admin-alerts';
-    if (path === '/admin/pricing') return 'admin-pricing';
-    if (path === '/admin/settings') return 'admin-settings';
-    if (path === '/admin/api-docs') return 'admin-api-docs';
-    if (path === '/admin/marketing') return 'admin-marketing';
-    if (path === '/admin/coupons') return 'admin-coupons';
-    if (path === '/admin/conversion') return 'admin-conversion';
-    if (path === '/admin/bank-transfers') return 'admin-bank-transfers';
-    return 'admin-home';
-  };
+    const getCurrentView = () => {
+        const path = location.pathname;
+        if (path === '/admin' || path === '/admin/') return 'admin-home';
+        if (path.startsWith('/admin/users/edit/')) return 'admin-edit-user';
+        if (path === '/admin/users') return 'admin-users';
+        if (path === '/admin/live') return 'admin-live';
+        if (path === '/admin/tickets') return 'admin-tickets';
+        if (path.startsWith('/admin/projects/edit/')) return 'admin-edit-project';
+        if (path === '/admin/projects') return 'admin-projects';
+        if (path === '/admin/projects/create') return 'admin-create-project';
+        if (path.startsWith('/admin/transactions/edit/')) return 'admin-edit-transaction';
+        if (path === '/admin/transactions') return 'admin-transactions';
+        if (path === '/admin/alerts') return 'admin-alerts';
+        if (path === '/admin/pricing') return 'admin-pricing';
+        if (path === '/admin/settings') return 'admin-settings';
+        if (path === '/admin/api-docs') return 'admin-api-docs';
+        if (path === '/admin/marketing') return 'admin-marketing';
+        if (path === '/admin/coupons') return 'admin-coupons';
+        if (path === '/admin/conversion') return 'admin-conversion';
+        if (path === '/admin/bank-transfers') return 'admin-bank-transfers';
+        if (path === '/admin/proxies') return 'admin-proxies';
+        return 'admin-home';
+    };
 
   const currentView = getCurrentView();
 
@@ -139,44 +140,50 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
     window.scrollTo(0, 0);
   };
 
-  const menuSections: MenuSection[] = [
-    {
-      title: 'Admin Control',
-      items: [
-        { label: 'Overview', id: 'admin-home', path: '', icon: <LayoutDashboard size={18} /> },
-        { label: 'User Management', id: 'admin-users', path: 'users', icon: <Users size={18} /> },
-        { label: 'Live Users', id: 'admin-live', path: 'live', icon: <Radio size={18} /> },
-        { label: 'All Projects', id: 'admin-projects', path: 'projects', icon: <Layers size={18} /> },
-        { label: 'Create Project', id: 'admin-create-project', path: 'projects/create', icon: <Plus size={18} /> },
-      ]
-    },
-    {
-      title: 'Operations',
-      items: [
-        { label: 'Transactions', id: 'admin-transactions', path: 'transactions', icon: <CreditCard size={18} /> },
-        { label: 'Bank Transfers', id: 'admin-bank-transfers', path: 'bank-transfers', icon: <Landmark size={18} /> },
-        { label: 'Support Tickets', id: 'admin-tickets', path: 'tickets', icon: <MessageSquare size={18} /> },
-        { label: 'Broadcasts', id: 'admin-alerts', path: 'alerts', icon: <Megaphone size={18} /> },
-        { label: 'API Documentation', id: 'admin-api-docs', path: 'api-docs', icon: <FileCode size={18} /> },
-      ]
-    },
-    {
-      title: 'Growth',
-      items: [
-        { label: 'Marketing Hub', id: 'admin-marketing', path: 'marketing', icon: <TrendingUp size={18} /> },
-        { label: 'Coupons', id: 'admin-coupons', path: 'coupons', icon: <Tag size={18} /> },
-        { label: 'Conversion', id: 'admin-conversion', path: 'conversion', icon: <Zap size={18} /> },
-        { label: 'Benefits', id: 'admin-benefits', path: 'benefits', icon: <TrendingUp size={18} /> },
-      ]
-    },
-    {
-      title: 'Configuration',
-      items: [
-        { label: 'Global Pricing', id: 'admin-pricing', path: 'pricing', icon: <CreditCard size={18} /> },
-        { label: 'System Settings', id: 'admin-settings', path: 'settings', icon: <Settings size={18} /> },
-      ]
-    }
-  ];
+    const menuSections: MenuSection[] = [
+        {
+            title: 'Admin Control',
+            items: [
+                { label: 'Overview', id: 'admin-home', path: '', icon: <LayoutDashboard size={18} /> },
+                { label: 'User Management', id: 'admin-users', path: 'users', icon: <Users size={18} /> },
+                { label: 'Live Users', id: 'admin-live', path: 'live', icon: <Radio size={18} /> },
+                { label: 'All Projects', id: 'admin-projects', path: 'projects', icon: <Layers size={18} /> },
+                { label: 'Create Project', id: 'admin-create-project', path: 'projects/create', icon: <Plus size={18} /> },
+            ]
+        },
+        {
+            title: 'Operations',
+            items: [
+                { label: 'Transactions', id: 'admin-transactions', path: 'transactions', icon: <CreditCard size={18} /> },
+                { label: 'Bank Transfers', id: 'admin-bank-transfers', path: 'bank-transfers', icon: <Landmark size={18} /> },
+                { label: 'Support Tickets', id: 'admin-tickets', path: 'tickets', icon: <MessageSquare size={18} /> },
+                { label: 'Broadcasts', id: 'admin-alerts', path: 'alerts', icon: <Megaphone size={18} /> },
+                { label: 'API Documentation', id: 'admin-api-docs', path: 'api-docs', icon: <FileCode size={18} /> },
+            ]
+        },
+        {
+            title: 'Growth',
+            items: [
+                { label: 'Marketing Hub', id: 'admin-marketing', path: 'marketing', icon: <TrendingUp size={18} /> },
+                { label: 'Coupons', id: 'admin-coupons', path: 'coupons', icon: <Tag size={18} /> },
+                { label: 'Conversion', id: 'admin-conversion', path: 'conversion', icon: <Zap size={18} /> },
+                { label: 'Benefits', id: 'admin-benefits', path: 'benefits', icon: <TrendingUp size={18} /> },
+            ]
+        },
+        {
+            title: 'Infrastructure',
+            items: [
+                { label: 'Proxy Provider', id: 'admin-proxies', path: 'proxies', icon: <Server size={18} /> },
+            ]
+        },
+        {
+            title: 'Configuration',
+            items: [
+                { label: 'Global Pricing', id: 'admin-pricing', path: 'pricing', icon: <CreditCard size={18} /> },
+                { label: 'System Settings', id: 'admin-settings', path: 'settings', icon: <Settings size={18} /> },
+            ]
+        }
+    ];
 
   const AdminEditUserWrapper: React.FC = () => {
     const { id } = useParams<{ id: string }>();
@@ -223,7 +230,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
             'admin-coupons': 'coupons',
             'admin-conversion': 'conversion',
             'admin-benefits': 'benefits',
-            'admin-bank-transfers': 'bank-transfers'
+            'admin-bank-transfers': 'bank-transfers',
+            'admin-proxies': 'proxies'
           };
           navigate(`/admin/${idToPath[id] || ''}`);
           setMobileMenuOpen(false);
@@ -267,7 +275,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
               <Route path="users/edit/:id" element={<AdminEditUserWrapper />} />
               <Route path="live" element={<AdminLiveUsers onStartChat={handleStartChatFromLive} />} />
               <Route path="tickets" element={<AdminTickets tickets={tickets} onRefresh={refreshData} />} />
-              <Route path="projects" element={<AdminProjects projects={projects} onEditProject={handleEditProject} />} />
+              <Route path="projects" element={<AdminProjects projects={projects} onEditProject={handleEditProject} onEditUser={handleEditUser} onBulkUpdate={async (ids, updates) => { await db.bulkUpdateAdminProjects(ids, updates as any); refreshData(); }} />} />
               <Route path="projects/edit/:id" element={<AdminEditProjectWrapper />} />
               <Route path="projects/create" element={<AdminCreateProjectWrapper />} />
               <Route path="transactions" element={<AdminTransactions transactions={transactions} onEditTransaction={handleEditTransaction} />} />
@@ -283,6 +291,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
               <Route path="conversion" element={<AdminConversion />} />
               <Route path="bank-transfers" element={<AdminBankTransfers />} />
               <Route path="benefits" element={<AdminBenefits />} />
+              <Route path="proxies" element={<AdminProxies />} />
               <Route path="*" element={<Navigate to="/admin" replace />} />
             </Routes>
           </div>

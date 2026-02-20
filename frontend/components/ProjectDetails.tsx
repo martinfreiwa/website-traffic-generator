@@ -127,11 +127,11 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
 
                 // Try to map full names to ISO if they exist, else assume ISO
                 currentSettings.geoTargets = currentSettings.countries.map((c, i) => {
-                    // Check if 'c' is a name like "United States" and find key
                     const iso = Object.keys(COUNTRY_MAP).find(key => COUNTRY_MAP[key] === c) || c;
                     return {
                         id: `geo-${Date.now()}-${i}`,
-                        country: iso, // Store ISO
+                        country: COUNTRY_MAP[iso] || iso,
+                        countryCode: iso,
                         percent: i === 0 ? percentPerCountry + remainder : percentPerCountry
                     };
                 });
@@ -380,7 +380,8 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ projectId, onBack, onUp
 
         const newTarget: GeoTarget = {
             id: `geo-${Date.now()}`,
-            country: isoCode, // Store ISO
+            country: COUNTRY_MAP[isoCode] || isoCode,
+            countryCode: isoCode,
             percent: remainder
         };
 

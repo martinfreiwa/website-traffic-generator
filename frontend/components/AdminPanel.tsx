@@ -179,7 +179,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout }) => {
                     autoCrawlEntry: false, autoCrawlInner: false, autoCrawlExit: false,
                     innerUrlCount: 0,
                     countries: ['United States'],
-                    geoTargets: [{ id: 'geo-demo', country: 'United States', percent: 100 }],
+                    geoTargets: [{ id: 'geo-demo', country: 'United States', countryCode: 'US', percent: 100 }],
                     trafficSource: 'organic',
                     keywords: '', referralUrls: '', sitemap: '', shortener: '',
                     autoRenew: false,

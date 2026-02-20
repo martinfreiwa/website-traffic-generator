@@ -633,6 +633,20 @@ def run_column_migrations():
         for col_name, col_type in broadcasts_cols:
             add_column_if_missing("broadcasts", col_name, col_type)
 
+        proxy_providers_cols = [
+            ("notification_email", "VARCHAR(255)"),
+            ("warn_at_80", "BOOLEAN DEFAULT TRUE"),
+            ("warn_at_50", "BOOLEAN DEFAULT TRUE"),
+            ("warn_at_20", "BOOLEAN DEFAULT TRUE"),
+            ("warned_at_80", "BOOLEAN DEFAULT FALSE"),
+            ("warned_at_50", "BOOLEAN DEFAULT FALSE"),
+            ("warned_at_20", "BOOLEAN DEFAULT FALSE"),
+            ("warned_at_100", "BOOLEAN DEFAULT FALSE"),
+        ]
+
+        for col_name, col_type in proxy_providers_cols:
+            add_column_if_missing("proxy_providers", col_name, col_type)
+
         tables_to_create = [
             (
                 "user_notification_prefs",
@@ -713,6 +727,18 @@ def run_column_migrations():
             (
                 "system_settings",
                 """id SERIAL PRIMARY KEY, settings JSONB DEFAULT '{}'::jsonb, updated_at TIMESTAMP""",
+            ),
+            (
+                "proxy_providers",
+                """id VARCHAR(255) PRIMARY KEY, name VARCHAR(255), provider_type VARCHAR(50), username VARCHAR(255), password VARCHAR(255), service_name VARCHAR(100), proxy_host VARCHAR(100), http_port_start INTEGER, http_port_end INTEGER, is_active BOOLEAN DEFAULT TRUE, session_lifetime_minutes INTEGER, bandwidth_limit_gb FLOAT, bandwidth_used_gb FLOAT, notification_email VARCHAR(255), warn_at_80 BOOLEAN DEFAULT TRUE, warn_at_50 BOOLEAN DEFAULT TRUE, warn_at_20 BOOLEAN DEFAULT TRUE, warned_at_80 BOOLEAN DEFAULT FALSE, warned_at_50 BOOLEAN DEFAULT FALSE, warned_at_20 BOOLEAN DEFAULT FALSE, warned_at_100 BOOLEAN DEFAULT FALSE, last_sync_at TIMESTAMP, created_at TIMESTAMP, updated_at TIMESTAMP""",
+            ),
+            (
+                "proxy_sessions",
+                """id VARCHAR(255) PRIMARY KEY, provider_id VARCHAR(255), session_id VARCHAR(255) UNIQUE, proxy_url TEXT, port INTEGER, country VARCHAR(100), country_code VARCHAR(10), state VARCHAR(100), city VARCHAR(100), ip_address VARCHAR(50), is_active BOOLEAN DEFAULT TRUE, created_at TIMESTAMP, expires_at TIMESTAMP, last_used_at TIMESTAMP, request_count INTEGER DEFAULT 0""",
+            ),
+            (
+                "geo_location_cache",
+                """id VARCHAR(255) PRIMARY KEY, provider_id VARCHAR(255), country_code VARCHAR(10), country_name VARCHAR(100), states JSONB, cities JSONB, asns JSONB, cached_at TIMESTAMP, expires_at TIMESTAMP""",
             ),
         ]
 
@@ -1092,6 +1118,7 @@ class ProjectResponse(BaseModel):
     total_hits: Optional[int] = 0
     start_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
 
     priority: int = 0
     force_stop_reason: Optional[str] = None
@@ -1099,6 +1126,10 @@ class ProjectResponse(BaseModel):
     internal_tags: List[str] = []
     notes: Optional[str] = None
     is_flagged: bool = False
+
+    user_email: Optional[str] = None
+    user_name: Optional[str] = None
+    user_balance: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -1157,6 +1188,7 @@ class TicketReply(BaseModel):
     text: str
     sender: str = "user"
     attachments: Optional[List[str]] = []
+    is_internal_note: bool = False
 
 
 class TicketUpdate(BaseModel):
@@ -1164,23 +1196,35 @@ class TicketUpdate(BaseModel):
     priority: Optional[str] = None
     type: Optional[str] = None
     category: Optional[str] = None
+    assignee_id: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+
+class BulkActionRequest(BaseModel):
+    ticket_ids: List[str]
+    action: str
 
 
 class TicketResponse(BaseModel):
     id: str
     user_id: str
     user_email: Optional[str] = None
+    user_name: Optional[str] = None
+    assignee_id: Optional[str] = None
+    assignee_name: Optional[str] = None
     subject: str
     status: str
     priority: str
     type: str
     category: str = "general"
+    tags: List[str] = []
     project_id: Optional[str] = None
     project_name: Optional[str] = None
     attachment_urls: List[str] = []
     messages: List[Dict[str, Any]]
     created_at: datetime
     updated_at: Optional[datetime] = None
+    sla_due_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -3808,20 +3852,20 @@ async def upload_benefit_screenshot(
     import os
     import shutil
     import uuid
-    
+
     if current_user.account_locked:
         raise HTTPException(status_code=403, detail="Account is locked")
 
     upload_dir = f"static/benefit_screenshots/{current_user.id}"
     os.makedirs(upload_dir, exist_ok=True)
-    
+
     file_ext = file.filename.split(".")[-1]
     filename = f"{uuid.uuid4()}.{file_ext}"
     file_path = os.path.join(upload_dir, filename)
-    
+
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-        
+
     return {"url": f"/{file_path}"}
 
 
@@ -3847,40 +3891,51 @@ def submit_benefit(
         raise HTTPException(
             status_code=400, detail="This URL is already pending review"
         )
-        
-    benefit_db_type = db.query(models.BenefitType).filter(
-        models.BenefitType.type == benefit.benefit_type,
-        models.BenefitType.category == benefit.benefit_category
-    ).first()
-    
+
+    benefit_db_type = (
+        db.query(models.BenefitType)
+        .filter(
+            models.BenefitType.type == benefit.benefit_type,
+            models.BenefitType.category == benefit.benefit_category,
+        )
+        .first()
+    )
+
     if benefit_db_type and benefit_db_type.requirements:
         reqs = benefit_db_type.requirements
         max_claims = reqs.get("max_claims", 0)
-        
+
         if max_claims > 0:
-            freq = reqs.get("frequency", "all_time") # daily, weekly, monthly, all_time
+            freq = reqs.get("frequency", "all_time")  # daily, weekly, monthly, all_time
             query = db.query(models.BenefitRequest).filter(
                 models.BenefitRequest.user_id == current_user.id,
                 models.BenefitRequest.benefit_type == benefit.benefit_type,
                 models.BenefitRequest.benefit_category == benefit.benefit_category,
-                models.BenefitRequest.status != "rejected"
+                models.BenefitRequest.status != "rejected",
             )
-            
+
             now = datetime.utcnow()
             if freq == "daily":
                 start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
                 query = query.filter(models.BenefitRequest.submitted_at >= start_date)
             elif freq == "weekly":
                 start_date = now - timedelta(days=now.weekday())
-                start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+                start_date = start_date.replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
                 query = query.filter(models.BenefitRequest.submitted_at >= start_date)
             elif freq == "monthly":
-                start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                start_date = now.replace(
+                    day=1, hour=0, minute=0, second=0, microsecond=0
+                )
                 query = query.filter(models.BenefitRequest.submitted_at >= start_date)
-                
+
             past_claims = query.count()
             if past_claims >= max_claims:
-                raise HTTPException(status_code=400, detail=f"Limit reached. You can only claim this {max_claims} time(s) {freq}.")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Limit reached. You can only claim this {max_claims} time(s) {freq}.",
+                )
 
     db_benefit = models.BenefitRequest(
         user_id=current_user.id,
@@ -4501,7 +4556,51 @@ def get_all_projects_admin(
 ):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
-    return db.query(models.Project).all()
+
+    projects = db.query(models.Project).all()
+    result = []
+    for p in projects:
+        user = db.query(models.User).filter(models.User.id == p.user_id).first()
+        user_balance = None
+        if user:
+            tier = (p.tier or "").lower()
+            if tier == "economy":
+                user_balance = user.balance_economy
+            elif tier == "professional":
+                user_balance = user.balance_professional
+            elif tier == "expert":
+                user_balance = user.balance_expert
+            else:
+                user_balance = user.balance
+
+        result.append(
+            ProjectResponse(
+                id=p.id,
+                user_id=p.user_id,
+                name=p.name,
+                status=p.status,
+                plan_type=p.plan_type,
+                tier=p.tier,
+                settings=p.settings,
+                daily_limit=p.daily_limit,
+                total_target=p.total_target,
+                hits_today=p.hits_today,
+                total_hits=p.total_hits,
+                start_at=p.start_at,
+                created_at=p.created_at,
+                expires_at=p.expires_at,
+                priority=p.priority,
+                force_stop_reason=p.force_stop_reason,
+                is_hidden=p.is_hidden,
+                internal_tags=p.internal_tags or [],
+                notes=p.notes,
+                is_flagged=p.is_flagged,
+                user_email=user.email if user else None,
+                user_name=user.name if user else None,
+                user_balance=user_balance,
+            )
+        )
+    return result
 
 
 @app.post("/admin/projects", response_model=ProjectResponse)
@@ -6806,6 +6905,11 @@ def update_transaction(
 
 def ticket_to_response(ticket: models.Ticket, db: Session) -> dict:
     user = db.query(models.User).filter(models.User.id == ticket.user_id).first()
+    assignee = (
+        db.query(models.User).filter(models.User.id == ticket.assignee_id).first()
+        if ticket.assignee_id
+        else None
+    )
     project_name = None
     if ticket.project_id:
         project = (
@@ -6818,17 +6922,22 @@ def ticket_to_response(ticket: models.Ticket, db: Session) -> dict:
         "id": ticket.id,
         "user_id": ticket.user_id,
         "user_email": user.email if user else None,
+        "user_name": user.name if user else None,
+        "assignee_id": ticket.assignee_id,
+        "assignee_name": assignee.name if assignee else None,
         "subject": ticket.subject,
         "status": ticket.status,
         "priority": ticket.priority,
         "type": ticket.type,
         "category": ticket.category or "general",
+        "tags": ticket.tags or [],
         "project_id": ticket.project_id,
         "project_name": project_name,
         "attachment_urls": ticket.attachment_urls or [],
         "messages": ticket.messages or [],
         "created_at": ticket.created_at,
         "updated_at": ticket.updated_at,
+        "sla_due_at": ticket.sla_due_at,
     }
 
 
@@ -6904,6 +7013,7 @@ def reply_ticket(
         "text": reply.text,
         "date": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
         "attachments": reply.attachments,
+        "is_internal_note": reply.is_internal_note,
     }
 
     current_messages = list(ticket.messages) if ticket.messages else []
@@ -6937,6 +7047,10 @@ def update_ticket(
         ticket.type = update.type
     if update.category:
         ticket.category = update.category
+    if update.assignee_id is not None:
+        ticket.assignee_id = update.assignee_id if update.assignee_id else None
+    if update.tags is not None:
+        ticket.tags = update.tags
 
     db.commit()
     db.refresh(ticket)
@@ -7017,6 +7131,209 @@ def delete_ticket(
     db.delete(ticket)
     db.commit()
     return {"status": "deleted"}
+
+
+@app.put("/tickets/bulk-action")
+def bulk_ticket_action(
+    request: BulkActionRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    tickets = (
+        db.query(models.Ticket).filter(models.Ticket.id.in_(request.ticket_ids)).all()
+    )
+
+    if request.action == "close":
+        for ticket in tickets:
+            ticket.status = "closed"
+    elif request.action == "delete":
+        for ticket in tickets:
+            db.delete(ticket)
+    elif request.action == "open":
+        for ticket in tickets:
+            ticket.status = "open"
+    elif request.action == "archive":
+        for ticket in tickets:
+            ticket.status = "archived"
+
+    db.commit()
+    return {"status": "success", "affected": len(tickets)}
+
+
+@app.put("/tickets/{ticket_id}/assign")
+def assign_ticket(
+    ticket_id: str,
+    assignee_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    ticket = db.query(models.Ticket).filter(models.Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    ticket.assignee_id = assignee_id
+    db.commit()
+    db.refresh(ticket)
+    return ticket_to_response(ticket, db)
+
+
+class TicketTemplateCreate(BaseModel):
+    title: str
+    content: str
+    category: str = "general"
+    shortcut: Optional[str] = None
+    is_active: bool = True
+
+
+class TicketTemplateResponse(BaseModel):
+    id: str
+    title: str
+    content: str
+    category: str
+    shortcut: Optional[str]
+    created_by: Optional[str]
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@app.get("/ticket-templates", response_model=List[TicketTemplateResponse])
+def get_ticket_templates(
+    category: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    query = db.query(models.TicketTemplate)
+    if category:
+        query = query.filter(models.TicketTemplate.category == category)
+    return query.all()
+
+
+@app.post("/ticket-templates", response_model=TicketTemplateResponse)
+def create_ticket_template(
+    template: TicketTemplateCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    new_template = models.TicketTemplate(
+        title=template.title,
+        content=template.content,
+        category=template.category,
+        shortcut=template.shortcut,
+        created_by=current_user.id,
+        is_active=template.is_active,
+    )
+    db.add(new_template)
+    db.commit()
+    db.refresh(new_template)
+    return new_template
+
+
+@app.put("/ticket-templates/{template_id}", response_model=TicketTemplateResponse)
+def update_ticket_template(
+    template_id: str,
+    template: TicketTemplateCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    existing = (
+        db.query(models.TicketTemplate)
+        .filter(models.TicketTemplate.id == template_id)
+        .first()
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    existing.title = template.title
+    existing.content = template.content
+    existing.category = template.category
+    existing.shortcut = template.shortcut
+    existing.is_active = template.is_active
+
+    db.commit()
+    db.refresh(existing)
+    return existing
+
+
+@app.delete("/ticket-templates/{template_id}")
+def delete_ticket_template(
+    template_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    template = (
+        db.query(models.TicketTemplate)
+        .filter(models.TicketTemplate.id == template_id)
+        .first()
+    )
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    db.delete(template)
+    db.commit()
+    return {"status": "deleted"}
+
+
+class UserStatsResponse(BaseModel):
+    user_id: str
+    plan: str
+    created_at: datetime
+    lifetime_value: float
+    total_tickets: int
+    open_tickets: int
+
+
+@app.get("/users/{user_id}/stats", response_model=UserStatsResponse)
+def get_user_stats(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    transactions = (
+        db.query(models.Transaction).filter(models.Transaction.user_id == user_id).all()
+    )
+    lifetime_value = sum(
+        t.amount for t in transactions if t.amount and t.status == "completed"
+    )
+
+    tickets = db.query(models.Ticket).filter(models.Ticket.user_id == user_id).all()
+    open_tickets = len([t for t in tickets if t.status == "open"])
+
+    return {
+        "user_id": user_id,
+        "plan": user.plan or "free",
+        "created_at": user.created_at,
+        "lifetime_value": lifetime_value,
+        "total_tickets": len(tickets),
+        "open_tickets": open_tickets,
+    }
 
 
 @app.get("/notifications", response_model=List[NotificationResponse])
@@ -10316,6 +10633,565 @@ class BlogArticleMetadata(BaseModel):
 
 class BlogArticleFull(BlogArticleMetadata):
     content: str
+
+
+class ProxyProviderConfig(BaseModel):
+    username: str
+    password: str
+    service_name: str = "RESIDENTIAL-PREMIUM"
+    session_lifetime_minutes: int = 30
+    bandwidth_limit_gb: Optional[float] = None
+    notification_email: str = "support@traffic-creator.com"
+    is_active: bool = True
+    warn_at_80: bool = True
+    warn_at_50: bool = True
+    warn_at_20: bool = True
+
+
+class ProxyProviderResponse(BaseModel):
+    id: str
+    name: str
+    provider_type: str
+    username: str
+    service_name: str
+    proxy_host: str
+    http_port_start: int
+    http_port_end: int
+    is_active: bool
+    session_lifetime_minutes: int
+    bandwidth_limit_gb: Optional[float]
+    bandwidth_used_gb: float
+    notification_email: str
+    last_sync_at: Optional[datetime]
+    created_at: datetime
+
+
+class ProxySessionResponse(BaseModel):
+    id: str
+    session_id: str
+    country: Optional[str]
+    country_code: Optional[str]
+    state: Optional[str]
+    city: Optional[str]
+    ip_address: Optional[str]
+    is_active: bool
+    port: int
+    request_count: int
+    created_at: datetime
+    expires_at: Optional[datetime]
+    last_used_at: Optional[datetime]
+
+
+class GeoLocationResponse(BaseModel):
+    country_code: str
+    country_name: str
+    states: List[Dict[str, Any]] = []
+    cities: List[Dict[str, Any]] = []
+
+
+from proxy_service import (
+    GeonodeProxyService,
+    sync_geo_locations,
+    check_bandwidth_and_notify,
+    cleanup_expired_sessions,
+)
+
+
+@app.get("/admin/proxies/config", response_model=Optional[ProxyProviderResponse])
+async def get_proxy_config(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    provider = db.query(models.ProxyProvider).first()
+    if not provider:
+        return None
+
+    return ProxyProviderResponse(
+        id=provider.id,
+        name=provider.name,
+        provider_type=provider.provider_type,
+        username=provider.username,
+        service_name=provider.service_name,
+        proxy_host=provider.proxy_host,
+        http_port_start=provider.http_port_start,
+        http_port_end=provider.http_port_end,
+        is_active=provider.is_active,
+        session_lifetime_minutes=provider.session_lifetime_minutes,
+        bandwidth_limit_gb=provider.bandwidth_limit_gb,
+        bandwidth_used_gb=provider.bandwidth_used_gb or 0.0,
+        notification_email=provider.notification_email,
+        last_sync_at=provider.last_sync_at,
+        created_at=provider.created_at,
+    )
+
+
+@app.post("/admin/proxies/config", response_model=ProxyProviderResponse)
+async def save_proxy_config(
+    config: ProxyProviderConfig,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    provider = db.query(models.ProxyProvider).first()
+
+    if provider:
+        provider.username = config.username
+        provider.password = config.password
+        provider.service_name = config.service_name
+        provider.session_lifetime_minutes = config.session_lifetime_minutes
+        provider.bandwidth_limit_gb = config.bandwidth_limit_gb
+        provider.notification_email = config.notification_email
+        provider.is_active = config.is_active
+        provider.warn_at_80 = config.warn_at_80
+        provider.warn_at_50 = config.warn_at_50
+        provider.warn_at_20 = config.warn_at_20
+        provider.warned_at_80 = False
+        provider.warned_at_50 = False
+        provider.warned_at_20 = False
+        provider.warned_at_100 = False
+    else:
+        provider = models.ProxyProvider(
+            name="Geonode Residential",
+            username=config.username,
+            password=config.password,
+            service_name=config.service_name,
+            session_lifetime_minutes=config.session_lifetime_minutes,
+            bandwidth_limit_gb=config.bandwidth_limit_gb,
+            notification_email=config.notification_email,
+            is_active=config.is_active,
+            warn_at_80=config.warn_at_80,
+            warn_at_50=config.warn_at_50,
+            warn_at_20=config.warn_at_20,
+        )
+        db.add(provider)
+
+    db.commit()
+    db.refresh(provider)
+
+    return ProxyProviderResponse(
+        id=provider.id,
+        name=provider.name,
+        provider_type=provider.provider_type,
+        username=provider.username,
+        service_name=provider.service_name,
+        proxy_host=provider.proxy_host,
+        http_port_start=provider.http_port_start,
+        http_port_end=provider.http_port_end,
+        is_active=provider.is_active,
+        session_lifetime_minutes=provider.session_lifetime_minutes,
+        bandwidth_limit_gb=provider.bandwidth_limit_gb,
+        bandwidth_used_gb=provider.bandwidth_used_gb or 0.0,
+        notification_email=provider.notification_email,
+        last_sync_at=provider.last_sync_at,
+        created_at=provider.created_at,
+    )
+
+
+@app.post("/admin/proxies/test")
+async def test_proxy_connection(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    provider = db.query(models.ProxyProvider).first()
+    if not provider:
+        raise HTTPException(status_code=400, detail="No proxy provider configured")
+
+    service = GeonodeProxyService(provider)
+    result = await service.test_connection()
+
+    if result.get("success"):
+        provider.bandwidth_used_gb = result.get("bandwidth_used_gb", 0)
+        db.commit()
+
+    return result
+
+
+class TestTrafficRequest(BaseModel):
+    country_code: Optional[str] = None
+    country_name: Optional[str] = None
+    state: Optional[str] = None
+    city: Optional[str] = None
+
+
+@app.post("/admin/proxies/test-traffic")
+async def test_proxy_traffic(
+    request: TestTrafficRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    provider = (
+        db.query(models.ProxyProvider)
+        .filter(models.ProxyProvider.is_active == True)
+        .first()
+    )
+    if not provider:
+        raise HTTPException(
+            status_code=400, detail="No active proxy provider configured"
+        )
+
+    import time
+    import aiohttp
+
+    service = GeonodeProxyService(provider)
+
+    start_time = time.time()
+
+    session = await get_or_create_session(
+        db=db,
+        country_code=request.country_code,
+        country_name=request.country_name,
+        state=request.state,
+        city=request.city,
+        max_retries=3,
+    )
+
+    if not session:
+        return {
+            "success": False,
+            "message": "Failed to create proxy session after 3 retries",
+            "requested": {
+                "country": request.country_name or request.country_code,
+                "state": request.state,
+                "city": request.city,
+            },
+        }
+
+    try:
+        async with aiohttp.ClientSession() as http_session:
+            test_url = "http://ip-api.com/json"
+            async with http_session.get(
+                test_url,
+                proxy=session.proxy_url,
+                timeout=aiohttp.ClientTimeout(total=15),
+            ) as resp:
+                if resp.status == 200:
+                    ip_data = await resp.json()
+                    latency = round((time.time() - start_time) * 1000)
+
+                    geo_match = True
+                    if (
+                        request.country_code
+                        and ip_data.get("countryCode") != request.country_code
+                    ):
+                        geo_match = False
+
+                    return {
+                        "success": True,
+                        "session_id": session.session_id,
+                        "latency_ms": latency,
+                        "detected": {
+                            "ip": ip_data.get("query"),
+                            "country": ip_data.get("country"),
+                            "country_code": ip_data.get("countryCode"),
+                            "region": ip_data.get("regionName"),
+                            "city": ip_data.get("city"),
+                            "isp": ip_data.get("isp"),
+                            "timezone": ip_data.get("timezone"),
+                            "lat": ip_data.get("lat"),
+                            "lon": ip_data.get("lon"),
+                        },
+                        "requested": {
+                            "country": request.country_name or request.country_code,
+                            "state": request.state,
+                            "city": request.city,
+                        },
+                        "geo_match": geo_match,
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "message": f"IP API returned status {resp.status}",
+                        "session_id": session.session_id,
+                    }
+    except asyncio.TimeoutError:
+        return {
+            "success": False,
+            "message": "Request timed out",
+            "session_id": session.session_id,
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": str(e),
+            "session_id": session.session_id,
+        }
+    finally:
+        session.is_active = False
+        db.commit()
+
+
+@app.post("/admin/proxies/sync-locations")
+async def sync_proxy_locations(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    provider = db.query(models.ProxyProvider).first()
+    if not provider:
+        raise HTTPException(status_code=400, detail="No proxy provider configured")
+
+    count = await sync_geo_locations(db, provider)
+    return {"success": True, "locations_synced": count}
+
+
+@app.get("/admin/proxies/usage")
+async def get_proxy_usage(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    provider = db.query(models.ProxyProvider).first()
+    if not provider:
+        return {"success": False, "message": "No provider configured"}
+
+    service = GeonodeProxyService(provider)
+    stats = await service.get_usage_stats()
+
+    if stats.get("success"):
+        provider.bandwidth_used_gb = stats.get("bandwidth_used_gb", 0)
+        db.commit()
+
+        await check_bandwidth_and_notify(db, provider)
+
+    return stats
+
+
+@app.get("/admin/proxies/locations", response_model=List[GeoLocationResponse])
+async def get_geo_locations(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    locations = (
+        db.query(models.GeoLocationCache)
+        .order_by(models.GeoLocationCache.country_name)
+        .all()
+    )
+
+    return [
+        GeoLocationResponse(
+            country_code=loc.country_code,
+            country_name=loc.country_name,
+            states=loc.states or [],
+            cities=loc.cities or [],
+        )
+        for loc in locations
+    ]
+
+
+@app.get("/admin/proxies/sessions", response_model=List[ProxySessionResponse])
+async def get_proxy_sessions(
+    active_only: bool = True,
+    limit: int = 100,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    query = db.query(models.ProxySession)
+
+    if active_only:
+        query = query.filter(models.ProxySession.is_active == True)
+
+    sessions = query.order_by(models.ProxySession.created_at.desc()).limit(limit).all()
+
+    return [
+        ProxySessionResponse(
+            id=s.id,
+            session_id=s.session_id,
+            country=s.country,
+            country_code=s.country_code,
+            state=s.state,
+            city=s.city,
+            ip_address=s.ip_address,
+            is_active=s.is_active,
+            port=s.port,
+            request_count=s.request_count,
+            created_at=s.created_at,
+            expires_at=s.expires_at,
+            last_used_at=s.last_used_at,
+        )
+        for s in sessions
+    ]
+
+
+@app.post("/admin/proxies/sessions/{session_id}/release")
+async def release_proxy_session(
+    session_id: str,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    session = (
+        db.query(models.ProxySession)
+        .filter(models.ProxySession.id == session_id)
+        .first()
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    provider = (
+        db.query(models.ProxyProvider)
+        .filter(models.ProxyProvider.id == session.provider_id)
+        .first()
+    )
+    if provider:
+        service = GeonodeProxyService(provider)
+        await service.release_session(db, session)
+
+    return {"success": True, "message": f"Session {session.session_id} released"}
+
+
+@app.post("/admin/proxies/sessions/release-all")
+async def release_all_proxy_sessions(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    provider = db.query(models.ProxyProvider).first()
+    if not provider:
+        raise HTTPException(status_code=400, detail="No proxy provider configured")
+
+    service = GeonodeProxyService(provider)
+    count = await service.release_all_sessions(db)
+
+    return {"success": True, "sessions_released": count}
+
+
+@app.post("/admin/proxies/cleanup")
+async def cleanup_proxy_sessions(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    await cleanup_expired_sessions(db)
+    return {"success": True, "message": "Expired sessions cleaned up"}
+
+
+class ProxyLogResponse(BaseModel):
+    id: str
+    session_id: Optional[str]
+    project_id: Optional[str]
+    request_url: Optional[str]
+    response_code: Optional[int]
+    latency_ms: Optional[int]
+    error_message: Optional[str]
+    country_code: Optional[str]
+    state: Optional[str]
+    city: Optional[str]
+    ip_address: Optional[str]
+    success: bool
+    created_at: str
+
+
+@app.get("/admin/proxies/logs", response_model=List[ProxyLogResponse])
+async def get_proxy_logs(
+    limit: int = 100,
+    offset: int = 0,
+    success_only: bool = False,
+    errors_only: bool = False,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    query = db.query(models.ProxyLog)
+
+    if success_only:
+        query = query.filter(models.ProxyLog.success == True)
+    if errors_only:
+        query = query.filter(models.ProxyLog.success == False)
+
+    logs = (
+        query.order_by(models.ProxyLog.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        ProxyLogResponse(
+            id=log.id,
+            session_id=log.session_id,
+            project_id=log.project_id,
+            request_url=log.request_url,
+            response_code=log.response_code,
+            latency_ms=log.latency_ms,
+            error_message=log.error_message,
+            country_code=log.country_code,
+            state=log.state,
+            city=log.city,
+            ip_address=log.ip_address,
+            success=log.success,
+            created_at=log.created_at.isoformat() if log.created_at else "",
+        )
+        for log in logs
+    ]
+
+
+@app.get("/admin/proxies/logs/stats")
+async def get_proxy_log_stats(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    from sqlalchemy import func
+
+    total = db.query(func.count(models.ProxyLog.id)).scalar() or 0
+    successful = (
+        db.query(func.count(models.ProxyLog.id))
+        .filter(models.ProxyLog.success == True)
+        .scalar()
+        or 0
+    )
+    failed = (
+        db.query(func.count(models.ProxyLog.id))
+        .filter(models.ProxyLog.success == False)
+        .scalar()
+        or 0
+    )
+
+    avg_latency = (
+        db.query(func.avg(models.ProxyLog.latency_ms))
+        .filter(models.ProxyLog.latency_ms != None)
+        .scalar()
+        or 0
+    )
+
+    return {
+        "total": total,
+        "successful": successful,
+        "failed": failed,
+        "success_rate": round((successful / total * 100) if total > 0 else 0, 1),
+        "avg_latency_ms": round(avg_latency, 0),
+    }
 
 
 @app.get("/api/blog/articles", response_model=List[BlogArticleMetadata])

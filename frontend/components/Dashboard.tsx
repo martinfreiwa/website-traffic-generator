@@ -97,6 +97,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     }
   ];
 
+  // Dynamic page title for browser tab
+  useEffect(() => {
+    document.title = `${getPageTitle()} | Traffic Creator`;
+  }, [currentPath]);
+
   const getPageTitle = () => {
     if (currentPath === 'home' || currentPath === '') return 'Dashboard';
     if (currentPath.startsWith('campaigns')) return 'Campaigns';

@@ -1,8 +1,8 @@
 
-import React, { useState } from 'react';
-import { Project, ProjectSettings, User } from '../../types';
+import React, { useState, useEffect } from 'react';
+import { Project, ProjectSettings, User, GeoLocation, GeoTarget } from '../../types';
 import { db } from '../../services/db';
-import { Globe, Save, ArrowLeft, Settings, Activity, MapPin, MousePointer, Search, CheckCircle, AlertCircle, Smartphone, Monitor, Link, Sliders, Shield, Zap, Globe2, MousePointer2, FileText, User as UserIcon, X } from 'lucide-react';
+import { Globe, Save, ArrowLeft, Settings, Activity, MapPin, MousePointer, Search, CheckCircle, AlertCircle, Smartphone, Monitor, Link, Sliders, Shield, Zap, Globe2, MousePointer2, FileText, User as UserIcon, X, Plus, Trash2 } from 'lucide-react';
 import CustomSelect from '../CustomSelect';
 import { COUNTRIES_LIST, TRAFFIC_SOURCES, TIME_ON_PAGE_OPTS, TIMEZONES } from '../../constants';
 
@@ -31,7 +31,7 @@ const DEFAULT_SETTINGS: ProjectSettings = {
     autoCrawlExit: false,
     innerUrlCount: 0,
     countries: ['United States'],
-    geoTargets: [{ id: 'default-geo', country: 'United States', percent: 100 }],
+    geoTargets: [{ id: 'default-geo', country: 'United States', countryCode: 'US', percent: 100 }],
     trafficSource: 'organic',
     keywords: '',
     referralUrls: '',
@@ -66,17 +66,34 @@ const AdminCreateProject: React.FC<AdminCreateProjectProps> = ({ onBack, onSucce
     const [users, setUsers] = useState<User[]>([]);
     const [selectedUserId, setSelectedUserId] = useState<string>('');
     const [countrySearch, setCountrySearch] = useState('');
+    
+    // Geo-Targeting State
+    const [geoLocations, setGeoLocations] = useState<GeoLocation[]>([]);
+    const [newGeoCountry, setNewGeoCountry] = useState('');
+    const [newGeoState, setNewGeoState] = useState('');
+    const [newGeoCity, setNewGeoCity] = useState('');
+    const [newGeoPercent, setNewGeoPercent] = useState(100);
 
     React.useEffect(() => {
         const loadUsers = async () => {
-            const allUsers = await db.syncUsers(); // Ensure fresh list
+            const allUsers = await db.syncUsers();
             setUsers(allUsers);
-            // Default to self if no selection, or just leave empty to force choice?
-            // Let's default to current admin
             const me = db.getCurrentUser();
             if (me) setSelectedUserId(me.id);
         };
         loadUsers();
+    }, []);
+
+    useEffect(() => {
+        const loadGeoLocations = async () => {
+            try {
+                const locations = await db.getGeoLocations();
+                setGeoLocations(locations);
+            } catch (e) {
+                console.error('Failed to load geo locations:', e);
+            }
+        };
+        loadGeoLocations();
     }, []);
 
     const dailyLimit = Math.round(totalVisitors / durationDays);
@@ -339,74 +356,159 @@ const AdminCreateProject: React.FC<AdminCreateProjectProps> = ({ onBack, onSucce
 
                 <div className="bg-white border border-gray-200 p-8 shadow-sm">
                     <h3 className="text-xs font-bold uppercase tracking-widest text-[#ff4d00] mb-6 flex items-center gap-2">
-                        <MapPin size={14} /> Geolocation
+                        <MapPin size={14} /> Geo-Targeting
                     </h3>
                     <div className="space-y-6">
                         <div>
-                            <Label>Countries</Label>
-                            {/* Selected Countries */}
-                            {settings.countries.length > 0 && (
-                                <div className="flex flex-wrap gap-2 mb-3">
-                                    {settings.countries.map(c => {
-                                        const countryInfo = COUNTRIES_LIST.find(ct => ct.name === c || ct.code === c);
+                            <div className="flex justify-between items-center mb-3">
+                                <Label>Traffic Distribution</Label>
+                                <span className={`text-xs font-bold ${settings.geoTargets.reduce((sum, t) => sum + t.percent, 0) === 100 ? 'text-green-600' : 'text-red-500'}`}>
+                                    Total: {settings.geoTargets.reduce((sum, t) => sum + t.percent, 0)}%
+                                </span>
+                            </div>
+                            
+                            {settings.geoTargets.length > 0 && (
+                                <div className="space-y-2 mb-4">
+                                    {settings.geoTargets.map((target, idx) => {
+                                        const countryInfo = geoLocations.find(l => l.countryCode === target.countryCode) || 
+                                            COUNTRIES_LIST.find(c => c.name === target.country);
                                         return (
-                                            <span key={c} className="bg-[#ff4d00]/10 text-[#ff4d00] px-2 py-1 text-xs font-bold flex items-center gap-1">
-                                                {countryInfo && (
-                                                    <img src={`https://flagcdn.com/w16/${countryInfo.code.toLowerCase()}.png`} alt={c} className="w-4 h-auto" />
-                                                )}
-                                                {countryInfo?.name || c}
-                                                <button onClick={() => updateSetting('countries', settings.countries.filter(x => x !== c))} className="ml-1 hover:text-red-500">
-                                                    <X size={12} />
-                                                </button>
-                                            </span>
+                                            <div key={target.id} className="flex items-center justify-between bg-gray-50 border border-gray-200 p-3">
+                                                <div className="flex items-center gap-3">
+                                                    {target.countryCode && (
+                                                        <img src={`https://flagcdn.com/w20/${target.countryCode.toLowerCase()}.png`} alt={target.country} className="w-5 h-auto" />
+                                                    )}
+                                                    <div>
+                                                        <div className="text-sm font-bold text-gray-900">
+                                                            {target.country}
+                                                            {target.state && <span className="text-gray-500 font-normal"> / {target.state}</span>}
+                                                            {target.city && <span className="text-gray-400 font-normal"> / {target.city}</span>}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        max="100"
+                                                        value={target.percent}
+                                                        onChange={(e) => {
+                                                            const newTargets = [...settings.geoTargets];
+                                                            newTargets[idx].percent = parseInt(e.target.value) || 0;
+                                                            updateSetting('geoTargets', newTargets);
+                                                        }}
+                                                        className="w-16 bg-white border border-gray-200 p-1 text-sm font-bold text-center"
+                                                    />
+                                                    <span className="text-xs text-gray-500">%</span>
+                                                    <button
+                                                        onClick={() => updateSetting('geoTargets', settings.geoTargets.filter(t => t.id !== target.id))}
+                                                        className="text-gray-400 hover:text-red-500"
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                </div>
+                                            </div>
                                         );
                                     })}
                                 </div>
                             )}
-                            {/* Search Input */}
-                            <div className="relative mb-2">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
-                                <input
-                                    type="text"
-                                    placeholder="Search countries..."
-                                    value={countrySearch}
-                                    onChange={(e) => setCountrySearch(e.target.value)}
-                                    className="w-full pl-9 pr-3 py-2 border border-gray-200 text-xs outline-none focus:border-[#ff4d00]"
-                                />
-                                {countrySearch && (
-                                    <button
-                                        onClick={() => setCountrySearch('')}
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                                    >
-                                        <X size={12} />
-                                    </button>
-                                )}
-                            </div>
-                            {/* Country Dropdown */}
-                            <div className="border border-gray-200 max-h-[150px] overflow-y-auto">
-                                <div className="grid grid-cols-2 gap-px p-1">
-                                    {COUNTRIES_LIST
-                                        .filter(c => 
-                                            !settings.countries.includes(c.name) && 
-                                            (countrySearch === '' || 
-                                                c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
-                                                c.code.toLowerCase().includes(countrySearch.toLowerCase()))
-                                        )
-                                        .slice(0, 50)
-                                        .map(c => (
-                                            <button
-                                                key={c.code}
-                                                onClick={() => updateSetting('countries', [...settings.countries, c.name])}
-                                                className="p-2 text-left text-xs font-medium flex items-center gap-2 hover:bg-gray-50 transition-colors"
-                                            >
-                                                <img src={`https://flagcdn.com/w16/${c.code.toLowerCase()}.png`} alt={c.name} className="w-4 h-auto" />
-                                                <span className="truncate">{c.name}</span>
-                                            </button>
-                                        ))
-                                    }
+                            
+                            <div className="bg-gray-50 border border-dashed border-gray-300 p-4">
+                                <div className="text-xs font-bold text-gray-500 mb-3 uppercase">Add Geo Target</div>
+                                <div className="grid grid-cols-4 gap-2">
+                                    <div>
+                                        <select
+                                            value={newGeoCountry}
+                                            onChange={(e) => {
+                                                setNewGeoCountry(e.target.value);
+                                                setNewGeoState('');
+                                                setNewGeoCity('');
+                                            }}
+                                            className="w-full bg-white border border-gray-200 p-2 text-xs font-medium"
+                                        >
+                                            <option value="">Country...</option>
+                                            {(geoLocations.length > 0 ? geoLocations : COUNTRIES_LIST.map(c => ({ countryCode: c.code, countryName: c.name, states: [], cities: [] }))).map(loc => (
+                                                <option key={loc.countryCode} value={loc.countryCode}>
+                                                    {loc.countryName}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <select
+                                            value={newGeoState}
+                                            onChange={(e) => {
+                                                setNewGeoState(e.target.value);
+                                                setNewGeoCity('');
+                                            }}
+                                            className="w-full bg-white border border-gray-200 p-2 text-xs font-medium"
+                                            disabled={!newGeoCountry}
+                                        >
+                                            <option value="">State (optional)</option>
+                                            {newGeoCountry && geoLocations.find(l => l.countryCode === newGeoCountry)?.states.map(s => (
+                                                <option key={s.code} value={s.name}>{s.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <select
+                                            value={newGeoCity}
+                                            onChange={(e) => setNewGeoCity(e.target.value)}
+                                            className="w-full bg-white border border-gray-200 p-2 text-xs font-medium"
+                                            disabled={!newGeoState}
+                                        >
+                                            <option value="">City (optional)</option>
+                                            {newGeoState && geoLocations.find(l => l.countryCode === newGeoCountry)?.cities
+                                                .filter(c => !newGeoState || c.code.startsWith(newGeoState.substring(0, 2).toUpperCase()))
+                                                .map(c => (
+                                                    <option key={c.code} value={c.name}>{c.name}</option>
+                                                ))}
+                                        </select>
+                                    </div>
+                                    <div className="flex gap-1">
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            max="100"
+                                            value={newGeoPercent}
+                                            onChange={(e) => setNewGeoPercent(parseInt(e.target.value) || 0)}
+                                            className="w-14 bg-white border border-gray-200 p-2 text-xs font-bold text-center"
+                                            placeholder="%"
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                if (!newGeoCountry) return;
+                                                const countryLoc = geoLocations.find(l => l.countryCode === newGeoCountry);
+                                                const countryName = countryLoc?.countryName || COUNTRIES_LIST.find(c => c.code === newGeoCountry)?.name || newGeoCountry;
+                                                const newTarget: GeoTarget = {
+                                                    id: `geo-${Date.now()}`,
+                                                    country: countryName,
+                                                    countryCode: newGeoCountry,
+                                                    state: newGeoState || undefined,
+                                                    stateCode: newGeoState ? newGeoState.substring(0, 2).toUpperCase() : undefined,
+                                                    city: newGeoCity || undefined,
+                                                    percent: newGeoPercent
+                                                };
+                                                updateSetting('geoTargets', [...settings.geoTargets, newTarget]);
+                                                setNewGeoCountry('');
+                                                setNewGeoState('');
+                                                setNewGeoCity('');
+                                                setNewGeoPercent(100);
+                                            }}
+                                            disabled={!newGeoCountry}
+                                            className="flex-1 bg-[#ff4d00] text-white p-2 text-xs font-bold hover:bg-[#e64500] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                                        >
+                                            <Plus size={14} />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-                            <p className="text-[10px] text-gray-400 mt-1">{settings.countries.length} countries selected</p>
+                            
+                            <p className="text-[10px] text-gray-400 mt-2">
+                                {geoLocations.length > 0 
+                                    ? 'Geo-targeting uses proxy locations synced from Geonode. States and cities are optional.'
+                                    : 'Configure Geonode proxy in Admin > Infrastructure for full geo-targeting with states/cities.'}
+                            </p>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>

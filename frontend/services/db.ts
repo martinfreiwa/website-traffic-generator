@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { Project, PriceClass, ProjectSettings, Transaction, User, Ticket, SystemSettings, Notification, TrafficLog, SystemAlert, LiveVisitor, Broadcast, AdminStats, Coupon, MarketingCampaign, ConversionSettings, ActivityLog, UserSession, ImpersonationLog, BalanceAdjustmentLog, EmailLog, UserNotificationPrefs, UserReferral, AdminUserDetails, UserStats, FraudAlert } from '../types';
+import { Project, PriceClass, ProjectSettings, Transaction, User, Ticket, SystemSettings, Notification, TrafficLog, SystemAlert, LiveVisitor, Broadcast, AdminStats, Coupon, MarketingCampaign, ConversionSettings, ActivityLog, UserSession, ImpersonationLog, BalanceAdjustmentLog, EmailLog, UserNotificationPrefs, UserReferral, AdminUserDetails, UserStats, FraudAlert, ProxyProvider, ProxyProviderConfig, ProxySession, GeoLocation, ProxyUsageStats, ProxyLog, ProxyLogStats } from '../types';
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' ? window.location.origin : '');
 const SSO_TARGET_DOMAIN = import.meta.env.VITE_SSO_TARGET_DOMAIN || '';
@@ -523,7 +523,6 @@ export const db = {
             if (!response.ok) return;
             const data = await response.json();
 
-            // Fetch stats for all projects
             let statsData: Record<string, any[]> = {};
             try {
                 const statsResponse = await fetchWithAuth(`${API_BASE_URL}/projects/stats?days=30`);
@@ -542,14 +541,45 @@ export const db = {
                 tier: p.tier,
                 status: p.status,
                 expires: p.expires_at || 'Never',
+                expiresAt: p.expires_at,
                 createdAt: p.created_at,
                 settings: p.settings,
-                stats: fillMissingDays(statsData[p.id] || [], 30)
+                stats: fillMissingDays(statsData[p.id] || [], 30),
+                totalHits: p.total_hits || 0,
+                hitsToday: p.hits_today || 0,
+                dailyLimit: p.daily_limit || 0,
+                totalTarget: p.total_target || 0,
+                priority: p.priority || 0,
+                forceStopReason: p.force_stop_reason,
+                isHidden: p.is_hidden || false,
+                internalTags: p.internal_tags || [],
+                notes: p.notes,
+                isFlagged: p.is_flagged || false,
+                userEmail: p.user_email,
+                userName: p.user_name,
+                userBalance: p.user_balance,
             }));
 
             localStorage.setItem('modus_admin_projects_cache', JSON.stringify(mapped));
         } catch (e) {
             console.error("Failed to sync admin projects:", e);
+        }
+    },
+
+    bulkUpdateAdminProjects: async (projectIds: string[], updates: { status?: string; priority?: number }): Promise<void> => {
+        try {
+            await Promise.all(projectIds.map(async (id) => {
+                const response = await fetchWithAuth(`${API_BASE_URL}/admin/projects/${id}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(updates)
+                });
+                if (!response.ok) {
+                    console.error(`Failed to update project ${id}`);
+                }
+            }));
+            await db.syncAdminProjects();
+        } catch (e) {
+            console.error("Failed to bulk update projects:", e);
         }
     },
 
@@ -688,6 +718,11 @@ export const db = {
     getUsers: (): User[] => {
         const data = localStorage.getItem('modus_users_cache');
         return data ? JSON.parse(data) : [];
+    },
+
+    getAdmins: (): User[] => {
+        const users = db.getUsers();
+        return users.filter(u => u.role === 'admin');
     },
 
     syncUsers: async () => {
@@ -1015,11 +1050,15 @@ export const db = {
             id: t.id,
             type: t.type || 'ticket',
             userId: t.user_id,
-            userName: t.user_email?.split('@')[0] || 'User',
+            userName: t.user_name || t.user_email?.split('@')[0] || 'User',
+            userEmail: t.user_email,
             subject: t.subject,
             status: t.status || 'open',
             priority: t.priority || 'low',
             category: t.category || 'general',
+            assigneeId: t.assignee_id,
+            assigneeName: t.assignee_name,
+            tags: t.tags || [],
             projectId: t.project_id,
             projectName: t.project_name,
             attachmentUrls: t.attachment_urls || [],
@@ -1027,7 +1066,8 @@ export const db = {
             lastMessage: t.messages?.length > 0 ? t.messages[t.messages.length - 1].text : 'Ticket created',
             messages: t.messages || [],
             unread: false,
-            updatedAt: t.updated_at
+            updatedAt: t.updated_at,
+            slaDueAt: t.sla_due_at
         }));
         localStorage.setItem('modus_tickets_cache', JSON.stringify(mapped));
     },
@@ -1153,11 +1193,12 @@ export const db = {
         return tickets.find(t => t.id === id);
     },
 
-    replyToTicket: async (ticketId: string, text: string, sender: 'user' | 'admin' | 'guest', attachments?: string[]) => {
+    replyToTicket: async (ticketId: string, text: string, sender: 'user' | 'admin' | 'guest', attachments?: string[], isInternalNote?: boolean) => {
         const payload = {
             text,
-            sender, // Although backend overrides this based on token, we send it for completeness
-            attachments: attachments || []
+            sender,
+            attachments: attachments || [],
+            is_internal_note: isInternalNote || false
         };
 
         const response = await fetchWithAuth(`${API_BASE_URL}/tickets/${ticketId}/reply`, {
@@ -1208,6 +1249,60 @@ export const db = {
         });
         if (!response.ok) throw new Error("Failed to delete ticket");
         await db.syncTickets();
+    },
+
+    bulkUpdateTickets: async (ticketIds: string[], action: 'close' | 'delete' | 'open' | 'archive') => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/tickets/bulk-action`, {
+            method: 'PUT',
+            body: JSON.stringify({ ticket_ids: ticketIds, action })
+        });
+        if (!response.ok) throw new Error("Failed to perform bulk action");
+        await db.syncTickets();
+    },
+
+    assignTicket: async (ticketId: string, assigneeId: string | null) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/tickets/${ticketId}/assign?assignee_id=${assigneeId || ''}`, {
+            method: 'PUT'
+        });
+        if (!response.ok) throw new Error("Failed to assign ticket");
+        await db.syncTickets();
+    },
+
+    updateTicketTags: async (ticketId: string, tags: string[]) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/tickets/${ticketId}`, {
+            method: 'PUT',
+            body: JSON.stringify({ tags })
+        });
+        if (!response.ok) throw new Error("Failed to update ticket tags");
+        await db.syncTickets();
+    },
+
+    getTicketTemplates: async () => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/ticket-templates`);
+        if (!response.ok) return [];
+        return await response.json();
+    },
+
+    createTicketTemplate: async (template: { title: string; content: string; category: string; shortcut?: string }) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/ticket-templates`, {
+            method: 'POST',
+            body: JSON.stringify({ ...template, is_active: true })
+        });
+        if (!response.ok) throw new Error("Failed to create template");
+        return await response.json();
+    },
+
+    deleteTicketTemplate: async (templateId: string) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/ticket-templates/${templateId}`, {
+            method: 'DELETE'
+        });
+        if (!response.ok) throw new Error("Failed to delete template");
+    },
+
+    getUserStatsById: async (userId: string) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/users/${userId}/stats`);
+        if (!response.ok) throw new Error("Failed to get user stats");
+        return await response.json();
     },
 
     savePricing: async (pricing: PriceClass[]) => {
@@ -2681,5 +2776,223 @@ export const db = {
             body: JSON.stringify({ tier_level: tierLevel })
         });
         if (!response.ok) throw new Error('Failed to update affiliate tier');
+    },
+
+    // Proxy Provider API
+    getProxyConfig: async (): Promise<ProxyProvider | null> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/proxies/config`);
+        if (response.status === 404) return null;
+        if (!response.ok) throw new Error('Failed to fetch proxy config');
+        const data = await response.json();
+        return {
+            id: data.id,
+            name: data.name,
+            providerType: data.provider_type,
+            username: data.username,
+            serviceName: data.service_name,
+            proxyHost: data.proxy_host,
+            httpPortStart: data.http_port_start,
+            httpPortEnd: data.http_port_end,
+            isActive: data.is_active,
+            sessionLifetimeMinutes: data.session_lifetime_minutes,
+            bandwidthLimitGb: data.bandwidth_limit_gb,
+            bandwidthUsedGb: data.bandwidth_used_gb || 0,
+            notificationEmail: data.notification_email,
+            warnAt80: data.warn_at_80,
+            warnAt50: data.warn_at_50,
+            warnAt20: data.warn_at_20,
+            lastSyncAt: data.last_sync_at,
+            createdAt: data.created_at
+        };
+    },
+
+    saveProxyConfig: async (config: ProxyProviderConfig): Promise<ProxyProvider> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/proxies/config`, {
+            method: 'POST',
+            body: JSON.stringify({
+                username: config.username,
+                password: config.password,
+                service_name: config.serviceName,
+                session_lifetime_minutes: config.sessionLifetimeMinutes,
+                bandwidth_limit_gb: config.bandwidthLimitGb,
+                notification_email: config.notificationEmail,
+                is_active: config.isActive,
+                warn_at_80: config.warnAt80,
+                warn_at_50: config.warnAt50,
+                warn_at_20: config.warnAt20
+            })
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || 'Failed to save proxy config');
+        }
+        const data = await response.json();
+        return {
+            id: data.id,
+            name: data.name,
+            providerType: data.provider_type,
+            username: data.username,
+            serviceName: data.service_name,
+            proxyHost: data.proxy_host,
+            httpPortStart: data.http_port_start,
+            httpPortEnd: data.http_port_end,
+            isActive: data.is_active,
+            sessionLifetimeMinutes: data.session_lifetime_minutes,
+            bandwidthLimitGb: data.bandwidth_limit_gb,
+            bandwidthUsedGb: data.bandwidth_used_gb || 0,
+            notificationEmail: data.notification_email,
+            warnAt80: data.warn_at_80,
+            warnAt50: data.warn_at_50,
+            warnAt20: data.warn_at_20,
+            lastSyncAt: data.last_sync_at,
+            createdAt: data.created_at
+        };
+    },
+
+    testProxyConnection: async (): Promise<{ success: boolean; message: string; bandwidth_used_gb?: number }> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/proxies/test`, {
+            method: 'POST'
+        });
+        return await response.json();
+    },
+
+    syncProxyLocations: async (): Promise<{ success: boolean; locations_synced: number }> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/proxies/sync-locations`, {
+            method: 'POST'
+        });
+        return await response.json();
+    },
+
+    getProxyUsage: async (): Promise<ProxyUsageStats> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/proxies/usage`);
+        return await response.json();
+    },
+
+    getGeoLocations: async (): Promise<GeoLocation[]> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/proxies/locations`);
+        if (!response.ok) return [];
+        const data = await response.json();
+        return data.map((l: any) => ({
+            countryCode: l.country_code,
+            countryName: l.country_name,
+            states: l.states || [],
+            cities: l.cities || []
+        }));
+    },
+
+    getProxySessions: async (activeOnly: boolean = true): Promise<ProxySession[]> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/proxies/sessions?active_only=${activeOnly}`);
+        if (!response.ok) return [];
+        const data = await response.json();
+        return data.map((s: any) => ({
+            id: s.id,
+            sessionId: s.session_id,
+            country: s.country,
+            countryCode: s.country_code,
+            state: s.state,
+            city: s.city,
+            ipAddress: s.ip_address,
+            isActive: s.is_active,
+            port: s.port,
+            requestCount: s.request_count,
+            createdAt: s.created_at,
+            expiresAt: s.expires_at,
+            lastUsedAt: s.last_used_at
+        }));
+    },
+
+    releaseProxySession: async (sessionId: string): Promise<void> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/proxies/sessions/${sessionId}/release`, {
+            method: 'POST'
+        });
+        if (!response.ok) throw new Error('Failed to release session');
+    },
+
+    releaseAllProxySessions: async (): Promise<{ success: boolean; sessions_released: number }> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/proxies/sessions/release-all`, {
+            method: 'POST'
+        });
+        return await response.json();
+    },
+
+    cleanupProxySessions: async (): Promise<{ success: boolean; message: string }> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/proxies/cleanup`, {
+            method: 'POST'
+        });
+        return await response.json();
+    },
+
+    testProxyTraffic: async (params: { countryCode?: string; countryName?: string; state?: string; city?: string }): Promise<{
+        success: boolean;
+        message?: string;
+        session_id?: string;
+        latency_ms?: number;
+        detected?: {
+            ip: string;
+            country: string;
+            country_code: string;
+            region: string;
+            city: string;
+            isp: string;
+            timezone: string;
+            lat: number;
+            lon: number;
+        };
+        requested?: {
+            country: string;
+            state?: string;
+            city?: string;
+        };
+        geo_match?: boolean;
+    }> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/proxies/test-traffic`, {
+            method: 'POST',
+            body: JSON.stringify({
+                country_code: params.countryCode,
+                country_name: params.countryName,
+                state: params.state,
+                city: params.city
+            })
+        });
+        return await response.json();
+    },
+
+    getProxyLogs: async (params?: { limit?: number; offset?: number; successOnly?: boolean; errorsOnly?: boolean }): Promise<ProxyLog[]> => {
+        const queryParams = new URLSearchParams();
+        if (params?.limit) queryParams.set('limit', params.limit.toString());
+        if (params?.offset) queryParams.set('offset', params.offset.toString());
+        if (params?.successOnly) queryParams.set('success_only', 'true');
+        if (params?.errorsOnly) queryParams.set('errors_only', 'true');
+        
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/proxies/logs?${queryParams.toString()}`);
+        if (!response.ok) return [];
+        const data = await response.json();
+        return data.map((l: any) => ({
+            id: l.id,
+            sessionId: l.session_id,
+            projectId: l.project_id,
+            requestUrl: l.request_url,
+            responseCode: l.response_code,
+            latencyMs: l.latency_ms,
+            errorMessage: l.error_message,
+            countryCode: l.country_code,
+            state: l.state,
+            city: l.city,
+            ipAddress: l.ip_address,
+            success: l.success,
+            createdAt: l.created_at
+        }));
+    },
+
+    getProxyLogStats: async (): Promise<ProxyLogStats> => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/proxies/logs/stats`);
+        const data = await response.json();
+        return {
+            total: data.total,
+            successful: data.successful,
+            failed: data.failed,
+            successRate: data.success_rate,
+            avgLatencyMs: data.avg_latency_ms
+        };
     }
 };
