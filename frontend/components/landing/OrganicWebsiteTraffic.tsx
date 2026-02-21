@@ -88,7 +88,7 @@ const OrganicWebsiteTraffic: React.FC<LandingPageProps> = ({ onLogin, onNavigate
                                 Features
                                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-[#ff4d00] transition-all group-hover:w-full"></span>
                             </a>
-                            <Link to="/pricing" className="hover:text-[#ff4d00] transition-colors relative group">
+                            <Link to="/#pricing" className="hover:text-[#ff4d00] transition-colors relative group">
                                 Pricing
                                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-[#ff4d00] transition-all group-hover:w-full"></span>
                             </Link>
@@ -366,7 +366,7 @@ const OrganicWebsiteTraffic: React.FC<LandingPageProps> = ({ onLogin, onNavigate
                         <Link to="/signup" className="bg-white text-black px-12 py-5 text-sm font-bold uppercase tracking-wider hover:bg-black hover:text-white transition-all shadow-2xl flex items-center justify-center gap-3 rounded-sm transform hover:-translate-y-1">
                             Start Free Trial <ArrowRight size={18} />
                         </Link>
-                        <Link to="/pricing" className="bg-transparent border-2 border-white text-white px-12 py-5 text-sm font-bold uppercase tracking-wider hover:bg-white hover:text-[#ff4d00] transition-all rounded-sm flex items-center justify-center">
+                        <Link to="/#pricing" className="bg-transparent border-2 border-white text-white px-12 py-5 text-sm font-bold uppercase tracking-wider hover:bg-white hover:text-[#ff4d00] transition-all rounded-sm flex items-center justify-center">
                             View Pricing
                         </Link>
                     </div>
@@ -396,7 +396,7 @@ const OrganicWebsiteTraffic: React.FC<LandingPageProps> = ({ onLogin, onNavigate
                         <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-8">Platform</h4>
                         <ul className="space-y-4 text-sm font-medium text-gray-300">
                             <li><Link to="/how-it-works" className="hover:text-[#ff4d00] transition-colors">How it Works</Link></li>
-                            <li><Link to="/pricing" className="hover:text-[#ff4d00] transition-colors">Pricing</Link></li>
+                            <li><Link to="/#pricing" className="hover:text-[#ff4d00] transition-colors">Pricing</Link></li>
                             <li><Link to="/login" className="hover:text-[#ff4d00] transition-colors">Dashboard</Link></li>
                             <li><Link to="/affiliate" className="hover:text-[#ff4d00] transition-colors">Affiliate Program</Link></li>
                         </ul>

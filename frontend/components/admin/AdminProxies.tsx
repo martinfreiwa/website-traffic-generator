@@ -8,6 +8,8 @@ const AdminProxies: React.FC = () => {
         username: '',
         password: '',
         serviceName: 'RESIDENTIAL-PREMIUM',
+        proxyHost: '92.204.164.15',
+        httpPort: 9000,
         sessionLifetimeMinutes: 30,
         bandwidthLimitGb: undefined,
         notificationEmail: 'support@traffic-creator.com',
@@ -75,6 +77,8 @@ const AdminProxies: React.FC = () => {
                     username: providerData.username,
                     password: '',
                     serviceName: providerData.serviceName,
+                    proxyHost: providerData.proxyHost || '92.204.164.15',
+                    httpPort: providerData.httpPort || 9000,
                     sessionLifetimeMinutes: providerData.sessionLifetimeMinutes,
                     bandwidthLimitGb: providerData.bandwidthLimitGb,
                     notificationEmail: providerData.notificationEmail,
@@ -292,6 +296,28 @@ const AdminProxies: React.FC = () => {
                                 className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 outline-none focus:border-[#ff4d00]"
                                 placeholder="RESIDENTIAL-PREMIUM"
                             />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-2">Proxy Host / IP</label>
+                                <input
+                                    type="text"
+                                    value={config.proxyHost}
+                                    onChange={(e) => setConfig({ ...config, proxyHost: e.target.value })}
+                                    className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 outline-none focus:border-[#ff4d00]"
+                                    placeholder="92.204.164.15"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide block mb-2">Proxy Port</label>
+                                <input
+                                    type="number"
+                                    value={config.httpPort}
+                                    onChange={(e) => setConfig({ ...config, httpPort: parseInt(e.target.value) || 9000 })}
+                                    className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-bold text-gray-900 outline-none focus:border-[#ff4d00]"
+                                    placeholder="9000"
+                                />
+                            </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>

@@ -3,7 +3,6 @@
 FROM node:20-alpine AS frontend-builder
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json* ./
-# Use legacy-peer-deps to handle potential conflicts in the existing project
 RUN npm install --legacy-peer-deps
 COPY frontend/ .
 RUN npm run build

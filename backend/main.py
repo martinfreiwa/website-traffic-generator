@@ -926,6 +926,77 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token", auto_error=False)
 api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)
 
 
+def seed_default_proxy_provider():
+    db = SessionLocal()
+    try:
+        existing = db.query(models.ProxyProvider).first()
+        if existing:
+            return
+
+        default_provider = models.ProxyProvider(
+            id=str(uuid.uuid4()),
+            name="Geonode Residential",
+            provider_type="geonode",
+            username="geonode_d0HRbZWDCV-type-residential",
+            password="92a8dcc4-52fe-445d-989c-5158a5f5ca09",
+            service_name="RESIDENTIAL-PREMIUM",
+            proxy_host="92.204.164.15",
+            http_port_start=9000,
+            http_port_end=9000,
+            is_active=True,
+            session_lifetime_minutes=30,
+            bandwidth_limit_gb=None,
+            bandwidth_used_gb=0.0,
+            notification_email="support@traffic-creator.com",
+            warn_at_80=True,
+            warn_at_50=True,
+            warn_at_20=True,
+        )
+        db.add(default_provider)
+        db.commit()
+        logger.info("Seeded default proxy provider")
+    except Exception as e:
+        logger.error(f"Failed to seed default proxy provider: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
+def seed_admin_user():
+    db = SessionLocal()
+    try:
+        existing = (
+            db.query(models.User)
+            .filter(models.User.email == "admin@traffic.com")
+            .first()
+        )
+        if existing:
+            logger.info("Admin user already exists")
+            return
+
+        admin_user = models.User(
+            id=str(uuid.uuid4()),
+            email="admin@traffic.com",
+            password_hash=pwd_context.hash("admin123"),
+            role="admin",
+            balance=1000.0,
+            balance_economy=5000.0,
+            balance_professional=5000.0,
+            balance_expert=5000.0,
+            api_key=None,
+            affiliate_code=None,
+            token_version=1,
+        )
+        db.add(admin_user)
+        db.commit()
+        logger.info("Seeded admin user (admin@traffic.com)")
+    except Exception as e:
+        logger.error(f"Failed to seed admin user: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 @app.on_event("startup")
 async def app_startup():
     environment = os.getenv("ENVIRONMENT", "development")
@@ -945,6 +1016,12 @@ async def app_startup():
         logger.info("Running column migrations...")
         run_column_migrations()
         logger.info("Column migrations completed.")
+
+        # Seed Default Proxy Provider
+        seed_default_proxy_provider()
+
+        # Seed Admin User
+        seed_admin_user()
 
         # Start Scheduler
         logger.info("Starting scheduler...")
@@ -2021,19 +2098,19 @@ def register(request: Request, user: UserCreate, db: Session = Depends(get_db)):
     settings_row = db.query(models.SystemSettings).first()
     signup_credits = 0.0
     if settings_row and settings_row.settings:
-        signup_credits = settings_row.settings.get("newUserSignupCredits", 0.0)
+        signup_credits = settings_row.settings.get("newUserSignupCreditsEconomy", 0.0)
 
     # Add signup credits to new user if configured
     if signup_credits > 0:
-        new_user.balance = signup_credits
+        new_user.balance_economy = signup_credits
         db.commit()
 
         # Create transaction record for signup credits
         transaction = models.Transaction(
             user_id=new_user.id,
-            type="signup_bonus",
+            type="signup_bonus_economy",
             amount=signup_credits,
-            description="Sign up bonus credits",
+            description="Sign up bonus credits (economy)",
             status="completed",
             hits=0,
         )
@@ -3251,12 +3328,24 @@ def create_quick_campaign(campaign: QuickCampaignCreate, db: Session = Depends(g
         new_user = models.User(
             email=campaign.email,
             password_hash=hashed_password,
-            balance=6.00,
+            balance_economy=10000,
             affiliate_code=f"QC-{campaign.email[:3].upper()}-{secrets.token_hex(3).upper()}",
         )
         db.add(new_user)
         db.commit()
         db.refresh(new_user)
+
+        # Create transaction record for quick campaign bonus
+        transaction = models.Transaction(
+            user_id=new_user.id,
+            type="quick_campaign_bonus",
+            amount=10000,
+            description="Quick Campaign bonus credits (economy)",
+            status="completed",
+            hits=0,
+        )
+        db.add(transaction)
+        db.commit()
 
         try:
             email_service.send_welcome_email(new_user.email, "User", generated_password)
@@ -7298,7 +7387,7 @@ def delete_ticket_template(
     return {"status": "deleted"}
 
 
-class UserStatsResponse(BaseModel):
+class IndividualUserStatsResponse(BaseModel):
     user_id: str
     plan: str
     created_at: datetime
@@ -7307,7 +7396,7 @@ class UserStatsResponse(BaseModel):
     open_tickets: int
 
 
-@app.get("/users/{user_id}/stats", response_model=UserStatsResponse)
+@app.get("/users/{user_id}/stats", response_model=IndividualUserStatsResponse)
 def get_user_stats(
     user_id: str,
     db: Session = Depends(get_db),
@@ -10643,6 +10732,8 @@ class ProxyProviderConfig(BaseModel):
     username: str
     password: str
     service_name: str = "RESIDENTIAL-PREMIUM"
+    proxy_host: str = "proxy.geonode.io"
+    http_port: int = 9000
     session_lifetime_minutes: int = 30
     bandwidth_limit_gb: Optional[float] = None
     notification_email: str = "support@traffic-creator.com"
@@ -10698,6 +10789,7 @@ from proxy_service import (
     sync_geo_locations,
     check_bandwidth_and_notify,
     cleanup_expired_sessions,
+    get_or_create_session,
 )
 
 
@@ -10711,7 +10803,23 @@ async def get_proxy_config(
 
     provider = db.query(models.ProxyProvider).first()
     if not provider:
-        return None
+        return {
+            "id": "",
+            "name": "",
+            "provider_type": "geonode",
+            "username": "",
+            "service_name": "RESIDENTIAL-PREMIUM",
+            "proxy_host": "92.204.164.15",
+            "http_port_start": 9000,
+            "http_port_end": 9000,
+            "is_active": False,
+            "session_lifetime_minutes": 30,
+            "bandwidth_limit_gb": None,
+            "bandwidth_used_gb": 0.0,
+            "notification_email": "support@traffic-creator.com",
+            "last_sync_at": None,
+            "created_at": datetime.utcnow(),
+        }
 
     return ProxyProviderResponse(
         id=provider.id,
@@ -10747,6 +10855,9 @@ async def save_proxy_config(
         provider.username = config.username
         provider.password = config.password
         provider.service_name = config.service_name
+        provider.proxy_host = config.proxy_host
+        provider.http_port_start = config.http_port
+        provider.http_port_end = config.http_port
         provider.session_lifetime_minutes = config.session_lifetime_minutes
         provider.bandwidth_limit_gb = config.bandwidth_limit_gb
         provider.notification_email = config.notification_email
@@ -10764,6 +10875,9 @@ async def save_proxy_config(
             username=config.username,
             password=config.password,
             service_name=config.service_name,
+            proxy_host=config.proxy_host,
+            http_port_start=config.http_port,
+            http_port_end=config.http_port,
             session_lifetime_minutes=config.session_lifetime_minutes,
             bandwidth_limit_gb=config.bandwidth_limit_gb,
             notification_email=config.notification_email,
@@ -11252,6 +11366,213 @@ def get_blog_article(slug: str, db: Session = Depends(get_db)):
         tags=article.tags if isinstance(article.tags, list) else [],
         seoDescription=article.seo_description,
     )
+
+
+# --- Internal API Endpoints for Workers ---
+
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "dev-internal-key-change-in-prod")
+
+
+def verify_internal_api_key(request: Request):
+    api_key = request.headers.get("X-Internal-API-Key")
+    if api_key != INTERNAL_API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid internal API key")
+    return True
+
+
+class InternalProjectConfig(BaseModel):
+    id: str
+    name: str
+    status: str
+    url: str
+    daily_limit: int
+    total_target: int
+    total_hits: int
+    hits_today: int
+    settings: Dict[str, Any]
+    plan_type: str
+
+
+class InternalTrafficLog(BaseModel):
+    project_id: str
+    url: str
+    event_type: str
+    status: str
+    proxy_session_id: Optional[str] = None
+
+
+class InternalProjectStats(BaseModel):
+    project_id: str
+    hits_increment: int = 1
+
+
+class InternalProxySessionRequest(BaseModel):
+    country_code: Optional[str] = None
+    country_name: Optional[str] = None
+    state: Optional[str] = None
+    city: Optional[str] = None
+
+
+class InternalProxySessionResponse(BaseModel):
+    session_id: str
+    proxy_url: str
+    country: Optional[str]
+    country_code: Optional[str]
+    state: Optional[str]
+    city: Optional[str]
+    ip_address: Optional[str]
+    is_active: bool
+
+
+@app.get("/internal/project/{project_id}", response_model=InternalProjectConfig)
+def internal_get_project(
+    project_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    verify_internal_api_key(request)
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    settings = project.settings or {}
+    return InternalProjectConfig(
+        id=project.id,
+        name=project.name,
+        status=project.status,
+        url=settings.get("url", ""),
+        daily_limit=project.daily_limit,
+        total_target=project.total_target,
+        total_hits=project.total_hits,
+        hits_today=project.hits_today,
+        settings=settings,
+        plan_type=project.plan_type,
+    )
+
+
+@app.post("/internal/traffic-log")
+def internal_traffic_log(
+    data: InternalTrafficLog,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    verify_internal_api_key(request)
+    try:
+        log_entry = models.TrafficLog(
+            project_id=data.project_id,
+            url=data.url,
+            event_type=data.event_type,
+            status=data.status,
+            proxy_session_id=data.proxy_session_id,
+        )
+        db.add(log_entry)
+        db.commit()
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"Failed to log traffic: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@app.post("/internal/project-stats")
+def internal_update_project_stats(
+    data: InternalProjectStats,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    verify_internal_api_key(request)
+    project = (
+        db.query(models.Project).filter(models.Project.id == data.project_id).first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project.total_hits = (project.total_hits or 0) + data.hits_increment
+    project.hits_today = (project.hits_today or 0) + data.hits_increment
+
+    user = db.query(models.User).filter(models.User.id == project.user_id).first()
+    if user and project.plan_type:
+        if project.plan_type == "economy":
+            user.balance_economy = max(
+                0, (user.balance_economy or 0) - data.hits_increment
+            )
+        elif project.plan_type == "professional":
+            user.balance_professional = max(
+                0, (user.balance_professional or 0) - data.hits_increment
+            )
+        elif project.plan_type == "expert":
+            user.balance_expert = max(
+                0, (user.balance_expert or 0) - data.hits_increment
+            )
+
+    db.commit()
+    return {"status": "ok", "total_hits": project.total_hits}
+
+
+@app.post("/internal/proxy-session", response_model=InternalProxySessionResponse)
+async def internal_get_proxy_session(
+    data: InternalProxySessionRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    verify_internal_api_key(request)
+    from proxy_service import get_or_create_session
+
+    proxy_session = await get_or_create_session(
+        db=db,
+        country_code=data.country_code,
+        country_name=data.country_name,
+        state=data.state,
+        city=data.city,
+    )
+
+    if not proxy_session:
+        raise HTTPException(status_code=503, detail="No proxy session available")
+
+    return InternalProxySessionResponse(
+        session_id=proxy_session.session_id,
+        proxy_url=proxy_session.proxy_url,
+        country=proxy_session.country,
+        country_code=proxy_session.country_code,
+        state=proxy_session.state,
+        city=proxy_session.city,
+        ip_address=proxy_session.ip_address,
+        is_active=proxy_session.is_active,
+    )
+
+
+@app.get("/internal/proxy-provider")
+async def internal_get_proxy_provider(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    verify_internal_api_key(request)
+    from proxy_service import get_active_provider
+
+    provider = await get_active_provider(db)
+    if not provider:
+        return {"active": False}
+    return {
+        "active": provider.is_active,
+        "name": provider.name,
+        "api_key": provider.api_key[:8] + "..." if provider.api_key else None,
+    }
+
+
+@app.get("/internal/custom-proxies")
+def internal_get_custom_proxies(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    verify_internal_api_key(request)
+    proxies = db.query(models.Proxy).filter(models.Proxy.is_active == True).all()
+    return [
+        {
+            "url": p.url,
+            "country": p.country,
+            "state": p.state,
+            "city": p.city,
+        }
+        for p in proxies
+    ]
 
 
 # --- SPA Catch-All Route (must be last) ---

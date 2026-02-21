@@ -474,7 +474,7 @@ const ConversionLandingPage: React.FC<ConversionLandingPageProps> = ({ onLogin, 
                             Start Free Trial <ArrowRight size={18} className="inline ml-2" />
                         </button>
                         <Link
-                            to="/pricing"
+                            to="/#pricing"
                             className="bg-white/10 backdrop-blur-sm border border-white/20 text-white px-8 py-4 rounded-xl text-sm font-bold uppercase tracking-wide hover:bg-white/20 transition-colors"
                         >
                             View All Plans

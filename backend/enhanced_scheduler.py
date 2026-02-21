@@ -1,6 +1,9 @@
 import asyncio
 import logging
 import random
+import os
+import json
+import uuid
 from datetime import datetime, timedelta, date
 from typing import Dict, Optional
 from sqlalchemy.orm import Session
@@ -10,6 +13,52 @@ from enhanced_hit_emulator import ga_emu_engine
 from sitemap_crawler import crawl_sitemap
 
 logger = logging.getLogger(__name__)
+
+USE_PUBSUB = os.getenv("USE_PUBSUB", "false").lower() == "true"
+GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "traffic-creator")
+PUBSUB_TOPIC = os.getenv("PUBSUB_TOPIC", "traffic-generation-tasks")
+
+_pubsub_publisher = None
+
+
+def get_pubsub_publisher():
+    global _pubsub_publisher
+    if _pubsub_publisher is None and USE_PUBSUB:
+        try:
+            from google.cloud import pubsub_v1
+
+            _pubsub_publisher = pubsub_v1.PublisherClient()
+        except ImportError:
+            logger.warning(
+                "google-cloud-pubsub not installed, falling back to direct execution"
+            )
+            return None
+    return _pubsub_publisher
+
+
+def publish_traffic_task(project_id: str, visitor_count: int) -> bool:
+    publisher = get_pubsub_publisher()
+    if not publisher:
+        return False
+
+    try:
+        topic_path = publisher.topic_path(GCP_PROJECT_ID, PUBSUB_TOPIC)
+        task_data = {
+            "task_id": str(uuid.uuid4()),
+            "project_id": project_id,
+            "visitor_count": visitor_count,
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        future = publisher.publish(topic_path, json.dumps(task_data).encode("utf-8"))
+        future.result(timeout=5)
+        logger.info(
+            f"Published task to Pub/Sub: project={project_id}, visitors={visitor_count}"
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Failed to publish to Pub/Sub: {e}")
+        return False
+
 
 # Track last reset date to prevent multiple resets
 _last_reset_date: Optional[date] = None
@@ -143,6 +192,9 @@ class TrafficScheduler:
             str, datetime
         ] = {}  # project_id -> last sitemap crawl time
         self.is_globally_paused = False
+        self._concurrency_semaphore = asyncio.Semaphore(
+            2
+        )  # Limit concurrent DB operations
 
     async def start(self):
         if self.is_running:
@@ -394,9 +446,26 @@ class TrafficScheduler:
         logger.info(
             f"Scheduler: Spawning {visitors_to_spawn} visitors for Project {project.name} (Hour: {current_hour})"
         )
-        asyncio.create_task(
-            ga_emu_engine.run_for_project(project.id, visitors_to_spawn)
-        )
+
+        if USE_PUBSUB:
+            published = publish_traffic_task(project.id, visitors_to_spawn)
+            if not published:
+                logger.warning(f"Pub/Sub failed, falling back to direct execution")
+
+                async def _run_with_semaphore():
+                    async with self._concurrency_semaphore:
+                        await ga_emu_engine.run_for_project(
+                            project.id, visitors_to_spawn
+                        )
+
+                asyncio.create_task(_run_with_semaphore())
+        else:
+
+            async def _run_with_semaphore():
+                async with self._concurrency_semaphore:
+                    await ga_emu_engine.run_for_project(project.id, visitors_to_spawn)
+
+            asyncio.create_task(_run_with_semaphore())
 
 
 # Global scheduler instance

@@ -169,7 +169,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onNavigate }) => {
               <a href="#problem" className="hover:text-[#ff4d00] transition-colors">The Problem</a>
               <a href="#features" className="hover:text-[#ff4d00] transition-colors">Features</a>
               <a href="#streak-bonus" className="hover:text-[#ff4d00] transition-colors">Unlimited Free Traffic</a>
-              <Link to="/pricing" className="hover:text-[#ff4d00] transition-colors uppercase">Pricing</Link>
+              <Link to="/#pricing" className="hover:text-[#ff4d00] transition-colors uppercase">Pricing</Link>
             </div>
             <Link
               to="/login"

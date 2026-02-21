@@ -161,7 +161,6 @@ const App: React.FC = () => {
                 <Route path="/helpdesk" element={<HelpDesk onBack={handleBack} />} />
                 <Route path="/blog" element={<Blog onBack={handleBack} />} />
                 <Route path="/blog/:slug" element={<Blog onBack={handleBack} />} />
-                <Route path="/pricing" element={<PricingPage />} />
 
                 {/* Legal Routes */}
                 <Route path="/legal/:type" element={<LegalWrapper />} />

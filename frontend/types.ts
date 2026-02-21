@@ -707,6 +707,8 @@ export interface ProxyProviderConfig {
   username: string;
   password: string;
   serviceName: string;
+  proxyHost: string;
+  httpPort: number;
   sessionLifetimeMinutes: number;
   bandwidthLimitGb?: number;
   notificationEmail: string;

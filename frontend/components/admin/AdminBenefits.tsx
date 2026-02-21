@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Clock, ExternalLink, AlertTriangle, Users, DollarSign, Gift, Trash2, Edit, Plus, Save } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, ExternalLink, AlertTriangle, Users, Gift, Trash2, Edit, Plus, Save } from 'lucide-react';
 import { db } from '../../services/db';
 
 interface PendingBenefit {
@@ -52,7 +52,7 @@ const AdminBenefits: React.FC = () => {
 
       // Load signup credits from settings
       const settings = settingsRes.settings || {};
-      setSignupCredits(settings.newUserSignupCredits || 0);
+      setSignupCredits(settings.newUserSignupCreditsEconomy || 0);
     } catch (e) {
       console.error(e);
     } finally {
@@ -65,7 +65,7 @@ const AdminBenefits: React.FC = () => {
     try {
       const currentSettingsRes = await fetch(`${window.location.origin}/settings`).then(r => r.json()).catch(() => ({ settings: {} }));
       const currentSettings = currentSettingsRes.settings || {};
-      const newSettings = { ...currentSettings, newUserSignupCredits: signupCredits };
+      const newSettings = { ...currentSettings, newUserSignupCreditsEconomy: signupCredits };
 
       await fetch(`${window.location.origin}/settings`, {
         method: 'PUT',
@@ -352,33 +352,30 @@ const AdminBenefits: React.FC = () => {
       {activeTab === 'signup' && (
         <div className="bg-white border border-gray-200">
           <div className="p-6 border-b border-gray-200">
-            <h3 className="text-lg font-bold text-gray-900">New User Signup Credits</h3>
-            <p className="text-sm text-gray-500 mt-1">Configure how many credits new users receive for free when they register</p>
+            <h3 className="text-lg font-bold text-gray-900">New User Signup Bonus (Economy Credits)</h3>
+            <p className="text-sm text-gray-500 mt-1">Configure how many economy credits new users receive for free when they register</p>
           </div>
           <div className="p-6">
             <div className="max-w-md">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Signup Credits Amount
+                Signup Bonus (Economy Credits)
               </label>
               <div className="flex items-center gap-4">
                 <div className="relative flex-1">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <DollarSign size={18} className="text-gray-400" />
-                  </div>
                   <input
                     type="number"
                     min="0"
-                    step="0.01"
+                    step="100"
                     value={signupCredits}
-                    onChange={(e) => setSignupCredits(parseFloat(e.target.value) || 0)}
-                    className="pl-10 pr-4 py-2 w-full border border-gray-300 focus:ring-2 focus:ring-[#ff4d00] focus:border-transparent"
-                    placeholder="0.00"
+                    onChange={(e) => setSignupCredits(parseInt(e.target.value) || 0)}
+                    className="pl-4 pr-4 py-2 w-full border border-gray-300 focus:ring-2 focus:ring-[#ff4d00] focus:border-transparent"
+                    placeholder="0"
                   />
                 </div>
                 <span className="text-gray-500">credits</span>
               </div>
               <p className="text-xs text-gray-500 mt-2">
-                Set to 0 to disable signup credits. New users will not receive any free credits upon registration.
+                Set to 0 to disable signup bonus. New users will not receive any economy credits upon registration.
               </p>
 
               <div className="mt-6 flex items-center gap-4">
@@ -402,8 +399,8 @@ const AdminBenefits: React.FC = () => {
                   How it works
                 </h4>
                 <ul className="mt-2 text-xs text-blue-800 space-y-1">
-                  <li>• When a new user registers, they will automatically receive {signupCredits} credits</li>
-                  <li>• Credits are added to their account balance immediately</li>
+                  <li>• When a new user registers, they will automatically receive {signupCredits.toLocaleString()} economy credits</li>
+                  <li>• Credits are added to their economy balance immediately</li>
                   <li>• A transaction record is created for tracking</li>
                   <li>• This setting applies to all new registrations</li>
                 </ul>

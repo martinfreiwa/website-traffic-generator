@@ -4,12 +4,16 @@ import random
 import string
 import logging
 import datetime
-from typing import Optional, List, Dict, Any
+import base64
+from typing import Optional, List, Dict, Any, Tuple
 from sqlalchemy.orm import Session
 import models
 from database import SessionLocal
 
 logger = logging.getLogger(__name__)
+
+_proxy_cache: Dict[str, Tuple[Dict[str, Any], datetime.datetime]] = {}
+CACHE_TTL_MINUTES = 5
 
 
 class GeonodeProxyService:
@@ -19,31 +23,35 @@ class GeonodeProxyService:
     def __init__(self, provider: models.ProxyProvider):
         self.provider = provider
 
+    def _get_auth_header(self) -> str:
+        auth_string = f"{self.provider.username}:{self.provider.password}"
+        encoded = base64.b64encode(auth_string.encode()).decode()
+        return f"Basic {encoded}"
+
     def _get_auth(self) -> aiohttp.BasicAuth:
         return aiohttp.BasicAuth(self.provider.username, self.provider.password)
 
     async def test_connection(self) -> Dict[str, Any]:
         try:
             async with aiohttp.ClientSession() as session:
-                url = f"{self.MONITOR_URL}/monitor-light/proxies"
-                async with session.get(url, auth=self._get_auth(), timeout=10) as resp:
+                proxy_url = f"http://{self.provider.username}:{self.provider.password}@{self.provider.proxy_host}:{self.provider.http_port_start}"
+                test_url = "http://ip-api.com/json"
+                async with session.get(
+                    test_url, proxy=proxy_url, timeout=aiohttp.ClientTimeout(total=15)
+                ) as resp:
                     if resp.status == 200:
                         data = await resp.json()
-                        bandwidth_data = (
-                            data.get("data", {}).get("bandwidth", {}).get("data", {})
-                        )
                         return {
                             "success": True,
-                            "bandwidth_used_gb": bandwidth_data.get(
-                                "totalBandwidthInGB", 0
-                            ),
-                            "bandwidth_bytes": bandwidth_data.get("default", 0),
-                            "message": "Connection successful",
+                            "bandwidth_used_gb": 0,
+                            "bandwidth_bytes": 0,
+                            "message": f"Proxy connected! IP: {data.get('query', 'unknown')} ({data.get('country', 'unknown')})",
                         }
                     else:
+                        response_text = await resp.text()
                         return {
                             "success": False,
-                            "message": f"Authentication failed: HTTP {resp.status}",
+                            "message": f"Proxy connection failed: HTTP {resp.status}",
                         }
         except Exception as e:
             return {"success": False, "message": f"Connection error: {str(e)}"}
@@ -52,7 +60,10 @@ class GeonodeProxyService:
         try:
             async with aiohttp.ClientSession() as session:
                 url = f"{self.MONITOR_URL}/monitor-light/proxies"
-                async with session.get(url, auth=self._get_auth(), timeout=10) as resp:
+                headers = {"Authorization": self._get_auth_header()}
+                async with session.get(
+                    url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)
+                ) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         bandwidth_data = (
@@ -68,7 +79,11 @@ class GeonodeProxyService:
                             "percent": percent,
                             "bandwidth_bytes": bandwidth_data.get("default", 0),
                         }
-                    return {"success": False, "message": f"HTTP {resp.status}"}
+                    response_text = await resp.text()
+                    return {
+                        "success": False,
+                        "message": f"HTTP {resp.status}: {response_text[:200]}",
+                    }
         except Exception as e:
             return {"success": False, "message": str(e)}
 
@@ -76,11 +91,17 @@ class GeonodeProxyService:
         try:
             async with aiohttp.ClientSession() as session:
                 url = f"{self.MONITOR_URL}/services/{self.provider.service_name}/targeting-options"
-                async with session.get(url, auth=self._get_auth(), timeout=30) as resp:
+                async with session.get(
+                    url, auth=self._get_auth(), timeout=aiohttp.ClientTimeout(total=30)
+                ) as resp:
                     if resp.status == 200:
                         data = await resp.json()
+                        logger.info(f"Fetched {len(data)} geo locations from Geonode")
                         return data
-                    logger.error(f"Failed to fetch locations: HTTP {resp.status}")
+                    response_text = await resp.text()
+                    logger.error(
+                        f"Failed to fetch locations: HTTP {resp.status} - {response_text[:500]}"
+                    )
                     return []
         except Exception as e:
             logger.error(f"Error fetching locations: {e}")
@@ -90,9 +111,12 @@ class GeonodeProxyService:
         try:
             async with aiohttp.ClientSession() as session:
                 test_url = "http://ip-api.com/json"
-                async with session.get(test_url, proxy=proxy_url, timeout=15) as resp:
+                async with session.get(
+                    test_url, proxy=proxy_url, timeout=aiohttp.ClientTimeout(total=15)
+                ) as resp:
                     if resp.status == 200:
                         return await resp.json()
+                    logger.error(f"Proxy verification failed: HTTP {resp.status}")
                     return None
         except Exception as e:
             logger.error(f"Proxy verification failed: {e}")
@@ -128,7 +152,8 @@ class GeonodeProxyService:
             city_clean = city.lower().replace(" ", "")
             username_parts.append(f"city-{city_clean}")
 
-        username_parts.append(f"session-{session_id}")
+        if port != 9000:
+            username_parts.append(f"session-{session_id}")
 
         username = "-".join(username_parts)
         password = self.provider.password
@@ -178,13 +203,79 @@ class GeonodeProxyService:
             expires_at=expires_at,
         )
 
+        try:
+            db.add(session)
+            db.commit()
+            db.refresh(session)
+            logger.info(
+                f"Created proxy session {session_id} for {country_code}/{state}/{city}"
+            )
+            return session
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Failed to create proxy session: {e}")
+            raise
+
+    async def build_and_verify_proxy(
+        self,
+        country_code: str = None,
+        state: str = None,
+        city: str = None,
+    ) -> Dict[str, Any]:
+        session_id = self._generate_session_id()
+        port = self.get_random_port()
+
+        proxy_url = self.build_proxy_url(
+            country_code=country_code or "",
+            session_id=session_id,
+            port=port,
+            state=state,
+            city=city,
+        )
+
+        ip_info = await self.verify_proxy_location(proxy_url)
+        ip_address = ip_info.get("query") if ip_info else None
+        actual_country = ip_info.get("countryCode") if ip_info else country_code
+        actual_city = ip_info.get("city") if ip_info else city
+
+        return {
+            "session_id": session_id,
+            "proxy_url": proxy_url,
+            "port": port,
+            "country_code": actual_country,
+            "city": actual_city,
+            "ip_address": ip_address,
+            "provider_id": self.provider.id,
+        }
+
+    def save_proxy_session(
+        self,
+        db: Session,
+        proxy_data: Dict[str, Any],
+        country_name: str = None,
+        state: str = None,
+    ) -> models.ProxySession:
+        expires_at = datetime.datetime.utcnow() + datetime.timedelta(
+            minutes=self.provider.session_lifetime_minutes
+        )
+
+        session = models.ProxySession(
+            provider_id=proxy_data["provider_id"],
+            session_id=proxy_data["session_id"],
+            proxy_url=proxy_data["proxy_url"],
+            port=proxy_data["port"],
+            country=country_name or proxy_data["country_code"],
+            country_code=proxy_data["country_code"],
+            state=state,
+            city=proxy_data["city"],
+            ip_address=proxy_data["ip_address"],
+            is_active=True,
+            expires_at=expires_at,
+        )
+
         db.add(session)
         db.commit()
         db.refresh(session)
-
-        logger.info(
-            f"Created proxy session {session_id} for {country_code}/{state}/{city}"
-        )
         return session
 
     async def release_session(self, db: Session, session: models.ProxySession) -> bool:
@@ -192,7 +283,7 @@ class GeonodeProxyService:
             async with aiohttp.ClientSession() as session_http:
                 url = f"{self.MONITOR_URL}/sticky-sessions/{self.provider.service_name}/release/{session.port}"
                 async with session_http.put(
-                    url, auth=self._get_auth(), timeout=10
+                    url, auth=self._get_auth(), timeout=aiohttp.ClientTimeout(total=10)
                 ) as resp:
                     if resp.status in [200, 204]:
                         session.is_active = False
@@ -222,6 +313,25 @@ class GeonodeProxyService:
             count += 1
 
         return count
+
+
+def get_cached_proxy(country_code: str) -> Optional[Dict[str, Any]]:
+    cache_key = country_code or "default"
+    if cache_key in _proxy_cache:
+        proxy_data, expiry = _proxy_cache[cache_key]
+        if datetime.datetime.utcnow() < expiry:
+            logger.info(f"Reusing cached proxy session for {cache_key}")
+            return proxy_data
+        else:
+            del _proxy_cache[cache_key]
+    return None
+
+
+def set_cached_proxy(country_code: str, proxy_data: Dict[str, Any]) -> None:
+    cache_key = country_code or "default"
+    expiry = datetime.datetime.utcnow() + datetime.timedelta(minutes=CACHE_TTL_MINUTES)
+    _proxy_cache[cache_key] = (proxy_data, expiry)
+    logger.info(f"Cached proxy session for {cache_key} until {expiry}")
 
 
 async def get_active_provider(db: Session) -> Optional[models.ProxyProvider]:
@@ -263,26 +373,49 @@ async def get_or_create_session(
             db.commit()
             return existing_session
 
+    cached_proxy = get_cached_proxy(country_code)
+    if cached_proxy:
+        try:
+            existing = (
+                db.query(models.ProxySession)
+                .filter(models.ProxySession.session_id == cached_proxy["session_id"])
+                .first()
+            )
+            if existing:
+                existing.last_used_at = datetime.datetime.utcnow()
+                existing.request_count += 1
+                db.commit()
+                logger.info(f"Reusing existing DB session {cached_proxy['session_id']}")
+                return existing
+        except Exception as e:
+            logger.warning(f"Failed to find cached proxy in DB: {e}")
+
     service = GeonodeProxyService(provider)
 
     last_error = None
     for attempt in range(max_retries):
         try:
-            session = await service.create_session(
-                db=db,
+            proxy_data = await service.build_and_verify_proxy(
                 country_code=country_code,
-                country_name=country_name,
                 state=state,
                 city=city,
             )
 
-            if session and session.ip_address:
-                return session
+            if proxy_data and proxy_data.get("proxy_url"):
+                if not proxy_data.get("ip_address"):
+                    logger.warning(
+                        f"Session created but no IP verified for {country_code}/{state}/{city} - Proceeding anyway"
+                    )
 
-            if session:
-                logger.warning(
-                    f"Session created but no IP verified for {country_code}/{state}/{city}"
+                set_cached_proxy(country_code, proxy_data)
+
+                session = service.save_proxy_session(
+                    db=db,
+                    proxy_data=proxy_data,
+                    country_name=country_name,
+                    state=state,
                 )
+                return session
 
         except Exception as e:
             last_error = e
@@ -319,9 +452,9 @@ async def handle_proxy_unavailable(
     if user:
         try:
             await send_email(
-                to_email=user.email,
+                to=user.email,
                 subject=f"[TrafficGen Pro] Project Paused - Proxy Unavailable",
-                content=f"""
+                html=f"""
 Your project "{project.name}" has been paused due to proxy unavailability.
 
 Requested Geo-Target:
@@ -426,9 +559,9 @@ async def check_bandwidth_and_notify(db: Session, provider: models.ProxyProvider
 
         try:
             await send_email(
-                to_email=provider.notification_email,
+                to=provider.notification_email,
                 subject=f"[TrafficGen Pro] Proxy Bandwidth Alert: {level}",
-                content=f"""
+                html=f"""
 Proxy bandwidth alert for {provider.name}:
 
 {message}

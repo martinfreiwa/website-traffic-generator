@@ -21,3 +21,4 @@ cryptography
 reportlab
 sentry-sdk[fastapi]
 certifi
+google-cloud-pubsub

@@ -174,10 +174,109 @@ Recent additions to `models.py`:
 | `STRIPE_SECRET_KEY` | Stripe API key for payments |
 | `RESEND_API_KEY` | Email sending via Resend |
 | `SECRET_KEY` | FastAPI secret key (hardcoded in main.py as fallback) |
+| `INTERNAL_API_KEY` | API key for worker-to-API communication |
+| `USE_PUBSUB` | Set to "true" to enable Pub/Sub task queue |
+| `GCP_PROJECT_ID` | Google Cloud project ID for Pub/Sub |
+| `PUBSUB_TOPIC` | Pub/Sub topic name (default: traffic-generation-tasks) |
 
 ---
 
-## 5. Guidelines for AI Agents
+## 6. Worker Architecture (Option C)
+
+### Overview
+Traffic generation is handled by a separate worker service that scales independently from the API.
+
+### Architecture
+```
+[API Service] → [Pub/Sub Queue] → [Workers (scale 0-50)]
+     │                                    │
+     └── [Cloud SQL] ←────────────────────┘ (via API calls)
+```
+
+### Components
+- **API Service**: Handles user requests, scheduler publishes tasks to Pub/Sub
+- **Worker Service**: Subscribes to Pub/Sub, processes traffic tasks
+- **Internal API**: Endpoints under `/internal/*` for worker-to-API communication
+
+### Key Files
+| File | Purpose |
+|------|---------|
+| `backend/worker_main.py` | Worker entry point |
+| `backend/worker.Dockerfile` | Worker container definition |
+| `backend/worker/subscriber.py` | Pub/Sub subscriber |
+| `backend/worker/task_processor.py` | Traffic generation logic |
+| `backend/worker/api_client.py` | HTTP client for API calls |
+| `backend/enhanced_scheduler.py` | Modified to publish to Pub/Sub |
+
+### Internal API Endpoints
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/internal/project/{id}` | GET | Get project config |
+| `/internal/traffic-log` | POST | Log traffic events |
+| `/internal/project-stats` | POST | Update project hit counts |
+| `/internal/proxy-session` | POST | Get/create proxy session |
+| `/internal/proxy-provider` | GET | Get active proxy provider |
+| `/internal/custom-proxies` | GET | Get custom proxies list |
+
+### Deployment
+- API Service: Standard Cloud Run deployment
+- Worker Service: Cloud Run with `min-instances: 0, max-instances: 50`
+- Pub/Sub: Topic `traffic-generation-tasks`, Subscription `traffic-workers-sub`
+
+### Local Testing
+```bash
+# Start all services
+docker-compose up --build
+
+# Start worker only (for debugging)
+docker-compose up worker
+```
+
+### Deployment Guide
+
+**First-time setup:**
+```bash
+# 1. Create GCP infrastructure (Pub/Sub topic, subscription, secrets)
+./setup-worker-infra.sh
+
+# 2. Deploy API service (must be deployed first)
+./deploy.sh
+
+# 3. Deploy worker service
+./deploy-worker.sh
+```
+
+**Subsequent deployments:**
+```bash
+# Deploy API (if backend code changed)
+./deploy.sh
+
+# Deploy worker (if worker code changed)
+./deploy-worker.sh
+```
+
+**Required GCP Secrets:**
+| Secret Name | Description |
+|-------------|-------------|
+| `db-password` | PostgreSQL password |
+| `jwt-secret-key` | JWT signing key |
+| `stripe-secret-key` | Stripe API key |
+| `stripe-webhook-secret` | Stripe webhook secret |
+| `resend-api-key` | Resend email API key |
+| `internal-api-key` | Worker-to-API authentication |
+
+**Local Development with Worker:**
+```bash
+# Terminal 1: Start API
+cd backend && uvicorn main:app --reload --port 8001
+
+# Terminal 2: Start worker (without Pub/Sub, for testing)
+cd backend && USE_PUBSUB=false API_URL=http://localhost:8001 python worker_main.py
+```
+
+---
+
+## 7. Guidelines for AI Agents
 
 - **Incremental Changes:** When adding a field to a model, update the SQLAlchemy model, Pydantic schema, AND the frontend TypeScript interface.
 - **Database Safety:** Always use `get_db` with `Depends()` in FastAPI endpoints.
@@ -190,4 +289,4 @@ Recent additions to `models.py`:
 
 ---
 
-*Revision: 2026-02-18 | Target: Agentic Coding Assistants*
+*Revision: 2026-02-21 | Target: Agentic Coding Assistants*

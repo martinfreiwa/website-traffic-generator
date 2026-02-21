@@ -39,8 +39,8 @@ gcloud beta run deploy $SERVICE_NAME \
   --port=8080 \
   --min-instances=1 \
   --max-instances=3 \
-  --set-env-vars=ENVIRONMENT=production,LOG_LEVEL=INFO,ALLOWED_ORIGINS=https://traffic-creator.com,CLOUD_SQL_CONNECTION_NAME=traffic-creator-487516:europe-west1:trafficgen-db,DB_USER=trafficgen_user,DB_NAME=trafficgen,RESEND_API_KEY=YOUR_RESEND_API_KEY,STRIPE_SECRET_KEY=YOUR_STRIPE_SECRET_KEY \
-  --set-secrets=DB_PASSWORD=db-password:latest \
+  --set-env-vars=ENVIRONMENT=production,LOG_LEVEL=INFO,ALLOWED_ORIGINS=https://traffic-creator.com,CLOUD_SQL_CONNECTION_NAME=traffic-creator-487516:europe-west1:trafficgen-db,DB_USER=trafficgen_user,DB_NAME=trafficgen,USE_PUBSUB=true,GCP_PROJECT_ID=traffic-creator-487516 \
+  --set-secrets=DB_PASSWORD=db-password:latest,JWT_SECRET_KEY=jwt-secret-key:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest,RESEND_API_KEY=resend-api-key:latest,INTERNAL_API_KEY=internal-api-key:latest \
   --set-cloudsql-instances=traffic-creator-487516:europe-west1:trafficgen-db
 
 # 5. Update traffic to latest revision

@@ -4,15 +4,34 @@ services:
   backend:
     build:
       context: ./backend
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://user:pass@db:5432/trafficnexus
       - SECRET_KEY=your-secret-key-change-this-in-prod
       - RESEND_API_KEY=re_9RGgxuhM_KLmRkYofRcGnhKgsfddLr3CC
+      - INTERNAL_API_KEY=dev-internal-key-change-in-prod
+      - USE_PUBSUB=false
     depends_on:
       - db
     restart: always
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: worker.Dockerfile
+    environment:
+      - API_URL=http://backend:8000
+      - INTERNAL_API_KEY=dev-internal-key-change-in-prod
+      - GCP_PROJECT_ID=traffic-creator
+      - PUBSUB_SUBSCRIPTION=traffic-workers-sub
+      - USE_PUBSUB=false
+    depends_on:
+      - backend
+    restart: always
+    deploy:
+      replicas: 0
 
   db:
     image: postgres:15-alpine

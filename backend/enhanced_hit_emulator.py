@@ -596,7 +596,7 @@ class GAEmuEngine:
         session: aiohttp.ClientSession,
         project: models.Project,
         proxies: List[Dict[str, Any]] = None,
-        proxy_session: models.ProxySession = None,
+        proxy_session_data: Dict[str, Any] = None,
     ):
         settings = project.settings
         targets_list = settings.get("targets", [])
@@ -626,15 +626,17 @@ class GAEmuEngine:
                 geo_targets, weights=[g.get("percent", 1) for g in geo_targets]
             )[0]
             selected_country = chosen_geo.get("country")
-            selected_country_code = chosen_geo.get("countryCode")
+            selected_country_code = chosen_geo.get("countryCode") or chosen_geo.get(
+                "country"
+            )
             selected_state = chosen_geo.get("state")
             selected_city = chosen_geo.get("city")
 
-        if proxy_session and proxy_session.is_active:
-            proxy_url = proxy_session.proxy_url
-            selected_country = proxy_session.country
-            selected_state = proxy_session.state
-            selected_city = proxy_session.city
+        if proxy_session_data and proxy_session_data.get("is_active"):
+            proxy_url = proxy_session_data.get("proxy_url")
+            selected_country = proxy_session_data.get("country")
+            selected_state = proxy_session_data.get("state")
+            selected_city = proxy_session_data.get("city")
         elif proxies:
             if geo_targets:
                 valid_proxies = [
@@ -1033,7 +1035,7 @@ class GAEmuEngine:
             for _ in range(visitor_count):
                 await asyncio.sleep(random.uniform(0.1, 1.0))
 
-                proxy_session = None
+                proxy_session_data = None
                 if use_geonode:
                     selected_geo = None
                     if geo_targets:
@@ -1046,14 +1048,17 @@ class GAEmuEngine:
                     try:
                         proxy_session = await get_or_create_session(
                             db=db_inner,
-                            country_code=selected_geo.get("countryCode")
+                            country_code=(
+                                selected_geo.get("countryCode")
+                                or selected_geo.get("country")
+                            )
                             if selected_geo
                             else None,
                             country_name=selected_geo.get("country")
                             if selected_geo
                             else None,
-                            state=selected_geo.get("state") if selected_geo else None,
-                            city=selected_geo.get("city") if selected_geo else None,
+                            state=None,
+                            city=None,
                         )
 
                         if not proxy_session:
@@ -1072,15 +1077,14 @@ class GAEmuEngine:
                                     db=db_inner,
                                     provider_id=provider.id,
                                     project_id=project.id,
-                                    country_code=selected_geo.get("countryCode")
+                                    country_code=(
+                                        selected_geo.get("countryCode")
+                                        or selected_geo.get("country")
+                                    )
                                     if selected_geo
                                     else None,
-                                    state=selected_geo.get("state")
-                                    if selected_geo
-                                    else None,
-                                    city=selected_geo.get("city")
-                                    if selected_geo
-                                    else None,
+                                    state=None,
+                                    city=None,
                                     success=False,
                                     error_message="Failed to create proxy session",
                                 )
@@ -1096,6 +1100,7 @@ class GAEmuEngine:
                                     or {"country": "Unknown"},
                                     error_message=f"Failed to create proxy session after {max_proxy_failures} attempts",
                                 )
+                                db_inner.commit()
                                 break
                         else:
                             provider = (
@@ -1115,49 +1120,68 @@ class GAEmuEngine:
                                     ip_address=proxy_session.ip_address,
                                     success=True,
                                 )
+                            proxy_session_data = {
+                                "is_active": proxy_session.is_active,
+                                "proxy_url": proxy_session.proxy_url,
+                                "country": proxy_session.country,
+                                "state": proxy_session.state,
+                                "city": proxy_session.city,
+                            }
                     except Exception as e:
                         logger.error(f"Failed to create proxy session: {e}")
                         proxy_failures += 1
+                        try:
+                            db_inner.rollback()
+                        except Exception:
+                            pass
 
-                        provider = (
-                            db_inner.query(models.ProxyProvider)
-                            .filter(models.ProxyProvider.is_active == True)
-                            .first()
-                        )
-                        if provider:
-                            log_proxy_request(
-                                db=db_inner,
-                                provider_id=provider.id,
-                                project_id=project.id,
-                                country_code=selected_geo.get("countryCode")
-                                if selected_geo
-                                else None,
-                                state=selected_geo.get("state")
-                                if selected_geo
-                                else None,
-                                city=selected_geo.get("city") if selected_geo else None,
-                                success=False,
-                                error_message=str(e),
+                        db_log = database.SessionLocal()
+                        try:
+                            provider = (
+                                db_log.query(models.ProxyProvider)
+                                .filter(models.ProxyProvider.is_active == True)
+                                .first()
                             )
+                            if provider:
+                                log_proxy_request(
+                                    db=db_log,
+                                    provider_id=provider.id,
+                                    project_id=project.id,
+                                    country_code=(
+                                        selected_geo.get("countryCode")
+                                        or selected_geo.get("country")
+                                    )
+                                    if selected_geo
+                                    else None,
+                                    state=None,
+                                    city=None,
+                                    success=False,
+                                    error_message=str(e),
+                                )
+                        finally:
+                            db_log.close()
 
                         if proxy_failures >= max_proxy_failures:
-                            db_inner2 = database.SessionLocal()
+                            db_err = database.SessionLocal()
                             try:
                                 await handle_proxy_unavailable(
-                                    db=db_inner2,
+                                    db=db_err,
                                     project=project,
                                     requested_geo=selected_geo
                                     or {"country": "Unknown"},
                                     error_message=str(e),
                                 )
+                                db_err.commit()
                             finally:
-                                db_inner2.close()
+                                db_err.close()
                             break
                     finally:
                         db_inner.close()
 
                 tasks.append(
-                    self.simulate_visitor(session, project, proxy_dicts, proxy_session)
+                    self.simulate_visitor(
+                        session, project, proxy_dicts, proxy_session_data
+                    )
                 )
 
             if tasks:
