@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Mail, Lock, User, ArrowRight, Loader2, AlertTriangle, CheckCircle } from 'lucide-react';
 import { db } from '../../services/db';
+import { isDisposableEmail } from '../../services/disposableEmail';
 
 interface AuthModalProps {
     isOpen: boolean;
@@ -25,6 +26,9 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
 
         try {
             if (mode === 'signup') {
+                if (isDisposableEmail(email)) {
+                    throw new Error('Temporary email addresses are not allowed. Please use a permanent email address.');
+                }
                 if (password.length < 6) {
                     throw new Error('Password must be at least 6 characters');
                 }
@@ -113,7 +117,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
                             </div>
                         )}
 
-                        <div>
+                         <div>
                             <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-2">Email</label>
                             <div className="relative">
                                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
@@ -126,6 +130,11 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
                                     placeholder="you@example.com"
                                 />
                             </div>
+                            {mode === 'signup' && email && isDisposableEmail(email) && (
+                                <p className="text-red-500 text-xs mt-2 font-bold flex items-center gap-1">
+                                    <AlertTriangle size={12} /> Temporary emails not allowed. Please use your real email.
+                                </p>
+                            )}
                         </div>
 
                         <div>
@@ -148,7 +157,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
 
                         <button
                             type="submit"
-                            disabled={isLoading}
+                            disabled={isLoading || (mode === 'signup' && isDisposableEmail(email))}
                             className="w-full bg-[#ff4d00] text-white p-4 rounded-xl text-sm font-bold uppercase tracking-widest hover:bg-black transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                         >
                             {isLoading ? (

@@ -31,12 +31,14 @@ gcloud run deploy $SERVICE_NAME \
   --image gcr.io/$PROJECT_ID/$SERVICE_NAME:latest \
   --region=$REGION \
   --no-allow-unauthenticated \
-  --memory=512Mi \
+  --memory=1Gi \
   --cpu=1 \
   --port=8080 \
-  --min-instances=0 \
-  --max-instances=50 \
-  --set-env-vars=API_URL=$API_URL,GCP_PROJECT_ID=$PROJECT_ID,PUBSUB_SUBSCRIPTION=traffic-workers-sub,USE_PUBSUB=true \
+  --min-instances=1 \
+  --max-instances=20 \
+  --concurrency=80 \
+  --timeout=600 \
+  --set-env-vars=API_URL=$API_URL,GCP_PROJECT_ID=$PROJECT_ID,PUBSUB_SUBSCRIPTION=traffic-workers-sub,USE_PUBSUB=true,MAX_CONCURRENT_TASKS=20 \
   --set-secrets=INTERNAL_API_KEY=internal-api-key:latest
 
 # Grant Pub/Sub subscriber permissions

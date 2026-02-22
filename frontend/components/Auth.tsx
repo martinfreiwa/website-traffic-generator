@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowLeft, Mail, Lock, User, ArrowRight, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { db } from '../services/db';
+import { isDisposableEmail } from '../services/disposableEmail';
 
 interface AuthProps {
     onLogin: (role: 'user' | 'admin') => void;
@@ -41,6 +42,9 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigate, view }) => {
 
         try {
             if (view === 'signup') {
+                if (isDisposableEmail(email)) {
+                    throw new Error('Temporary email addresses are not allowed. Please use a permanent email address.');
+                }
                 if (password.length < 6) {
                     throw new Error('Password must be at least 6 characters long');
                 }
@@ -197,6 +201,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigate, view }) => {
                                         placeholder="name@company.com"
                                     />
                                 </div>
+                                {view === 'signup' && email && isDisposableEmail(email) && (
+                                    <p className="text-red-500 text-xs mt-2 font-bold flex items-center gap-1">
+                                        <AlertTriangle size={12} /> Temporary emails not allowed. Please use your real email.
+                                    </p>
+                                )}
                             </div>
 
                             <div>
@@ -224,7 +233,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigate, view }) => {
 
                             <button
                                 type="submit"
-                                disabled={isLoading}
+                                disabled={isLoading || (view === 'signup' && isDisposableEmail(email))}
                                 className="w-full bg-[#ff4d00] text-white p-4 text-xs font-bold uppercase tracking-widest hover:bg-black transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                             >
                                 {isLoading ? (

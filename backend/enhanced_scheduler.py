@@ -363,6 +363,15 @@ class TrafficScheduler:
                 f"Processing project {project.id}: status={project.status}, daily_limit={project.daily_limit}, hits_today={project.hits_today}, total_target={project.total_target}, total_hits={project.total_hits}, geoTargets={geo_targets}"
             )
 
+        # Check for projects with no targets configured
+        if project.daily_limit <= 0 and project.total_target <= 0:
+            if now.second == 0:
+                logger.warning(
+                    f"Project {project.id} has no daily_limit or total_target configured. "
+                    f"Traffic will NOT be delivered. Please update project settings."
+                )
+            return
+
         # 0. Check Sitemap Crawling
         await self._check_sitemap_crawling(db, project, now)
 
@@ -406,6 +415,10 @@ class TrafficScheduler:
             delay = pacer.get_next_hit_delay(current_hour, current_day)
             time_since_last = (now - last_hit).total_seconds()
             if time_since_last < delay:
+                if now.second == 0:
+                    logger.debug(
+                        f"Project {project.id}: Waiting {delay - time_since_last:.1f}s before next spawn (delay={delay:.1f}s, time_since_last={time_since_last:.1f}s)"
+                    )
                 return
 
         # Calculate how many visitors to spawn now

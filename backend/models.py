@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKey,
     Text,
     JSON,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship, declarative_base
 
@@ -768,3 +769,20 @@ class ProxyLog(Base):
 
     provider = relationship("ProxyProvider", backref="logs")
     project = relationship("Project", backref="proxy_logs")
+
+
+class DomainUsage(Base):
+    __tablename__ = "domain_usage"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    domain = Column(String, nullable=False, index=True)
+    project_count = Column(Integer, default=1)
+    first_used_at = Column(DateTime, default=datetime.datetime.utcnow)
+    last_used_at = Column(
+        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+    )
+
+    user = relationship("User", backref="domain_usage")
+
+    __table_args__ = (UniqueConstraint("user_id", "domain", name="uq_user_domain"),)

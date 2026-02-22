@@ -22,3 +22,4 @@ reportlab
 sentry-sdk[fastapi]
 certifi
 google-cloud-pubsub
+disposable-email-domains

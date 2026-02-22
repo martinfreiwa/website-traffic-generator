@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../services/db';
-import { Project, ProjectSettings, GeoTarget, Transaction } from '../types';
+import { Project, ProjectSettings, GeoTarget, Transaction, SystemSettings } from '../types';
 import { ArrowLeft, Globe, Info, Zap, MapPin, Search, X, Check, AlertCircle, Settings, Layers } from 'lucide-react';
 import CustomSelect from './CustomSelect';
 import { COUNTRIES_LIST, TRAFFIC_SOURCES, TIME_ON_PAGE_OPTS } from '../constants';
+import { validateDomainForEconomy } from '../services/domainValidator';
 
 interface AddProjectProps {
     onBack: () => void;
@@ -37,13 +38,16 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
     const [error, setError] = useState('');
     
     const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
     
     useEffect(() => {
-        const loadTransactions = async () => {
+        const loadData = async () => {
             await db.syncTransactions();
             setTransactions(db.getTransactions());
+            const settings = db.getSystemSettings();
+            if (settings) setSystemSettings(settings);
         };
-        loadTransactions();
+        loadData();
     }, []);
 
     const calculateAvailableHits = (tier: string): number => {
@@ -94,6 +98,12 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
     const [keywords, setKeywords] = useState('');
     const [referralUrls, setReferralUrls] = useState('');
     const [selectedSocialPlatforms, setSelectedSocialPlatforms] = useState<string[]>([]);
+
+    const domainValidationError = useMemo(() => {
+        if (selectedTier !== 'economy' || !url) return null;
+        const result = validateDomainForEconomy(url, systemSettings?.blockedDomainsForFree);
+        return result.isValid ? null : result.errorMessage;
+    }, [url, selectedTier, systemSettings]);
 
     const handleScanGA = async () => {
         if (!url) return;
@@ -456,9 +466,15 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
                                     onChange={(e) => setUrl(e.target.value)}
                                     onBlur={() => { if (url && !gaId) handleScanGA(); }}
                                     placeholder="https://example.com"
-                                    className="w-full bg-[#f9fafb] border border-gray-200 p-4 pl-12 text-lg font-medium font-mono text-gray-700 focus:border-[#ff4d00] outline-none"
+                                    className={`w-full bg-[#f9fafb] border p-4 pl-12 text-lg font-medium font-mono text-gray-700 focus:border-[#ff4d00] outline-none ${domainValidationError ? 'border-red-300' : 'border-gray-200'}`}
                                 />
                             </div>
+                            {domainValidationError && (
+                                <div className="mt-3 flex items-center gap-2 text-red-600 text-sm font-medium">
+                                    <AlertCircle size={16} />
+                                    {domainValidationError}
+                                </div>
+                            )}
                         </div>
 
                         <div className="p-6 bg-gray-50 border border-gray-100 rounded-sm">
@@ -832,7 +848,7 @@ const AddProject: React.FC<AddProjectProps> = ({ onBack, onCreated }) => {
                 </button>
                 <button
                     onClick={handleNext}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || (currentStep === 5 && selectedTier === 'economy' && !!domainValidationError)}
                     className="bg-black text-white px-8 py-4 text-xs font-bold uppercase tracking-wider hover:bg-[#ff4d00] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg"
                 >
                     {isSubmitting ? 'Creating...' : (currentStep === 5 ? 'Create Project' : 'Next Step')}

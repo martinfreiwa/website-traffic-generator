@@ -1,37 +1,26 @@
+import sys, os, asyncio, datetime
+from pprint import pprint
+import traceback
 
-import asyncio
-import logging
-import database
+sys.path.insert(0, '/Users/martin/ab/backend')
+from database import SessionLocal
 import models
-from hit_emulator import ga_emu_engine
+from enhanced_hit_emulator import ga_emu_engine
+from enhanced_scheduler import TrafficScheduler
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("debugger")
-
-async def debug_run():
-    db = database.SessionLocal()
-    # Get the project created by verify_v2
-    # It was named "Verify V2 Project"
-    project = db.query(models.Project).filter(models.Project.name == "Verify V2 Project").order_by(models.Project.created_at.desc()).first()
-    
+async def test():
+    db = SessionLocal()
+    project = db.query(models.Project).filter(models.Project.status == 'active').first()
     if not project:
-        logger.error("Project not found!")
+        print("No active project")
         return
-
-    logger.info(f"Found Project: {project.id}, Daily Limit: {project.daily_limit}, Status: {project.status}")
-    logger.info(f"Settings: {project.settings}")
     
-    # Run Engine Manually
-    logger.info("Triggering run_for_project...")
-    await ga_emu_engine.run_for_project(project.id)
-    
-    # Check Logs
-    logs = db.query(models.TrafficLog).filter(models.TrafficLog.project_id == project.id).all()
-    logger.info(f"Traffic Logs count: {len(logs)}")
-    for log in logs:
-        logger.info(f"Log: {log.url} - {log.status} - {log.event_type}")
+    print(f"Testing project: {project.id}, Name: {project.name}")
+    try:
+        await ga_emu_engine.run_for_project(project.id, 1)
+        print("Finished run_for_project successfully")
+    except Exception as e:
+        print("EXCEPTION RAISED:")
+        traceback.print_exc()
 
-    db.close()
-
-if __name__ == "__main__":
-    asyncio.run(debug_run())
+asyncio.run(test())

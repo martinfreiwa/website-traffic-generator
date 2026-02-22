@@ -367,10 +367,10 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ projects, balance, onNavi
                     <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                         <CreditCard size={64} className="text-[#ff4d00]" />
                     </div>
-                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Available Credits</div>
-                    <div className="text-4xl font-black text-gray-900 mb-2">€{(balance ?? 0).toFixed(2)}</div>
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Available Hits</div>
+                    <div className="text-4xl font-black text-gray-900 mb-2">{(balance ?? 0).toLocaleString()}</div>
                     <div className="text-[10px] font-black text-[#ff4d00] flex items-center gap-1 uppercase tracking-wider">
-                        Add Credits <Plus size={10} className="group-hover:rotate-90 transition-transform" />
+                        Buy Hits <Plus size={10} className="group-hover:rotate-90 transition-transform" />
                     </div>
                 </div>
 

@@ -437,11 +437,14 @@ export const db = {
                 status: p.status,
                 startAt: p.start_at,
                 expires: p.expires_at || 'Never',
+                expiresAt: p.expires_at,
                 createdAt: p.created_at,
                 settings: p.settings,
                 stats: fillMissingDays(statsData[p.id] || [], 30),
                 totalHits: p.total_hits || 0,
                 hitsToday: p.hits_today || 0,
+                dailyLimit: p.daily_limit || 0,
+                totalTarget: p.total_target || 0,
                 customTarget: {
                     totalVisitors: p.total_target || 0,
                     dailyLimit: p.daily_limit || 0
@@ -619,6 +622,35 @@ export const db = {
         return createdProject;
     },
 
+    // Admin: Create project for a user (bypasses email verification and can deduct credits)
+    addProjectAdmin: async (project: Project, userEmail: string, deductCredits: boolean = false) => {
+        const projectData = {
+            name: project.name,
+            plan_type: project.plan,
+            tier: project.tier,
+            settings: project.settings,
+            daily_limit: project.customTarget?.dailyLimit || 0,
+            total_target: project.customTarget?.totalVisitors || 0,
+            start_at: project.startAt || null,
+            user_email: userEmail,
+            deduct_credits: deductCredits
+        };
+
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/projects`, {
+            method: 'POST',
+            body: JSON.stringify(projectData)
+        });
+
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.detail || "Failed to create project as admin");
+        }
+
+        const createdProject = await response.json();
+        await db.syncProjects();
+        return createdProject;
+    },
+
     updateProject: async (project: Project) => {
         const dailyLimit = project.settings?.scheduleTrafficAmount || project.customTarget?.dailyLimit || 0;
 
@@ -666,6 +698,45 @@ export const db = {
         return db.getProjects();
     },
 
+    // Admin Project Update - bypasses user ownership check
+    updateProjectAdmin: async (project: Project) => {
+        const payload = {
+            name: project.name,
+            settings: project.settings,
+            daily_limit: project.daily_limit || project.customTarget?.dailyLimit || 0,
+            total_target: project.total_target || project.customTarget?.totalVisitors || 0,
+            status: project.status,
+            tier: project.tier,
+            plan_type: project.plan,
+            expires: project.expires,
+            priority: project.settings?.adminPriority || 0,
+            force_stop_reason: project.settings?.forceStopReason || ''
+        };
+
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/projects/${project.id}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            throw new Error("Failed to update project as admin");
+        }
+
+        await db.syncProjects();
+        return db.getProjects();
+    },
+
+    // Admin: Update project status directly (bypasses user ownership)
+    updateProjectStatusAdmin: async (projectId: string, status: string) => {
+        const response = await fetchWithAuth(`${API_BASE_URL}/admin/projects/${projectId}`, {
+            method: 'PUT',
+            body: JSON.stringify({ status })
+        });
+        if (!response.ok) throw new Error("Failed to update project status");
+        await db.syncProjects();
+        return db.getProjects();
+    },
+
     // Bulk Actions
     bulkUpdateProjectStatus: async (ids: string[], status: 'active' | 'stopped') => {
         await Promise.all(ids.map(id =>
@@ -695,8 +766,7 @@ export const db = {
 
     // Financials
     getBalance: (): number => {
-        const user = db.getCurrentUser();
-        return user?.balance ?? 0;
+        return db.getMaxTierBalance();
     },
 
     // Unified Syncing

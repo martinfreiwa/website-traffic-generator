@@ -62,6 +62,10 @@ const AdminCreateProject: React.FC<AdminCreateProjectProps> = ({ onBack, onSucce
     const [isDetectingGA, setIsDetectingGA] = useState(false);
     const [gaDetectionStatus, setGaDetectionStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
+    // Tier and Credits State
+    const [selectedTier, setSelectedTier] = useState<'economy' | 'professional' | 'expert'>('economy');
+    const [deductCredits, setDeductCredits] = useState(true);
+
     // User Selection State
     const [users, setUsers] = useState<User[]>([]);
     const [selectedUserId, setSelectedUserId] = useState<string>('');
@@ -154,6 +158,7 @@ const AdminCreateProject: React.FC<AdminCreateProjectProps> = ({ onBack, onSucce
                 userId: selectedUserId || db.getCurrentUser()?.id || 'admin',
                 name,
                 plan: 'Custom',
+                tier: selectedTier,
                 customTarget: {
                     totalVisitors,
                     durationDays,
@@ -165,7 +170,15 @@ const AdminCreateProject: React.FC<AdminCreateProjectProps> = ({ onBack, onSucce
                 stats: []
             };
 
-            await db.addProject(newProject);
+            // Get user email for admin endpoint
+            const selectedUser = users.find(u => u.id === selectedUserId);
+            const userEmail = selectedUser?.email || db.getCurrentUser()?.email || '';
+            
+            if (!userEmail) {
+                throw new Error('User email is required');
+            }
+
+            await db.addProjectAdmin(newProject, userEmail, deductCredits);
             onSuccess();
             onBack();
         } catch (e: any) {
@@ -236,6 +249,43 @@ const AdminCreateProject: React.FC<AdminCreateProjectProps> = ({ onBack, onSucce
                                 </select>
                             </div>
                         </div>
+
+                        {/* Tier Selection */}
+                        <div>
+                            <Label>Credits Tier</Label>
+                            <div className="grid grid-cols-3 gap-2">
+                                {(['economy', 'professional', 'expert'] as const).map(tier => (
+                                    <button
+                                        key={tier}
+                                        type="button"
+                                        onClick={() => setSelectedTier(tier)}
+                                        className={`p-3 text-xs font-bold uppercase border transition-colors ${
+                                            selectedTier === tier
+                                                ? 'border-[#ff4d00] bg-orange-50 text-[#ff4d00]'
+                                                : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                                        }`}
+                                    >
+                                        {tier === 'economy' ? 'Economy' : tier === 'professional' ? 'Professional' : 'Expert'}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Deduct Credits Toggle */}
+                        <div className="flex items-center justify-between p-4 border border-gray-200 bg-gray-50">
+                            <div>
+                                <div className="text-sm font-bold text-gray-900">Deduct Credits</div>
+                                <div className="text-xs text-gray-500">Deduct from user's balance</div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setDeductCredits(!deductCredits)}
+                                className={`w-12 h-6 flex items-center p-1 transition-colors duration-300 rounded-full ${deductCredits ? 'bg-[#ff4d00]' : 'bg-gray-300'}`}
+                            >
+                                <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 ${deductCredits ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                            </button>
+                        </div>
+
                         <div>
                             <Label>Target URL (Entry)</Label>
                             <input

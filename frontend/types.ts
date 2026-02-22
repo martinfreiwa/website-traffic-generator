@@ -152,6 +152,8 @@ export interface Project {
   hitsToday?: number;
   dailyLimit?: number;
   totalTarget?: number;
+  daily_limit?: number;
+  total_target?: number;
 
   priority?: number;
   forceStopReason?: string;
@@ -360,10 +362,11 @@ export interface SystemSettings {
   allowRegistrations: boolean;
   supportEmail: string;
   minDeposit: number;
-  sparkTrafficApiKey?: string; // Legacy field, kept for compat
-  apiConfigs?: ApiConfig[]; // List of available API keys
-  payloadTemplates?: PayloadTemplate[]; // List of saved JSON templates
-  pricingPlans?: PriceClass[]; // Configurable Pricing Plans
+  sparkTrafficApiKey?: string;
+  apiConfigs?: ApiConfig[];
+  payloadTemplates?: PayloadTemplate[];
+  pricingPlans?: PriceClass[];
+  blockedDomainsForFree?: string[];
 }
 
 export interface Notification {

@@ -1,7 +1,9 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Globe, Clock, ArrowRight, AlertCircle, CheckCircle, Zap, Users, Globe2, MousePointer, Timer, TrendingUp, Eye, MapPin, Target, BarChart3, Shield } from 'lucide-react';
+import { isDisposableEmail } from '../../services/disposableEmail';
+import { validateDomainForEconomy } from '../../services/domainValidator';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin;
 
@@ -22,6 +24,23 @@ const QuickCampaign: React.FC<QuickCampaignProps> = ({ onSuccess }) => {
   const [success, setSuccess] = useState(false);
   const [generatedPassword, setGeneratedPassword] = useState('');
 
+  const emailWarning = useMemo(() => {
+    if (!email) return null;
+    if (isDisposableEmail(email)) {
+      return 'Temporary emails not allowed. Please use your real email.';
+    }
+    return null;
+  }, [email]);
+
+  const urlWarning = useMemo(() => {
+    if (!url) return null;
+    const result = validateDomainForEconomy(url);
+    if (!result.isValid) {
+      return result.errorMessage;
+    }
+    return null;
+  }, [url]);
+
   const formatTimeOnPage = (seconds: number): string => {
     if (seconds < 60) return `${seconds} seconds`;
     const mins = Math.floor(seconds / 60);
@@ -34,12 +53,21 @@ const QuickCampaign: React.FC<QuickCampaignProps> = ({ onSuccess }) => {
       setError('Please enter a valid email address');
       return false;
     }
+    if (isDisposableEmail(email)) {
+      setError('Temporary email addresses are not allowed. Please use a permanent email address.');
+      return false;
+    }
     if (!projectName || projectName.length < 3) {
       setError('Project name must be at least 3 characters');
       return false;
     }
     if (!url || (!url.startsWith('http://') && !url.startsWith('https://'))) {
       setError('Please enter a valid URL starting with http:// or https://');
+      return false;
+    }
+    const domainValidation = validateDomainForEconomy(url);
+    if (!domainValidation.isValid) {
+      setError(domainValidation.errorMessage || 'Invalid URL');
       return false;
     }
     return true;
@@ -216,6 +244,11 @@ const QuickCampaign: React.FC<QuickCampaignProps> = ({ onSuccess }) => {
                         <Users size={16} />
                       </div>
                     </div>
+                    {emailWarning && (
+                      <p className="text-red-500 text-xs mt-1 flex items-center gap-1">
+                        <AlertCircle size={12} /> {emailWarning}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-gray-500 uppercase tracking-wide block ml-1">Project Name</label>
@@ -243,6 +276,11 @@ const QuickCampaign: React.FC<QuickCampaignProps> = ({ onSuccess }) => {
                       <Globe size={16} />
                     </div>
                   </div>
+                  {urlWarning && (
+                    <p className="text-red-500 text-xs mt-1 flex items-center gap-1">
+                      <AlertCircle size={12} /> {urlWarning}
+                    </p>
+                  )}
                 </div>
 
                 <div className="bg-gray-50/80 rounded-xl p-6 space-y-6 border border-gray-100">
@@ -319,7 +357,7 @@ const QuickCampaign: React.FC<QuickCampaignProps> = ({ onSuccess }) => {
 
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !!emailWarning || !!urlWarning}
                   className="w-full bg-black text-white py-5 px-6 rounded-xl text-sm font-bold uppercase tracking-widest hover:bg-gray-900 transition-all shadow-xl hover:shadow-2xl disabled:opacity-70 disabled:cursor-not-allowed group flex items-center justify-center gap-3 transform active:scale-[0.98]"
                 >
                   {isSubmitting ? 'Creating Campaign...' : <>Start Free Campaign <ArrowRight className="group-hover:translate-x-1 transition-transform" /></>}

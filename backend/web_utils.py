@@ -3,6 +3,7 @@ import re
 import logging
 import asyncio
 import certifi
+from disposable_email_domains import blocklist
 
 logger = logging.getLogger(__name__)
 
@@ -133,3 +134,14 @@ async def find_ga4_tid(url: str, timeout: float = 10.0) -> str:
     except Exception as e:
         logger.error(f"Error finding GA4 TID for {url}: {e}")
         return ""
+
+
+def is_disposable_email(email: str) -> bool:
+    """
+    Check if an email address uses a disposable/temporary email domain.
+    Returns True if the domain is in the disposable email blocklist.
+    """
+    if not email or "@" not in email:
+        return False
+    domain = email.split("@")[-1].lower().strip()
+    return domain in blocklist

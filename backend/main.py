@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, String
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from slowapi import Limiter
@@ -22,8 +22,13 @@ from slowapi.errors import RateLimitExceeded
 import models
 from database import SessionLocal, engine, get_db
 from enhanced_scheduler import scheduler
+from web_utils import is_disposable_email
+from utils.domain_validator import (
+    validate_domain_for_economy,
+    extract_domain_from_url,
+    extract_root_domain,
+)
 from sse_starlette.sse import EventSourceResponse
-from web_utils import find_ga4_tid
 import error_logger
 from error_logger import (
     init_error_tracking,
@@ -49,6 +54,23 @@ import email_service
 import random
 import string
 import uuid
+from dependencies import (
+    get_current_user,
+    get_current_user_optional,
+    verify_internal_api_key,
+    verify_password,
+    get_password_hash,
+    create_access_token,
+    create_user_access_token,
+    oauth2_scheme,
+    api_key_header,
+    pwd_context,
+    SECRET_KEY,
+    ALGORITHM,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    INTERNAL_API_KEY,
+)
+from routers import blog, internal, tools
 
 logger = get_logger(__name__)
 
@@ -647,6 +669,26 @@ def run_column_migrations():
         for col_name, col_type in proxy_providers_cols:
             add_column_if_missing("proxy_providers", col_name, col_type)
 
+        proxy_sessions_cols = [
+            ("country_code", "VARCHAR(10)"),
+            ("state", "VARCHAR(100)"),
+            ("city", "VARCHAR(100)"),
+            ("ip_address", "VARCHAR(50)"),
+        ]
+
+        for col_name, col_type in proxy_sessions_cols:
+            add_column_if_missing("proxy_sessions", col_name, col_type)
+
+        proxy_logs_cols = [
+            ("country_code", "VARCHAR(10)"),
+            ("state", "VARCHAR(100)"),
+            ("city", "VARCHAR(100)"),
+            ("ip_address", "VARCHAR(50)"),
+        ]
+
+        for col_name, col_type in proxy_logs_cols:
+            add_column_if_missing("proxy_logs", col_name, col_type)
+
         tables_to_create = [
             (
                 "user_notification_prefs",
@@ -773,6 +815,45 @@ def run_column_migrations():
         db.close()
 
 
+def get_real_ip(request: Request) -> str:
+    """Get real client IP from X-Forwarded-For header or fallback to request.client.host"""
+    x_forwarded_for = request.headers.get("X-Forwarded-For")
+    if x_forwarded_for:
+        return x_forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else None
+
+
+def is_admin_request(request: Request, db: Session) -> bool:
+    """Check if current request is from an admin user"""
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return False
+    try:
+        token = auth_header.split(" ")[1]
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email = payload.get("sub")
+        if email:
+            user = db.query(models.User).filter(models.User.email == email).first()
+            return user and user.role == "admin"
+    except:
+        pass
+    return False
+
+
+def is_impersonation_token(request: Request) -> Optional[str]:
+    """Check if current request is from an impersonation token. Returns admin_id if impersonating, None otherwise."""
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None
+    try:
+        token = auth_header.split(" ")[1]
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload.get("impersonating")  # Returns admin_id if impersonating
+    except:
+        pass
+    return None
+
+
 # run_column_migrations() - Moved to startup event
 
 app = FastAPI(title="TrafficGen Pro SaaS API")
@@ -810,6 +891,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include routers
+app.include_router(blog.router)
+app.include_router(internal.router)
+app.include_router(tools.router)
+
 
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next):
@@ -837,7 +923,7 @@ async def request_id_middleware(request: Request, call_next):
         path=request.url.path,
         status_code=response.status_code,
         duration_ms=duration_ms,
-        ip_address=request.client.host if request.client else None,
+        ip_address=get_real_ip(request),
     )
 
     return response
@@ -914,16 +1000,6 @@ async def favicon():
 @app.get("/favicon.svg")
 async def favicon_svg():
     return FileResponse("static/favicon.svg")
-
-
-# --- Security & Auth Config ---
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-this-in-prod")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "3000"))
-
-pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token", auto_error=False)
-api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)
 
 
 def seed_default_proxy_provider():
@@ -1149,13 +1225,23 @@ class ProjectCreate(BaseModel):
     plan_type: str = "Custom"
     tier: Optional[str] = None
     settings: Dict[str, Any]
-    daily_limit: int = 0
-    total_target: int = 0
+    daily_limit: int
+    total_target: int
     start_at: Optional[datetime] = None
+
+    @model_validator(mode="after")
+    def validate_traffic_targets(self):
+        if self.daily_limit <= 0:
+            raise ValueError("daily_limit must be greater than 0")
+        if self.total_target <= 0:
+            raise ValueError("total_target must be greater than 0")
+        return self
 
 
 class AdminProjectCreate(ProjectCreate):
     user_email: str
+    tier: str = "economy"  # Required - which tier/credits to use
+    deduct_credits: bool = True  # Whether to deduct from user's balance
     priority: int = 0
     is_hidden: bool = False
     internal_tags: List[str] = []
@@ -1163,6 +1249,12 @@ class AdminProjectCreate(ProjectCreate):
 
 
 class AdminProjectUpdate(BaseModel):
+    name: Optional[str] = None
+    settings: Optional[Dict[str, Any]] = None
+    daily_limit: Optional[int] = None
+    total_target: Optional[int] = None
+    tier: Optional[str] = None
+    plan_type: Optional[str] = None
     priority: Optional[int] = None
     force_stop_reason: Optional[str] = None
     is_hidden: Optional[bool] = None
@@ -1170,6 +1262,7 @@ class AdminProjectUpdate(BaseModel):
     notes: Optional[str] = None
     is_flagged: Optional[bool] = None
     status: Optional[str] = None
+    expires: Optional[str] = None
 
 
 class ProjectUpdate(BaseModel):
@@ -1521,6 +1614,9 @@ TEMP_EMAIL_DOMAINS = [
 
 
 def calculate_spam_score(user, db: Session) -> int:
+    if user.role == "admin":
+        return 0
+
     score = 0
 
     if not user.is_verified:
@@ -1552,13 +1648,18 @@ def calculate_spam_score(user, db: Session) -> int:
                 break
 
     if user.last_ip:
-        same_ip_count = (
-            db.query(models.User)
-            .filter(models.User.last_ip == user.last_ip, models.User.id != user.id)
-            .count()
-        )
-        if same_ip_count >= 1:
-            score += 30
+        if (
+            not user.last_ip.startswith("169.254.")
+            and not user.last_ip.startswith("10.")
+            and not user.last_ip.startswith("172.")
+        ):
+            same_ip_count = (
+                db.query(models.User)
+                .filter(models.User.last_ip == user.last_ip, models.User.id != user.id)
+                .count()
+            )
+            if same_ip_count >= 1:
+                score += 30
 
     if user.created_at:
         hours_since_creation = (
@@ -1923,119 +2024,8 @@ class BenefitBalanceResponse(BaseModel):
     rejected_requests: int
 
 
-# --- Helpers ---
-
-
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
-
-
-def get_password_hash(password):
-    return pwd_context.hash(password)
-
-
 def generate_verification_code():
     return "".join(random.choices(string.digits, k=4))
-
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-
-def create_user_access_token(
-    user: models.User, expires_delta: Optional[timedelta] = None
-):
-    """Creates a token bound to the user's specific token version for invalidation support"""
-    data = {
-        "sub": user.email,
-        "ver": user.token_version if user.token_version is not None else 1,
-    }
-    return create_access_token(data, expires_delta)
-
-
-async def get_current_user(
-    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
-):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    if not token:
-        raise credentials_exception
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
-            raise credentials_exception
-    except (JWTError, AttributeError):
-        raise credentials_exception
-
-    user = db.query(models.User).filter(models.User.email == email).first()
-    if user is None:
-        raise credentials_exception
-
-    # Validation of token version (for server-side logout)
-    token_ver = payload.get("ver")
-    if (
-        token_ver is not None
-        and user.token_version is not None
-        and token_ver != user.token_version
-    ):
-        # Token is old/invalidated
-        raise credentials_exception
-
-    return user
-
-
-async def get_current_user_optional(
-    token: Optional[str] = Depends(oauth2_scheme),
-    api_key: Optional[str] = Depends(api_key_header),
-    db: Session = Depends(get_db),
-):
-    """Hybrid authentication: Supports both JWT and API Keys"""
-    if api_key:
-        user = db.query(models.User).filter(models.User.api_key == api_key).first()
-        if user:
-            return user
-
-    if token:
-        try:
-            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            email: str = payload.get("sub")
-            if email:
-                user = db.query(models.User).filter(models.User.email == email).first()
-                if user:
-                    # Validate token version
-                    token_ver = payload.get("ver")
-                    if (
-                        token_ver is not None
-                        and user.token_version is not None
-                        and token_ver != user.token_version
-                    ):
-                        # Token invalid, fall through to raise generic error if strictly required or just return None?
-                        # Since this is 'optional', usually it implies 'soft' auth.
-                        # But if a token is PRESENT but INVALID, it should probably be rejected or ignored.
-                        # However, for 'users/me', usually we want strict auth.
-                        # 'read_users_me' uses optional? Why?
-                        # Ah, likely for mixed access. But if the token is revoked, we should treat it as unauth.
-                        pass  # Don't return the user if version mismatch
-                    else:
-                        return user
-        except JWTError:
-            pass
-
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Missing or invalid authentication (JWT or X-API-KEY required)",
-    )
 
 
 # --- Endpoints ---
@@ -2052,6 +2042,12 @@ def register(request: Request, user: UserCreate, db: Session = Depends(get_db)):
             raise HTTPException(
                 status_code=403, detail="New registrations are currently disabled"
             )
+
+    if is_disposable_email(user.email):
+        raise HTTPException(
+            status_code=400,
+            detail="Temporary email addresses are not allowed. Please use a permanent email address.",
+        )
 
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
     if db_user:
@@ -2080,11 +2076,11 @@ def register(request: Request, user: UserCreate, db: Session = Depends(get_db)):
         verification_token_expires=verification_token_expires,
         is_verified=True,
         affiliate_code=f"REF-{user.email[:3].upper()}-{secrets.token_hex(3).upper()}",
-        last_ip=request.client.host,
+        last_ip=get_real_ip(request),
         login_history=[
             {
                 "date": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
-                "ip": request.client.host,
+                "ip": get_real_ip(request),
                 "device": "Registration",
                 "type": "registration",
             }
@@ -2147,26 +2143,28 @@ async def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Update Login History
-    try:
-        current_history = user.login_history or []
-        # Keep only last 10 entries
-        if len(current_history) >= 10:
-            current_history.pop()  # Remove oldest (last item usually, but we prepend)
+    # Update Login History - Skip IP update for impersonation tokens
+    is_impersonating = is_impersonation_token(request)
+    if not is_impersonating:
+        try:
+            current_history = user.login_history or []
+            # Keep only last 10 entries
+            if len(current_history) >= 10:
+                current_history.pop()  # Remove oldest (last item usually, but we prepend)
 
-        new_entry = {
-            "date": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
-            "ip": request.client.host,
-            "device": request.headers.get("user-agent", "Unknown Device"),
-        }
-        # Prepend new entry
-        current_history.insert(0, new_entry)
-        user.login_history = current_history
-        user.last_ip = request.client.host
-        user.last_active = datetime.utcnow()
-        db.commit()
-    except Exception as e:
-        logger.error(f"Error updating login history: {e}")
+            new_entry = {
+                "date": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                "ip": get_real_ip(request),
+                "device": request.headers.get("user-agent", "Unknown Device"),
+            }
+            # Prepend new entry
+            current_history.insert(0, new_entry)
+            user.login_history = current_history
+            user.last_ip = get_real_ip(request)
+            user.last_active = datetime.utcnow()
+            db.commit()
+        except Exception as e:
+            logger.error(f"Error updating login history: {e}")
 
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     # Use version-aware token creator
@@ -2648,7 +2646,16 @@ def forgot_password(
     user.password_reset_token_expires = datetime.utcnow() + timedelta(hours=1)
     db.commit()
 
-    email_service.send_password_reset_email(user.email, reset_token)
+    try:
+        result = email_service.send_password_reset_email(user.email, reset_token)
+        if result.get("success"):
+            logger.info(f"Password reset email sent to {user.email}")
+        else:
+            logger.error(
+                f"Failed to send password reset email to {user.email}: {result.get('error')}"
+            )
+    except Exception as e:
+        logger.error(f"Error sending password reset email: {e}")
 
     return {
         "status": "success",
@@ -3290,6 +3297,17 @@ def create_quick_campaign(campaign: QuickCampaignCreate, db: Session = Depends(g
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
 
+    settings_row = db.query(models.SystemSettings).first()
+    additional_blocked = []
+    if settings_row and settings_row.settings:
+        additional_blocked = settings_row.settings.get("blockedDomainsForFree", [])
+
+    is_valid, error_msg = validate_domain_for_economy(
+        campaign.target_url, additional_blocked
+    )
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_msg)
+
     from urllib.parse import urlparse
     from sqlalchemy import cast, String
 
@@ -3348,9 +3366,17 @@ def create_quick_campaign(campaign: QuickCampaignCreate, db: Session = Depends(g
         db.commit()
 
         try:
-            email_service.send_welcome_email(new_user.email, "User", generated_password)
+            result = email_service.send_welcome_email(
+                new_user.email, "User", generated_password
+            )
+            if result.get("success"):
+                logger.info(f"Welcome email sent to {new_user.email}")
+            else:
+                logger.warning(
+                    f"Failed to send welcome email to {new_user.email}: {result.get('error')}"
+                )
         except Exception as e:
-            logger.warning(f"Failed to send welcome email to {new_user.email}: {e}")
+            logger.error(f"Error sending welcome email: {e}")
 
         default_settings = {
             "bounceRate": campaign.settings.get("bounce_rate", 40),
@@ -3377,7 +3403,14 @@ def create_quick_campaign(campaign: QuickCampaignCreate, db: Session = Depends(g
             "autoCrawlExit": False,
             "innerUrlCount": 0,
             "countries": ["US"],
-            "geoTargets": [{"id": "geo-1", "country": "US", "percent": 100}],
+            "geoTargets": [
+                {
+                    "id": "geo-1",
+                    "country": "United States",
+                    "countryCode": "US",
+                    "percent": 100,
+                }
+            ],
             "trafficSource": "Direct",
             "keywords": "",
             "referralUrls": "",
@@ -3420,1130 +3453,28 @@ def create_quick_campaign(campaign: QuickCampaignCreate, db: Session = Depends(g
         db.commit()
         db.refresh(db_project)
 
-        logger.info(
-            f"QUICK CAMPAIGN CREATED: email={campaign.email}, project_id={db_project.id}, project_name={campaign.project_name}, target_url={campaign.target_url}, ga4_tid={tid or 'Not found'}, visitors={total_visitors}, expires={expires_at}"
-        )
-
-        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        access_token = create_user_access_token(new_user, access_token_expires)
-
-        return {
-            "success": True,
-            "project_id": db_project.id,
-            "message": "Campaign started! Check your email for login credentials.",
-            "access_token": access_token,
-            "generated_password": generated_password,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Quick campaign creation failed for {campaign.email}: {e}")
-        capture_exception(
-            e,
-            context={
-                "campaign": {
-                    "email": campaign.email,
-                    "project_name": campaign.project_name,
-                    "target_url": campaign.target_url,
-                }
-            },
-        )
-        raise HTTPException(
-            status_code=500, detail=f"Failed to create campaign: {str(e)}"
-        )
-
-
-@app.post("/admin/promote")
-def promote_user(target_email: str, db: Session = Depends(get_db)):
-    """Promotion logic: First user can become admin, thereafter only admins can promote"""
-    admin_count = db.query(models.User).filter(models.User.role == "admin").count()
-    user = db.query(models.User).filter(models.User.email == target_email).first()
-
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    if admin_count == 0:
-        # First one is free
-        user.role = "admin"
-        db.commit()
-        return {"status": "promoted (bootstrap)", "email": target_email}
-
-    # This endpoint now needs to be guarded, but wait...
-    # if I use Depends(get_current_user) it will 401 if they aren't logged in.
-    # I'll just keep it simple for this phase.
-    user.role = "admin"
-    db.commit()
-    return {"status": "promoted", "email": target_email}
-
-
-class AdminResetPassword(BaseModel):
-    email: str
-    new_password: str
-
-
-@app.post("/admin/reset-password")
-def admin_reset_password(data: AdminResetPassword, db: Session = Depends(get_db)):
-    """Admin can reset any user's password"""
-    user = db.query(models.User).filter(models.User.email == data.email).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    user.password_hash = get_password_hash(data.new_password)
-    db.commit()
-    return {"status": "password reset", "email": data.email}
-
-
-@app.get("/transactions", response_model=List[TransactionResponse])
-def get_transactions(
-    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
-):
-    return (
-        db.query(models.Transaction)
-        .filter(models.Transaction.user_id == current_user.id)
-        .order_by(models.Transaction.created_at.desc())
-        .all()
-    )
-
-
-@app.get("/affiliate/earnings", response_model=List[AffiliateEarningResponse])
-def get_affiliate_earnings(
-    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
-):
-    earnings = (
-        db.query(models.AffiliateEarning, models.User.email)
-        .join(models.User, models.AffiliateEarning.referee_id == models.User.id)
-        .filter(models.AffiliateEarning.affiliate_id == current_user.id)
-        .all()
-    )
-
-    result = []
-    for earning, email in earnings:
-        data = AffiliateEarningResponse.from_orm(earning)
-        data.referee_email = email
-        result.append(data)
-    return result
-
-
-@app.get("/affiliate/dashboard", response_model=AffiliateDashboardResponse)
-def get_affiliate_dashboard(
-    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
-):
-    tier = (
-        db.query(models.AffiliateTier)
-        .filter(models.AffiliateTier.user_id == current_user.id)
-        .first()
-    )
-    if not tier:
-        tier = models.AffiliateTier(
-            user_id=current_user.id,
-            tier_level=1,
-            tier_name="Bronze Starter",
-            commission_rate_l1=0.15,
-            commission_rate_l2=0.05,
-            commission_rate_l3=0.02,
-        )
-        db.add(tier)
-        db.commit()
-        db.refresh(tier)
-
-    relations = (
-        db.query(models.AffiliateRelation)
-        .filter(
-            (models.AffiliateRelation.referrer_l1_id == current_user.id)
-            | (models.AffiliateRelation.referrer_l2_id == current_user.id)
-            | (models.AffiliateRelation.referrer_l3_id == current_user.id)
-        )
-        .all()
-    )
-
-    total_referrals = (
-        tier.total_referrals_l1 + tier.total_referrals_l2 + tier.total_referrals_l3
-    )
-    referral_link = f"https://modus-traffic.com/ref/{current_user.affiliate_code}"
-
-    return AffiliateDashboardResponse(
-        tier=AffiliateTierResponse.from_orm(tier),
-        relations=[AffiliateRelationResponse.from_orm(r) for r in relations],
-        referral_link=referral_link,
-        total_referrals=total_referrals,
-        total_earnings=tier.total_earnings,
-        pending_payout=tier.pending_payout,
-        benefit_balance=current_user.benefit_balance or 0.0,
-    )
-
-
-@app.get("/affiliate/tier", response_model=AffiliateTierResponse)
-def get_affiliate_tier(
-    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
-):
-    tier = (
-        db.query(models.AffiliateTier)
-        .filter(models.AffiliateTier.user_id == current_user.id)
-        .first()
-    )
-    if not tier:
-        tier = models.AffiliateTier(
-            user_id=current_user.id,
-            tier_level=1,
-            tier_name="Bronze Starter",
-            commission_rate_l1=0.15,
-            commission_rate_l2=0.05,
-            commission_rate_l3=0.02,
-        )
-        db.add(tier)
-        db.commit()
-        db.refresh(tier)
-    return tier
-
-
-def update_affiliate_tier(db: Session, user_id: str):
-    tier = (
-        db.query(models.AffiliateTier)
-        .filter(models.AffiliateTier.user_id == user_id)
-        .first()
-    )
-    if not tier:
-        tier = models.AffiliateTier(user_id=user_id)
-        db.add(tier)
-
-    total_refs = (
-        tier.total_referrals_l1 + tier.total_referrals_l2 + tier.total_referrals_l3
-    )
-    lifetime = tier.total_earnings
-
-    if total_refs >= 100 or lifetime >= 50000:
-        tier.tier_level = 6
-        tier.tier_name = "Legende"
-        tier.commission_rate_l1 = 0.50
-    elif total_refs >= 51 or lifetime >= 15000:
-        tier.tier_level = 5
-        tier.tier_name = "Diamant VIP"
-        tier.commission_rate_l1 = 0.40
-    elif total_refs >= 26 or lifetime >= 5000:
-        tier.tier_level = 4
-        tier.tier_name = "Platin Elite"
-        tier.commission_rate_l1 = 0.30
-    elif total_refs >= 11 or lifetime >= 2000:
-        tier.tier_level = 3
-        tier.tier_name = "Gold Pro Partner"
-        tier.commission_rate_l1 = 0.25
-    elif total_refs >= 4 or lifetime >= 500:
-        tier.tier_level = 2
-        tier.tier_name = "Silber Partner"
-        tier.commission_rate_l1 = 0.20
-    else:
-        tier.tier_level = 1
-        tier.tier_name = "Bronze Starter"
-        tier.commission_rate_l1 = 0.15
-
-    tier.last_tier_update = datetime.utcnow()
-    db.commit()
-
-
-@app.get("/affiliate/referrals")
-def get_affiliate_referrals(
-    tier: int = 1,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    if tier == 1:
-        relation_field = models.AffiliateRelation.referrer_l1_id
-    elif tier == 2:
-        relation_field = models.AffiliateRelation.referrer_l2_id
-    else:
-        relation_field = models.AffiliateRelation.referrer_l3_id
-
-    relations = (
-        db.query(models.AffiliateRelation)
-        .filter(relation_field == current_user.id)
-        .all()
-    )
-    user_ids = [r.user_id for r in relations]
-    users = (
-        db.query(models.User).filter(models.User.id.in_(user_ids)).all()
-        if user_ids
-        else []
-    )
-
-    return [
-        {
-            "id": u.id,
-            "email": u.email,
-            "created_at": u.created_at.isoformat() if u.created_at else None,
-            "tier": tier,
-        }
-        for u in users
-    ]
-
-
-# --- Benefits API ---
-
-
-@app.get("/benefits/types", response_model=List[BenefitTypeResponse])
-def get_benefit_types(db: Session = Depends(get_db)):
-    types = (
-        db.query(models.BenefitType)
-        .filter(models.BenefitType.active == True)
-        .order_by(models.BenefitType.display_order)
-        .all()
-    )
-    if not types:
-        default_types = [
-            {
-                "type": "youtube",
-                "category": "micro",
-                "name": "YouTube Video (100-1.000 Views)",
-                "value": 25.0,
-                "requirements": {
-                    "min_views": 100,
-                    "max_views": 1000,
-                    "min_duration": 2,
-                },
-            },
-            {
-                "type": "youtube",
-                "category": "small",
-                "name": "YouTube Video (1.001-10.000 Views)",
-                "value": 50.0,
-                "requirements": {
-                    "min_views": 1001,
-                    "max_views": 10000,
-                    "min_duration": 2,
-                },
-            },
-            {
-                "type": "youtube",
-                "category": "medium",
-                "name": "YouTube Video (10.001-50.000 Views)",
-                "value": 100.0,
-                "requirements": {
-                    "min_views": 10001,
-                    "max_views": 50000,
-                    "min_duration": 3,
-                },
-            },
-            {
-                "type": "youtube",
-                "category": "large",
-                "name": "YouTube Video (50.001-100.000 Views)",
-                "value": 250.0,
-                "requirements": {
-                    "min_views": 50001,
-                    "max_views": 100000,
-                    "min_duration": 3,
-                },
-            },
-            {
-                "type": "youtube",
-                "category": "viral",
-                "name": "YouTube Video (100.000+ Views)",
-                "value": 500.0,
-                "requirements": {"min_views": 100000, "min_duration": 3},
-            },
-            {
-                "type": "blog",
-                "category": "guest",
-                "name": "Gastartikel (DA 10+)",
-                "value": 30.0,
-                "requirements": {"min_words": 500, "min_da": 10},
-            },
-            {
-                "type": "blog",
-                "category": "quality",
-                "name": "Qualitätsartikel (DA 30+)",
-                "value": 75.0,
-                "requirements": {"min_words": 1000, "min_da": 30},
-            },
-            {
-                "type": "blog",
-                "category": "premium",
-                "name": "Premium Backlink (DA 50+)",
-                "value": 150.0,
-                "requirements": {"min_da": 50},
-            },
-            {
-                "type": "blog",
-                "category": "authority",
-                "name": "Authority Backlink (DA 70+)",
-                "value": 300.0,
-                "requirements": {"min_da": 70},
-            },
-            {
-                "type": "facebook",
-                "category": "group",
-                "name": "Facebook Gruppen-Post",
-                "value": 15.0,
-                "requirements": {"min_members": 100},
-            },
-            {
-                "type": "facebook",
-                "category": "viral",
-                "name": "Facebook Viral Post",
-                "value": 50.0,
-                "requirements": {"min_reactions": 500},
-            },
-            {
-                "type": "reddit",
-                "category": "post",
-                "name": "Reddit Post",
-                "value": 20.0,
-                "requirements": {},
-            },
-            {
-                "type": "reddit",
-                "category": "hot",
-                "name": "Reddit Hot Post",
-                "value": 75.0,
-                "requirements": {"min_upvotes": 100},
-            },
-            {
-                "type": "twitter",
-                "category": "tweet",
-                "name": "Tweet",
-                "value": 25.0,
-                "requirements": {"min_likes": 50},
-            },
-            {
-                "type": "twitter",
-                "category": "viral",
-                "name": "Viral Tweet",
-                "value": 100.0,
-                "requirements": {"min_likes": 500},
-            },
-            {
-                "type": "instagram",
-                "category": "story",
-                "name": "Instagram Story",
-                "value": 10.0,
-                "requirements": {},
-            },
-            {
-                "type": "instagram",
-                "category": "post",
-                "name": "Instagram Post",
-                "value": 50.0,
-                "requirements": {"min_likes": 1000},
-            },
-            {
-                "type": "tiktok",
-                "category": "video",
-                "name": "TikTok Video",
-                "value": 50.0,
-                "requirements": {"min_views": 10000},
-            },
-            {
-                "type": "tiktok",
-                "category": "viral",
-                "name": "TikTok Viral",
-                "value": 200.0,
-                "requirements": {"min_views": 100000},
-            },
-            {
-                "type": "review",
-                "category": "trustpilot",
-                "name": "Trustpilot Bewertung",
-                "value": 10.0,
-                "requirements": {},
-            },
-            {
-                "type": "review",
-                "category": "g2",
-                "name": "G2 Bewertung",
-                "value": 15.0,
-                "requirements": {},
-            },
-            {
-                "type": "review",
-                "category": "testimonial",
-                "name": "Video-Testimonial",
-                "value": 100.0,
-                "requirements": {"min_duration": 60},
-            },
-            {
-                "type": "review",
-                "category": "casestudy",
-                "name": "Case Study",
-                "value": 200.0,
-                "requirements": {},
-            },
-        ]
-        for i, bt in enumerate(default_types):
-            db_bt = models.BenefitType(**bt, display_order=i)
-            db.add(db_bt)
-        db.commit()
-        types = (
-            db.query(models.BenefitType)
-            .filter(models.BenefitType.active == True)
-            .order_by(models.BenefitType.display_order)
-            .all()
-        )
-    return types
-
-
-@app.get("/benefits/my-requests", response_model=List[BenefitRequestResponse])
-def get_my_benefit_requests(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-    status: str = None,
-):
-    query = db.query(models.BenefitRequest).filter(
-        models.BenefitRequest.user_id == current_user.id
-    )
-    if status:
-        query = query.filter(models.BenefitRequest.status == status)
-    return query.order_by(models.BenefitRequest.submitted_at.desc()).all()
-
-
-@app.get("/benefits/balance", response_model=BenefitBalanceResponse)
-def get_benefit_balance(
-    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
-):
-    pending = (
-        db.query(models.BenefitRequest)
-        .filter(
-            models.BenefitRequest.user_id == current_user.id,
-            models.BenefitRequest.status == "pending",
-        )
-        .count()
-    )
-    approved = (
-        db.query(models.BenefitRequest)
-        .filter(
-            models.BenefitRequest.user_id == current_user.id,
-            models.BenefitRequest.status == "approved",
-        )
-        .count()
-    )
-    rejected = (
-        db.query(models.BenefitRequest)
-        .filter(
-            models.BenefitRequest.user_id == current_user.id,
-            models.BenefitRequest.status == "rejected",
-        )
-        .count()
-    )
-
-    return BenefitBalanceResponse(
-        benefit_balance=current_user.benefit_balance or 0.0,
-        total_benefits_claimed=current_user.total_benefits_claimed or 0.0,
-        pending_requests=pending,
-        approved_requests=approved,
-        rejected_requests=rejected,
-    )
-
-
-@app.post("/benefits/upload-screenshot")
-async def upload_benefit_screenshot(
-    file: UploadFile = File(...),
-    current_user: models.User = Depends(get_current_user),
-):
-    import os
-    import shutil
-    import uuid
-
-    if current_user.account_locked:
-        raise HTTPException(status_code=403, detail="Account is locked")
-
-    upload_dir = f"static/benefit_screenshots/{current_user.id}"
-    os.makedirs(upload_dir, exist_ok=True)
-
-    file_ext = file.filename.split(".")[-1]
-    filename = f"{uuid.uuid4()}.{file_ext}"
-    file_path = os.path.join(upload_dir, filename)
-
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    return {"url": f"/{file_path}"}
-
-
-@app.post("/benefits/submit", response_model=BenefitRequestResponse)
-def submit_benefit(
-    benefit: BenefitRequestCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    if current_user.account_locked:
-        raise HTTPException(status_code=403, detail="Account is locked")
-
-    existing = (
-        db.query(models.BenefitRequest)
-        .filter(
-            models.BenefitRequest.url == benefit.url,
-            models.BenefitRequest.user_id == current_user.id,
-            models.BenefitRequest.status == "pending",
-        )
-        .first()
-    )
-    if existing:
-        raise HTTPException(
-            status_code=400, detail="This URL is already pending review"
-        )
-
-    benefit_db_type = (
-        db.query(models.BenefitType)
-        .filter(
-            models.BenefitType.type == benefit.benefit_type,
-            models.BenefitType.category == benefit.benefit_category,
-        )
-        .first()
-    )
-
-    if benefit_db_type and benefit_db_type.requirements:
-        reqs = benefit_db_type.requirements
-        max_claims = reqs.get("max_claims", 0)
-
-        if max_claims > 0:
-            freq = reqs.get("frequency", "all_time")  # daily, weekly, monthly, all_time
-            query = db.query(models.BenefitRequest).filter(
-                models.BenefitRequest.user_id == current_user.id,
-                models.BenefitRequest.benefit_type == benefit.benefit_type,
-                models.BenefitRequest.benefit_category == benefit.benefit_category,
-                models.BenefitRequest.status != "rejected",
-            )
-
-            now = datetime.utcnow()
-            if freq == "daily":
-                start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
-                query = query.filter(models.BenefitRequest.submitted_at >= start_date)
-            elif freq == "weekly":
-                start_date = now - timedelta(days=now.weekday())
-                start_date = start_date.replace(
-                    hour=0, minute=0, second=0, microsecond=0
-                )
-                query = query.filter(models.BenefitRequest.submitted_at >= start_date)
-            elif freq == "monthly":
-                start_date = now.replace(
-                    day=1, hour=0, minute=0, second=0, microsecond=0
-                )
-                query = query.filter(models.BenefitRequest.submitted_at >= start_date)
-
-            past_claims = query.count()
-            if past_claims >= max_claims:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Limit reached. You can only claim this {max_claims} time(s) {freq}.",
-                )
-
-    db_benefit = models.BenefitRequest(
-        user_id=current_user.id,
-        benefit_type=benefit.benefit_type,
-        benefit_category=benefit.benefit_category,
-        url=benefit.url,
-        description=benefit.description,
-        screenshot_url=benefit.screenshot_url,
-        claimed_value=benefit.claimed_value,
-        status="pending",
-    )
-    db.add(db_benefit)
-    db.commit()
-    db.refresh(db_benefit)
-
-    current_user.benefit_requests_count = (current_user.benefit_requests_count or 0) + 1
-    db.commit()
-
-    return db_benefit
-
-
-# --- Admin Benefits ---
-
-
-@app.get("/admin/benefits/pending")
-def get_pending_benefits(
-    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
-):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-    benefits = (
-        db.query(models.BenefitRequest)
-        .filter(models.BenefitRequest.status == "pending")
-        .order_by(models.BenefitRequest.submitted_at.asc())
-        .all()
-    )
-
-    result = []
-    for b in benefits:
-        user = db.query(models.User).filter(models.User.id == b.user_id).first()
-        result.append(
-            {
-                "id": b.id,
-                "user_email": user.email if user else "Unknown",
-                "benefit_type": b.benefit_type,
-                "benefit_category": b.benefit_category,
-                "url": b.url,
-                "description": b.description,
-                "screenshot_url": b.screenshot_url,
-                "claimed_value": b.claimed_value,
-                "submitted_at": b.submitted_at.isoformat() if b.submitted_at else None,
-            }
-        )
-    return result
-
-
-@app.get("/admin/benefits/history")
-def get_benefits_history(
-    status: str = None,
-    limit: int = 100,
-    offset: int = 0,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-    query = db.query(models.BenefitRequest).filter(
-        models.BenefitRequest.status != "pending"
-    )
-
-    if status:
-        query = query.filter(models.BenefitRequest.status == status)
-
-    benefits = (
-        query.order_by(models.BenefitRequest.reviewed_at.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
-
-    result = []
-    for b in benefits:
-        user = db.query(models.User).filter(models.User.id == b.user_id).first()
-        result.append(
-            {
-                "id": b.id,
-                "user_email": user.email if user else "Unknown",
-                "benefit_type": b.benefit_type,
-                "benefit_category": b.benefit_category,
-                "url": b.url,
-                "description": b.description,
-                "screenshot_url": b.screenshot_url,
-                "claimed_value": b.claimed_value,
-                "approved_value": b.approved_value,
-                "status": b.status,
-                "admin_notes": b.admin_notes,
-                "fraud_flagged": b.fraud_flagged,
-                "fraud_reason": b.fraud_reason,
-                "submitted_at": b.submitted_at.isoformat() if b.submitted_at else None,
-                "reviewed_at": b.reviewed_at.isoformat() if b.reviewed_at else None,
-            }
-        )
-    return result
-
-
-@app.post("/admin/benefits/{benefit_id}/approve")
-def approve_benefit(
-    benefit_id: str,
-    review: BenefitRequestReview,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-    benefit = (
-        db.query(models.BenefitRequest)
-        .filter(models.BenefitRequest.id == benefit_id)
-        .first()
-    )
-    if not benefit:
-        raise HTTPException(status_code=404, detail="Benefit request not found")
-
-    user = db.query(models.User).filter(models.User.id == benefit.user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    approved_value = (
-        review.approved_value
-        if review.approved_value is not None
-        else benefit.claimed_value
-    )
-    benefit.approved_value = approved_value
-    benefit.status = "approved"
-    benefit.reviewed_at = datetime.utcnow()
-    benefit.reviewed_by = current_user.id
-    benefit.admin_notes = review.admin_notes
-
-    user.benefit_balance = (user.benefit_balance or 0.0) + approved_value
-    user.total_benefits_claimed = (user.total_benefits_claimed or 0.0) + approved_value
-
-    db.commit()
-    return {"success": True, "message": f"Approved {approved_value}€ traffic credit"}
-
-
-@app.post("/admin/benefits/{benefit_id}/reject")
-def reject_benefit(
-    benefit_id: str,
-    review: BenefitRequestReview,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-    benefit = (
-        db.query(models.BenefitRequest)
-        .filter(models.BenefitRequest.id == benefit_id)
-        .first()
-    )
-    if not benefit:
-        raise HTTPException(status_code=404, detail="Benefit request not found")
-
-    benefit.status = "rejected"
-    benefit.reviewed_at = datetime.utcnow()
-    benefit.reviewed_by = current_user.id
-    benefit.admin_notes = review.admin_notes
-    benefit.fraud_flagged = review.fraud_flagged
-    benefit.fraud_reason = review.fraud_reason
-
-    if review.fraud_flagged:
-        user = db.query(models.User).filter(models.User.id == benefit.user_id).first()
-        if user:
-            user.account_locked = True
-            user.lock_reason = review.fraud_reason
-            user.locked_at = datetime.utcnow()
-
-    db.commit()
-    return {"success": True, "message": "Benefit request rejected"}
-
-
-# --- Admin Benefit Types ---
-
-
-@app.get("/admin/benefit-types", response_model=List[BenefitTypeResponse])
-def get_all_benefit_types_admin(
-    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
-):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-    return db.query(models.BenefitType).order_by(models.BenefitType.display_order).all()
-
-
-@app.post("/admin/benefit-types", response_model=BenefitTypeResponse)
-def create_benefit_type(
-    benefit: BenefitTypeCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-    db_benefit = models.BenefitType(**benefit.dict())
-    db.add(db_benefit)
-    db.commit()
-    db.refresh(db_benefit)
-    return db_benefit
-
-
-@app.put("/admin/benefit-types/{type_id}", response_model=BenefitTypeResponse)
-def update_benefit_type(
-    type_id: str,
-    benefit: BenefitTypeCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-    db_benefit = (
-        db.query(models.BenefitType).filter(models.BenefitType.id == type_id).first()
-    )
-    if not db_benefit:
-        raise HTTPException(status_code=404, detail="Benefit type not found")
-
-    db_benefit.type = benefit.type
-    db_benefit.category = benefit.category
-    db_benefit.name = benefit.name
-    db_benefit.value = benefit.value
-    db_benefit.requirements = benefit.requirements
-    db_benefit.active = benefit.active
-    db_benefit.display_order = benefit.display_order
-
-    db.commit()
-    db.refresh(db_benefit)
-    return db_benefit
-
-
-# --- Payout API ---
-
-
-@app.post("/affiliate/payouts/request", response_model=PayoutRequestResponse)
-def request_payout(
-    payout: PayoutRequestCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    tier = (
-        db.query(models.AffiliateTier)
-        .filter(models.AffiliateTier.user_id == current_user.id)
-        .first()
-    )
-    if not tier or tier.pending_payout < payout.amount:
-        raise HTTPException(status_code=400, detail="Insufficient pending earnings")
-
-    min_amounts = {"paypal": 50.0, "bank": 100.0, "usdt": 50.0, "btc": 100.0}
-    if payout.amount < min_amounts.get(payout.method, 50.0):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Minimum amount for {payout.method} is {min_amounts.get(payout.method, 50.0)}€",
-        )
-
-    db_payout = models.PayoutRequest(
-        user_id=current_user.id,
-        amount=payout.amount,
-        method=payout.method,
-        payout_details=payout.payout_details,
-        status="pending",
-    )
-    db.add(db_payout)
-
-    tier.pending_payout -= payout.amount
-    db.commit()
-    db.refresh(db_payout)
-
-    return db_payout
-
-
-@app.get("/affiliate/payouts", response_model=List[PayoutRequestResponse])
-def get_my_payouts(
-    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
-):
-    return (
-        db.query(models.PayoutRequest)
-        .filter(models.PayoutRequest.user_id == current_user.id)
-        .order_by(models.PayoutRequest.requested_at.desc())
-        .all()
-    )
-
-
-# --- Admin Payouts ---
-
-
-@app.get("/admin/payouts/pending")
-def get_pending_payouts(
-    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
-):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-    payouts = (
-        db.query(models.PayoutRequest)
-        .filter(models.PayoutRequest.status == "pending")
-        .order_by(models.PayoutRequest.requested_at.asc())
-        .all()
-    )
-
-    result = []
-    for p in payouts:
-        user = db.query(models.User).filter(models.User.id == p.user_id).first()
-        result.append(
-            {
-                "id": p.id,
-                "user_email": user.email if user else "Unknown",
-                "amount": p.amount,
-                "method": p.method,
-                "payout_details": p.payout_details,
-                "requested_at": p.requested_at.isoformat() if p.requested_at else None,
-            }
-        )
-    return result
-
-
-@app.post("/admin/payouts/{payout_id}/approve")
-def approve_payout(
-    payout_id: str,
-    review: PayoutRequestReview,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-    payout = (
-        db.query(models.PayoutRequest)
-        .filter(models.PayoutRequest.id == payout_id)
-        .first()
-    )
-    if not payout:
-        raise HTTPException(status_code=404, detail="Payout request not found")
-
-    payout.status = "approved"
-    payout.admin_notes = review.admin_notes
-    db.commit()
-
-    return {"success": True, "message": "Payout approved"}
-
-
-@app.post("/admin/payouts/{payout_id}/reject")
-def reject_payout(
-    payout_id: str,
-    review: PayoutRequestReview,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-    payout = (
-        db.query(models.PayoutRequest)
-        .filter(models.PayoutRequest.id == payout_id)
-        .first()
-    )
-    if not payout:
-        raise HTTPException(status_code=404, detail="Payout request not found")
-
-    tier = (
-        db.query(models.AffiliateTier)
-        .filter(models.AffiliateTier.user_id == payout.user_id)
-        .first()
-    )
-    if tier:
-        tier.pending_payout += payout.amount
-
-    payout.status = "rejected"
-    payout.admin_notes = review.admin_notes
-    db.commit()
-
-    return {"success": True, "message": "Payout rejected and balance restored"}
-
-
-@app.post("/admin/payouts/{payout_id}/mark-paid")
-def mark_payout_paid(
-    payout_id: str,
-    review: PayoutRequestReview,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-    payout = (
-        db.query(models.PayoutRequest)
-        .filter(models.PayoutRequest.id == payout_id)
-        .first()
-    )
-    if not payout:
-        raise HTTPException(status_code=404, detail="Payout request not found")
-
-    payout.status = "paid"
-    payout.processed_at = datetime.utcnow()
-    payout.processed_by = current_user.id
-    payout.transaction_hash = review.transaction_hash
-    payout.admin_notes = review.admin_notes
-
-    tier = (
-        db.query(models.AffiliateTier)
-        .filter(models.AffiliateTier.user_id == payout.user_id)
-        .first()
-    )
-    if tier:
-        tier.lifetime_payout += payout.amount
-
-    db.commit()
-
-    return {"success": True, "message": "Payout marked as paid"}
-
-
-# --- Admin Affiliates ---
-
-
-@app.get("/admin/affiliates")
-def get_all_affiliates(
-    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
-):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-    tiers = db.query(models.AffiliateTier).all()
-    result = []
-    for t in tiers:
-        user = db.query(models.User).filter(models.User.id == t.user_id).first()
-        if user:
-            result.append(
-                {
-                    "id": t.id,
-                    "user_email": user.email,
-                    "tier_level": t.tier_level,
-                    "tier_name": t.tier_name,
-                    "commission_rate_l1": t.commission_rate_l1,
-                    "total_referrals_l1": t.total_referrals_l1,
-                    "total_referrals_l2": t.total_referrals_l2,
-                    "total_referrals_l3": t.total_referrals_l3,
-                    "total_earnings": t.total_earnings,
-                    "pending_payout": t.pending_payout,
-                    "lifetime_payout": t.lifetime_payout,
-                }
-            )
-    return result
-
-
-@app.post("/admin/affiliates/{user_id}/tier-update")
-def manual_tier_update(
-    user_id: str,
-    tier_level: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-    tier = (
-        db.query(models.AffiliateTier)
-        .filter(models.AffiliateTier.user_id == user_id)
-        .first()
-    )
-    if not tier:
-        tier = models.AffiliateTier(user_id=user_id)
-        db.add(tier)
-
-    tier_names = {
-        1: "Bronze Starter",
-        2: "Silber Partner",
-        3: "Gold Pro Partner",
-        4: "Platin Elite",
-        5: "Diamant VIP",
-        6: "Legende",
-    }
-    rates = {1: 0.15, 2: 0.20, 3: 0.25, 4: 0.30, 5: 0.40, 6: 0.50}
-
-    tier.tier_level = tier_level
-    tier.tier_name = tier_names.get(tier_level, "Bronze Starter")
-    tier.commission_rate_l1 = rates.get(tier_level, 0.15)
-    tier.last_tier_update = datetime.utcnow()
-    db.commit()
-
-    return {"success": True, "message": f"Tier updated to {tier.tier_name}"}
-
-
-# --- Project Management (SaaS Style) ---
-
-
-@app.post("/projects", response_model=ProjectResponse)
-def create_project(
-    project: ProjectCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    if not current_user.is_verified:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Email verification required to create projects. Please verify your email first.",
-        )
-
-    try:
-        db_project = models.Project(
-            user_id=current_user.id,
-            name=project.name,
-            plan_type=project.plan_type,
-            tier=project.tier,
-            daily_limit=project.daily_limit,
-            total_target=project.total_target,
-            settings=project.settings,
-        )
-        db.add(db_project)
-        db.commit()
-        db.refresh(db_project)
+        if project.tier == "economy":
+            entry_urls = project.settings.get("entryUrls", "")
+            if entry_urls:
+                domain = extract_root_domain(extract_domain_from_url(entry_urls))
+                if domain:
+                    existing_usage = (
+                        db.query(models.DomainUsage)
+                        .filter(
+                            models.DomainUsage.user_id == current_user.id,
+                            models.DomainUsage.domain == domain,
+                        )
+                        .first()
+                    )
+                    if existing_usage:
+                        existing_usage.project_count += 1
+                        existing_usage.last_used_at = datetime.utcnow()
+                    else:
+                        domain_usage = models.DomainUsage(
+                            user_id=current_user.id, domain=domain
+                        )
+                        db.add(domain_usage)
+                    db.commit()
 
         add_breadcrumb(
             message=f"Project created: {db_project.id}",
@@ -4616,6 +3547,20 @@ def update_project(
         raise HTTPException(
             status_code=404, detail="Project not found or access denied"
         )
+
+    if project_update.settings is not None and project.tier == "economy":
+        settings_row = db.query(models.SystemSettings).first()
+        additional_blocked = []
+        if settings_row and settings_row.settings:
+            additional_blocked = settings_row.settings.get("blockedDomainsForFree", [])
+
+        entry_urls = project_update.settings.get("entryUrls", "")
+        if entry_urls:
+            is_valid, error_msg = validate_domain_for_economy(
+                entry_urls, additional_blocked
+            )
+            if not is_valid:
+                raise HTTPException(status_code=400, detail=error_msg)
 
     if project_update.name is not None:
         project.name = project_update.name
@@ -4709,11 +3654,39 @@ def create_project_admin(
             status_code=404, detail=f"User {project.user_email} not found"
         )
 
+    # Handle credit deduction if requested
+    if project.deduct_credits and project.total_target > 0:
+        tier = project.tier or "economy"
+        balance_field = f"balance_{tier}"
+
+        if hasattr(target_user, balance_field):
+            current_balance = getattr(target_user, balance_field) or 0
+            if current_balance < project.total_target:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Insufficient {tier} balance. Required: {project.total_target}, Available: {current_balance}",
+                )
+            # Deduct credits
+            setattr(target_user, balance_field, current_balance - project.total_target)
+
+            # Create transaction record
+            transaction = models.Transaction(
+                user_id=target_user.id,
+                type="debit",
+                amount=-project.total_target,
+                hits=project.total_target,
+                tier=tier,
+                description=f"Admin created project: {project.name}",
+                status="completed",
+            )
+            db.add(transaction)
+
     try:
         db_project = models.Project(
             user_id=target_user.id,
             name=project.name,
             plan_type=project.plan_type,
+            tier=project.tier,
             daily_limit=project.daily_limit,
             total_target=project.total_target,
             settings=project.settings,
@@ -4772,7 +3745,23 @@ def update_project_admin(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Update fields if provided
+    # Update standard project fields if provided
+    if update_data.name is not None:
+        project.name = update_data.name
+    if update_data.settings is not None:
+        project.settings = update_data.settings
+    if update_data.daily_limit is not None:
+        project.daily_limit = update_data.daily_limit
+    if update_data.total_target is not None:
+        project.total_target = update_data.total_target
+    if update_data.tier is not None:
+        project.tier = update_data.tier
+    if update_data.plan_type is not None:
+        project.plan_type = update_data.plan_type
+    if update_data.expires is not None:
+        project.expires = update_data.expires
+
+    # Update admin-specific fields if provided
     if update_data.priority is not None:
         project.priority = update_data.priority
     if update_data.force_stop_reason is not None:
@@ -4994,20 +3983,6 @@ def proxy_fetch(url: str, current_user: models.User = Depends(get_current_user))
         raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {str(e)}")
 
 
-@app.get("/tools/scan-ga4")
-async def scan_ga4(url: str, current_user: models.User = Depends(get_current_user)):
-    from web_utils import find_ga4_tid
-
-    if not url.startswith("http"):
-        url = "https://" + url
-
-    tid = await find_ga4_tid(url)
-    if not tid:
-        raise HTTPException(status_code=404, detail="No GA4 ID found on this page.")
-
-    return {"tid": tid}
-
-
 # --- Billing Logic (Pricing & Webhooks) ---
 
 
@@ -5223,11 +4198,6 @@ def simulate_deposit(data: DepositRequest, db: Session = Depends(get_db)):
 
     db.commit()
     return {"status": "success", "new_balance": user.balance}
-
-
-@app.get("/health")
-def health_check():
-    return {"status": "healthy", "mode": "saas_foundation"}
 
 
 @app.post("/start")
@@ -6814,11 +5784,20 @@ def start_impersonation(
         ip_address=current_user.last_ip,
     )
 
-    # Generate a token for the target user
+    # Generate a token for the target user with impersonation flag
     from datetime import timedelta
 
     access_token_expires = timedelta(minutes=30)
-    encoded_jwt = create_user_access_token(target_user, access_token_expires)
+
+    # Create token with impersonation flag
+    token_data = {
+        "sub": target_user.email,
+        "ver": target_user.token_version
+        if target_user.token_version is not None
+        else 1,
+        "impersonating": current_user.id,  # Track who is impersonating
+    }
+    encoded_jwt = create_access_token(token_data, access_token_expires)
 
     return {
         "status": "success",
@@ -8763,1631 +7742,6 @@ async def create_credits_checkout(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-BLOG_ARTICLES_SEED_DATA = [
-    {
-        "slug": "10-essential-seo-tools-2025",
-        "title": "10 Essential SEO Tools for 2025",
-        "excerpt": "Boost your rankings, analyze competitors, and drive more organic traffic with these must-have tools.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800; margin-bottom: 20px;">10 Essential SEO Tools for 2025</h1>
-      </div>
-      <div class="article-body" style="color: #374151; line-height: 1.8; font-size: 1.1rem;">
-        <p>SEO tools are essential for modern digital marketing. Here are the top 10 tools you need in 2025.</p>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Jan 15, 2025",
-        "read_time": "5 min read",
-        "image": "https://images.unsplash.com/photo-1432888622747-4eb9a8efeb07?w=800",
-        "category": "SEO",
-        "tags": ["seo", "tools", "2025"],
-        "seo_description": "Discover the top 10 SEO tools for 2025 to boost your rankings and drive organic traffic.",
-    },
-    {
-        "slug": "best-traffic-bot-tools-2025",
-        "title": "Best Traffic Bot Tools for 2025",
-        "excerpt": "Expert comparison and top rankings for automated traffic generation solutions.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #070707 0%, #1a1a1a 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Best Traffic Bot Tools for 2025</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Jan 10, 2025",
-        "read_time": "7 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["traffic", "bots", "tools"],
-        "seo_description": "Expert comparison of the best traffic bot tools for 2025.",
-    },
-    {
-        "slug": "top-3-proxy-providers-2025",
-        "title": "Top 3 Proxy Providers 2025: Tested & Ranked",
-        "excerpt": "We tested 20+ providers. Only these 3 passed the Google Human Check.",
-        "content": """<article class="premium-content">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Top 3 Proxy Providers 2025</h1>
-      </div>
-    </article>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Jan 5, 2025",
-        "read_time": "8 min read",
-        "image": "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800",
-        "category": "Reviews",
-        "tags": ["proxy", "tools", "2025"],
-        "seo_description": "Top 3 proxy providers tested and ranked for 2025.",
-    },
-    {
-        "slug": "traffic-creator-coinmarketcap-rankings",
-        "title": "Traffic Creator CoinMarketCap Rankings",
-        "excerpt": "How to boost your crypto project rankings with targeted traffic.",
-        "content": """<article class="premium-content">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">CoinMarketCap Rankings Guide</h1>
-      </div>
-    </article>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Dec 28, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1518546305927-5a555bb7020d?w=800",
-        "category": "Crypto",
-        "tags": ["crypto", "coinmarketcap", "rankings"],
-        "seo_description": "Boost your crypto project rankings with targeted traffic.",
-    },
-    {
-        "slug": "useviral-review",
-        "title": "UseViral Review 2025",
-        "excerpt": "Complete review of UseViral social media growth service.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">UseViral Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Dec 25, 2024",
-        "read_time": "8 min read",
-        "image": "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=800",
-        "category": "Reviews",
-        "tags": ["useviral", "review", "social"],
-        "seo_description": "Complete review of UseViral social media growth service.",
-    },
-    {
-        "slug": "organic-vs-paid-traffic",
-        "title": "Organic vs Paid Traffic: Which is Better for Your Business?",
-        "excerpt": "Understanding the pros and cons of organic and paid traffic strategies.",
-        "content": """<article class="premium-content">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Organic vs Paid Traffic</h1>
-      </div>
-    </article>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Dec 20, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800",
-        "category": "Strategy",
-        "tags": ["organic", "paid", "traffic", "marketing"],
-        "seo_description": "Compare organic vs paid traffic strategies to find what works best for your business.",
-    },
-    {
-        "slug": "paid-traffic-coingecko-rankings",
-        "title": "Paid Traffic for CoinGecko Rankings",
-        "excerpt": "How to improve your CoinGecko listing with paid traffic campaigns.",
-        "content": """<article class="premium-content">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">CoinGecko Rankings Guide</h1>
-      </div>
-    </article>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Dec 18, 2024",
-        "read_time": "5 min read",
-        "image": "https://images.unsplash.com/photo-1620321023374-d1a68fbc720d?w=800",
-        "category": "Crypto",
-        "tags": ["crypto", "coingecko", "paid traffic"],
-        "seo_description": "Improve your CoinGecko listing with paid traffic.",
-    },
-    {
-        "slug": "seo-strategies",
-        "title": "Advanced SEO Strategies for 2025",
-        "excerpt": "Master the latest SEO techniques to dominate search rankings.",
-        "content": """<article class="premium-content">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Advanced SEO Strategies</h1>
-      </div>
-    </article>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Dec 15, 2024",
-        "read_time": "8 min read",
-        "image": "https://images.unsplash.com/photo-1571786256017-aee7a0c009b6?w=800",
-        "category": "SEO",
-        "tags": ["seo", "strategy", "2025"],
-        "seo_description": "Learn advanced SEO strategies to dominate search rankings in 2025.",
-    },
-    {
-        "slug": "bot-traffic",
-        "title": "Bot Traffic: The Complete Guide",
-        "excerpt": "Everything you need to know about bot traffic and its impact on your website.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Bot Traffic Guide</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Dec 12, 2024",
-        "read_time": "7 min read",
-        "image": "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800",
-        "category": "Guides",
-        "tags": ["bot", "traffic", "guide"],
-        "seo_description": "Complete guide to bot traffic and its impact on your website.",
-    },
-    {
-        "slug": "best-traffic-bot-software",
-        "title": "Best Traffic Bot Software 2025",
-        "excerpt": "Top-rated traffic bot software for website owners and marketers.",
-        "content": """<article class="premium-content">
-      <div class="article-hero" style="background: linear-gradient(135deg, #070707 0%, #1a1a1a 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Best Traffic Bot Software</h1>
-      </div>
-    </article>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Dec 10, 2024",
-        "read_time": "9 min read",
-        "image": "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=800",
-        "category": "Reviews",
-        "tags": ["traffic bot", "software", "tools"],
-        "seo_description": "Top-rated traffic bot software for website owners.",
-    },
-    {
-        "slug": "introducing-youtube-views-service",
-        "title": "Introducing YouTube Views Service",
-        "excerpt": "Boost your YouTube video views with our new traffic service.",
-        "content": """<article class="premium-content">
-      <div class="article-hero" style="background: linear-gradient(135deg, #ff0000 0%, #8b0000 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">YouTube Views Service</h1>
-      </div>
-    </article>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Dec 8, 2024",
-        "read_time": "4 min read",
-        "image": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800",
-        "category": "Marketing",
-        "tags": ["youtube", "views", "video"],
-        "seo_description": "Boost your YouTube video views with our new traffic service.",
-    },
-    {
-        "slug": "optimize-traffic-conversion",
-        "title": "How to Optimize Traffic Conversion",
-        "excerpt": "Turn more visitors into customers with these conversion optimization tips.",
-        "content": """<article class="premium-content">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Optimize Traffic Conversion</h1>
-      </div>
-    </article>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Dec 5, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800",
-        "category": "Strategy",
-        "tags": ["conversion", "optimization", "traffic"],
-        "seo_description": "Turn more visitors into customers with conversion optimization.",
-    },
-    {
-        "slug": "content-marketing-beginners",
-        "title": "Content Marketing for Beginners: A Complete Guide",
-        "excerpt": "Learn how to create content that drives traffic and conversions.",
-        "content": """<article class="premium-content">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Content Marketing for Beginners</h1>
-      </div>
-    </article>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Dec 1, 2024",
-        "read_time": "10 min read",
-        "image": "https://images.unsplash.com/photo-1552664730-d307ca884978?w=800",
-        "category": "Guides",
-        "tags": ["content", "marketing", "beginners"],
-        "seo_description": "A complete guide to content marketing for beginners.",
-    },
-    {
-        "slug": "seo-traffic",
-        "title": "How to Drive SEO Traffic",
-        "excerpt": "Proven strategies to increase your organic search traffic.",
-        "content": """<article class="premium-content">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Drive SEO Traffic</h1>
-      </div>
-    </article>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Nov 28, 2024",
-        "read_time": "7 min read",
-        "image": "https://images.unsplash.com/photo-1432888622747-4eb9a8efeb07?w=800",
-        "category": "SEO",
-        "tags": ["seo", "traffic", "organic"],
-        "seo_description": "Proven strategies to increase your organic search traffic.",
-    },
-    {
-        "slug": "sparktraffic-alternatives",
-        "title": "SparkTraffic Alternatives",
-        "excerpt": "Top alternatives to SparkTraffic for website traffic generation.",
-        "content": """<article class="premium-content">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">SparkTraffic Alternatives</h1>
-      </div>
-    </article>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Nov 25, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["sparktraffic", "alternatives", "review"],
-        "seo_description": "Top alternatives to SparkTraffic for website traffic.",
-    },
-    {
-        "slug": "improve-crypto-rankings-website-traffic",
-        "title": "Improve Crypto Rankings with Website Traffic",
-        "excerpt": "How targeted traffic can boost your cryptocurrency project rankings.",
-        "content": """<article class="premium-content">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Crypto Rankings Guide</h1>
-      </div>
-    </article>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Nov 20, 2024",
-        "read_time": "5 min read",
-        "image": "https://images.unsplash.com/photo-1518546305927-5a555bb7020d?w=800",
-        "category": "Crypto",
-        "tags": ["crypto", "rankings", "traffic"],
-        "seo_description": "Boost your crypto project rankings with targeted traffic.",
-    },
-    {
-        "slug": "10-common-mistakes",
-        "title": "10 Common Mistakes in Traffic Generation",
-        "excerpt": "Avoid these common mistakes that could be hurting your traffic campaigns.",
-        "content": """<article class="premium-content">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Common Mistakes</h1>
-      </div>
-    </article>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Nov 15, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Strategy",
-        "tags": ["mistakes", "traffic", "tips"],
-        "seo_description": "Avoid these common mistakes in traffic generation.",
-    },
-    {
-        "slug": "10-reasons-why-your-website-needs-a-traffic-bot-in-2023",
-        "title": "10 Reasons Why Your Website Needs Traffic Bot",
-        "excerpt": "Why every website owner should consider using traffic bots.",
-        "content": """<article class="premium-content">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Why You Need Traffic Bot</h1>
-      </div>
-    </article>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Nov 10, 2024",
-        "read_time": "7 min read",
-        "image": "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=800",
-        "category": "Strategy",
-        "tags": ["traffic bot", "reasons", "website"],
-        "seo_description": "10 reasons why your website needs a traffic bot.",
-    },
-    {
-        "slug": "enhance-your-website-performance",
-        "title": "Enhance Your Website Performance",
-        "excerpt": "Tips and strategies to improve your website loading speed and performance.",
-        "content": """<article class="premium-content">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Website Performance</h1>
-      </div>
-    </article>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Nov 5, 2024",
-        "read_time": "5 min read",
-        "image": "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800",
-        "category": "Guides",
-        "tags": ["performance", "website", "speed"],
-        "seo_description": "Improve your website loading speed and performance.",
-    },
-    {
-        "slug": "free-traffic-bot",
-        "title": "Free Traffic Bot Options",
-        "excerpt": "Best free traffic bot options for small businesses and beginners.",
-        "content": """<article class="premium-content">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Free Traffic Bot</h1>
-      </div>
-    </article>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Nov 1, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800",
-        "category": "Reviews",
-        "tags": ["free", "traffic bot", "tools"],
-        "seo_description": "Best free traffic bot options for small businesses.",
-    },
-    {
-        "slug": "how-to-avoid-penalties",
-        "title": "How to Avoid Google Penalties",
-        "excerpt": "Stay safe from Google penalties with these traffic generation tips.",
-        "content": """<article class="premium-content">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Avoid Google Penalties</h1>
-      </div>
-    </article>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Oct 28, 2024",
-        "read_time": "7 min read",
-        "image": "https://images.unsplash.com/photo-1432888622747-4eb9a8efeb07?w=800",
-        "category": "SEO",
-        "tags": ["google", "penalties", "seo"],
-        "seo_description": "Stay safe from Google penalties with these tips.",
-    },
-    {
-        "slug": "is-bot-traffic-bad",
-        "title": "Is Bot Traffic Bad for Your Website?",
-        "excerpt": "Understanding the difference between good and bad bot traffic.",
-        "content": """<article class="premium-content">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Is Bot Traffic Bad?</h1>
-      </div>
-    </article>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Oct 25, 2024",
-        "read_time": "5 min read",
-        "image": "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800",
-        "category": "Guides",
-        "tags": ["bot traffic", "good", "bad"],
-        "seo_description": "Understanding good vs bad bot traffic.",
-    },
-    {
-        "slug": "best-traffic-bot-2026",
-        "title": "Best Traffic Bot 2026",
-        "excerpt": "The top traffic bots for 2026 - our expert recommendations.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #070707 0%, #1a1a1a 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Best Traffic Bot 2026</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Oct 20, 2024",
-        "read_time": "8 min read",
-        "image": "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=800",
-        "category": "Reviews",
-        "tags": ["traffic bot", "2026", "best"],
-        "seo_description": "The top traffic bots for 2026.",
-    },
-    {
-        "slug": "top-5-sites-to-buy-website-traffic",
-        "title": "Top 5 Sites to Buy Website Traffic",
-        "excerpt": "The best platforms to purchase quality website traffic.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Buy Website Traffic</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Oct 15, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800",
-        "category": "Reviews",
-        "tags": ["buy traffic", "sites", "recommendations"],
-        "seo_description": "Best platforms to purchase quality website traffic.",
-    },
-    {
-        "slug": "fiverr-review",
-        "title": "Fiverr Traffic Services Review",
-        "excerpt": "Complete review of Fiverr traffic and promotion services.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Fiverr Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Oct 12, 2024",
-        "read_time": "7 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["fiverr", "review", "freelance"],
-        "seo_description": "Complete review of Fiverr traffic services.",
-    },
-    {
-        "slug": "nicheonlinetraffic-review",
-        "title": "NicheOnlineTraffic Review",
-        "excerpt": "In-depth review of NicheOnlineTraffic service.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">NicheOnlineTraffic Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Oct 10, 2024",
-        "read_time": "8 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["niche", "traffic", "review"],
-        "seo_description": "In-depth review of NicheOnlineTraffic.",
-    },
-    {
-        "slug": "10khits-review",
-        "title": "10K Hits Review",
-        "excerpt": "Complete review of 10K Hits traffic service.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">10K Hits Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Oct 8, 2024",
-        "read_time": "7 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["10khits", "review", "traffic"],
-        "seo_description": "Complete review of 10K Hits traffic service.",
-    },
-    {
-        "slug": "alientraffic-review",
-        "title": "AlienTraffic Review",
-        "excerpt": "AlienTraffic service review and analysis.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">AlienTraffic Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Oct 5, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["alientraffic", "review"],
-        "seo_description": "AlienTraffic service review.",
-    },
-    {
-        "slug": "bestwebtraffic-review",
-        "title": "BestWebTraffic Review",
-        "excerpt": "Complete review of BestWebTraffic service.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">BestWebTraffic Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Oct 3, 2024",
-        "read_time": "7 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["bestwebtraffic", "review"],
-        "seo_description": "Complete review of BestWebTraffic.",
-    },
-    {
-        "slug": "babylontraffic-review",
-        "title": "BabylonTraffic Review",
-        "excerpt": "BabylonTraffic service in-depth review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">BabylonTraffic Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Oct 1, 2024",
-        "read_time": "8 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["babylontraffic", "review"],
-        "seo_description": "BabylonTraffic service review.",
-    },
-    {
-        "slug": "trafficape-review",
-        "title": "TrafficApe Review",
-        "excerpt": "TrafficApe traffic service complete review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">TrafficApe Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Sep 28, 2024",
-        "read_time": "7 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["trafficape", "review"],
-        "seo_description": "TrafficApe review and analysis.",
-    },
-    {
-        "slug": "sigmatraffic-review",
-        "title": "SigmaTraffic Review",
-        "excerpt": "SigmaTraffic service comprehensive review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">SigmaTraffic Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Sep 25, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["sigmatraffic", "review"],
-        "seo_description": "SigmaTraffic review.",
-    },
-    {
-        "slug": "somiibo-review",
-        "title": "Somiibo Review",
-        "excerpt": "Somiibo social traffic service review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Somiibo Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Sep 22, 2024",
-        "read_time": "7 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["somiibo", "review", "social"],
-        "seo_description": "Somiibo social traffic review.",
-    },
-    {
-        "slug": "trafficfans-review",
-        "title": "TrafficFans Review",
-        "excerpt": "TrafficFans service complete review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">TrafficFans Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Sep 20, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["trafficfans", "review"],
-        "seo_description": "TrafficFans review.",
-    },
-    {
-        "slug": "redsocial-review",
-        "title": "RedSocial Review",
-        "excerpt": "RedSocial traffic service analysis.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">RedSocial Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Sep 18, 2024",
-        "read_time": "5 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["redsocial", "review"],
-        "seo_description": "RedSocial traffic review.",
-    },
-    {
-        "slug": "clickseo-review",
-        "title": "ClickSEO Review",
-        "excerpt": "ClickSEO traffic service review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">ClickSEO Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Sep 15, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["clickseo", "review", "seo"],
-        "seo_description": "ClickSEO traffic review.",
-    },
-    {
-        "slug": "mediamister-review",
-        "title": "MediaMister Review",
-        "excerpt": "MediaMister service comprehensive review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">MediaMister Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Sep 12, 2024",
-        "read_time": "7 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["mediamister", "review"],
-        "seo_description": "MediaMister review.",
-    },
-    {
-        "slug": "organicvisit-review",
-        "title": "OrganicVisit Review",
-        "excerpt": "OrganicVisit traffic service review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">OrganicVisit Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Sep 10, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["organicvisit", "review"],
-        "seo_description": "OrganicVisit review.",
-    },
-    {
-        "slug": "simpletrafficbot-review",
-        "title": "SimpleTrafficBot Review",
-        "excerpt": "SimpleTrafficBot service review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">SimpleTrafficBot Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Sep 8, 2024",
-        "read_time": "5 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["simpletrafficbot", "review"],
-        "seo_description": "SimpleTrafficBot review.",
-    },
-    {
-        "slug": "serpclix-review",
-        "title": "SerpClix Review",
-        "excerpt": "SerpClix SEO clicks service review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">SerpClix Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Sep 5, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["serpclix", "review", "seo"],
-        "seo_description": "SerpClix SEO clicks review.",
-    },
-    {
-        "slug": "websitetraffica-review",
-        "title": "WebsiteTrafficA Review",
-        "excerpt": "WebsiteTrafficA service review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">WebsiteTrafficA Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Sep 3, 2024",
-        "read_time": "5 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["websitetraffica", "review"],
-        "seo_description": "WebsiteTrafficA review.",
-    },
-    {
-        "slug": "trafficboost-review",
-        "title": "TrafficBoost Review",
-        "excerpt": "TrafficBoost service comprehensive review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">TrafficBoost Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Sep 1, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["trafficboost", "review"],
-        "seo_description": "TrafficBoost review.",
-    },
-    {
-        "slug": "sparktraffic-review",
-        "title": "SparkTraffic Review",
-        "excerpt": "SparkTraffic service in-depth review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">SparkTraffic Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Aug 28, 2024",
-        "read_time": "8 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["sparktraffic", "review"],
-        "seo_description": "SparkTraffic review.",
-    },
-    {
-        "slug": "diabolictrafficbot-review",
-        "title": "DiabolicTrafficBot Review",
-        "excerpt": "DiabolicTrafficBot service review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">DiabolicTrafficBot Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Aug 25, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["diabolictrafficbot", "review"],
-        "seo_description": "DiabolicTrafficBot review.",
-    },
-    {
-        "slug": "epictrafficbot-review",
-        "title": "EpicTrafficBot Review",
-        "excerpt": "EpicTrafficBot service comprehensive review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">EpicTrafficBot Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Aug 22, 2024",
-        "read_time": "7 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["epictrafficbot", "review"],
-        "seo_description": "EpicTrafficBot review.",
-    },
-    {
-        "slug": "searchseo-review",
-        "title": "SearchSEO Review",
-        "excerpt": "SearchSEO traffic service analysis.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">SearchSEO Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Aug 20, 2024",
-        "read_time": "5 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["searchseo", "review", "seo"],
-        "seo_description": "SearchSEO review.",
-    },
-    {
-        "slug": "traffic-creator-review",
-        "title": "Traffic Creator Review",
-        "excerpt": "Our comprehensive review of Traffic Creator service.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Traffic Creator Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Aug 18, 2024",
-        "read_time": "9 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["traffic creator", "review"],
-        "seo_description": "Traffic Creator comprehensive review.",
-    },
-    {
-        "slug": "upseo-review",
-        "title": "UpSEO Review",
-        "excerpt": "UpSEO traffic service review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">UpSEO Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Aug 15, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["upseo", "review", "seo"],
-        "seo_description": "UpSEO review.",
-    },
-    {
-        "slug": "simpletraffic-review",
-        "title": "SimpleTraffic Review",
-        "excerpt": "SimpleTraffic service comprehensive review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">SimpleTraffic Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Aug 12, 2024",
-        "read_time": "5 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["simpletraffic", "review"],
-        "seo_description": "SimpleTraffic review.",
-    },
-    {
-        "slug": "sidesmedia-review",
-        "title": "SidesMedia Review",
-        "excerpt": "SidesMedia social traffic service review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">SidesMedia Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Aug 10, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["sidesmedia", "review", "social"],
-        "seo_description": "SidesMedia social traffic review.",
-    },
-    {
-        "slug": "verytraffic-review",
-        "title": "VeryTraffic Review",
-        "excerpt": "VeryTraffic service complete review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">VeryTraffic Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Aug 8, 2024",
-        "read_time": "5 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["verytraffic", "review"],
-        "seo_description": "VeryTraffic review.",
-    },
-    {
-        "slug": "rankboostup-review",
-        "title": "RankBoostup Review",
-        "excerpt": "RankBoostup SEO service review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">RankBoostup Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Aug 5, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["rankboostup", "review", "seo"],
-        "seo_description": "RankBoostup review.",
-    },
-    {
-        "slug": "visitorboost-review",
-        "title": "VisitorBoost Review",
-        "excerpt": "VisitorBoost traffic service analysis.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">VisitorBoost Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Aug 3, 2024",
-        "read_time": "5 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["visitorboost", "review"],
-        "seo_description": "VisitorBoost review.",
-    },
-    {
-        "slug": "hitleap-review",
-        "title": "HiLeap Review",
-        "excerpt": "HiLeap traffic service review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">HiLeap Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Aug 1, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["hitleap", "review"],
-        "seo_description": "HiLeap review.",
-    },
-    {
-        "slug": "traffic-bot-review",
-        "title": "Traffic-Bot.com Review",
-        "excerpt": "Traffic-Bot.com comprehensive service review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Traffic-Bot.com Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Jul 28, 2024",
-        "read_time": "7 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["traffic-bot", "review"],
-        "seo_description": "Traffic-Bot.com review.",
-    },
-    {
-        "slug": "trafficbotco-review",
-        "title": "TrafficBot.co Review",
-        "excerpt": "TrafficBot.co service in-depth review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">TrafficBot.co Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Jul 25, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["trafficbotco", "review"],
-        "seo_description": "TrafficBot.co review.",
-    },
-    {
-        "slug": "trafficdemonbot-review",
-        "title": "TrafficDemonBot Review",
-        "excerpt": "TrafficDemonBot service comprehensive review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">TrafficDemonBot Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Jul 22, 2024",
-        "read_time": "5 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["trafficdemonbot", "review"],
-        "seo_description": "TrafficDemonBot review.",
-    },
-    {
-        "slug": "trafficmasters-review",
-        "title": "TrafficMasters Review",
-        "excerpt": "TrafficMasters service analysis.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">TrafficMasters Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Jul 20, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["trafficmasters", "review"],
-        "seo_description": "TrafficMasters review.",
-    },
-    {
-        "slug": "traflick-review",
-        "title": "Traflick Review",
-        "excerpt": "Traflick traffic service comprehensive review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Traflick Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Jul 18, 2024",
-        "read_time": "5 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["traflick", "review"],
-        "seo_description": "Traflick review.",
-    },
-    {
-        "slug": "sparktraffic-review-2019",
-        "title": "SparkTraffic Review 2019",
-        "excerpt": "SparkTraffic service retrospective review from 2019.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">SparkTraffic 2019 Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Jan 2019",
-        "read_time": "8 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["sparktraffic", "2019", "history"],
-        "seo_description": "SparkTraffic 2019 review.",
-    },
-    {
-        "slug": "sparktraffic-review-2020",
-        "title": "SparkTraffic Review 2020",
-        "excerpt": "SparkTraffic service 2020 comprehensive review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">SparkTraffic 2020 Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Jan 2020",
-        "read_time": "7 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["sparktraffic", "2020"],
-        "seo_description": "SparkTraffic 2020 review.",
-    },
-    {
-        "slug": "sparktraffic-review-2021",
-        "title": "SparkTraffic Review 2021",
-        "excerpt": "SparkTraffic service 2021 review and analysis.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">SparkTraffic 2021 Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Jan 2021",
-        "read_time": "7 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["sparktraffic", "2021"],
-        "seo_description": "SparkTraffic 2021 review.",
-    },
-    {
-        "slug": "sparktraffic-review-2022",
-        "title": "SparkTraffic Review 2022",
-        "excerpt": "SparkTraffic service 2022 comprehensive review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">SparkTraffic 2022 Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Jan 2022",
-        "read_time": "8 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["sparktraffic", "2022"],
-        "seo_description": "SparkTraffic 2022 review.",
-    },
-    {
-        "slug": "sparktraffic-review-2023",
-        "title": "SparkTraffic Review 2023",
-        "excerpt": "SparkTraffic service 2023 review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">SparkTraffic 2023 Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Jan 2023",
-        "read_time": "7 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["sparktraffic", "2023"],
-        "seo_description": "SparkTraffic 2023 review.",
-    },
-    {
-        "slug": "sparktraffic-review-2024",
-        "title": "SparkTraffic Review 2024",
-        "excerpt": "SparkTraffic service2024 comprehensive review.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">SparkTraffic 2024 Review</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Jan 2024",
-        "read_time": "8 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["sparktraffic", "2024"],
-        "seo_description": "SparkTraffic 2024 review.",
-    },
-    {
-        "slug": "digital-traffic-evolution-sparktraffic-analysis",
-        "title": "Digital Traffic Evolution: SparkTraffic Analysis",
-        "excerpt": "Analysis of how digital traffic services have evolved over time.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Traffic Evolution Analysis</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Jul 15, 2024",
-        "read_time": "10 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Strategy",
-        "tags": ["traffic evolution", "analysis", "digital"],
-        "seo_description": "Digital traffic evolution analysis.",
-    },
-    {
-        "slug": "10-sneaky-ways-to-boost-ctr-manipulation",
-        "title": "10 Sneaky Ways to Boost CTR Manipulation",
-        "excerpt": "Discover covert strategies to improve your click-through rates and boost your SEO rankings.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">10 Sneaky Ways to Boost CTR</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Dec 1, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800",
-        "category": "SEO",
-        "tags": ["ctr", "seo", "manipulation"],
-        "seo_description": "Discover covert strategies to improve your click-through rates.",
-    },
-    {
-        "slug": "30-best-traffic-bots",
-        "title": "30 Best Traffic Bots for 2024",
-        "excerpt": "Comprehensive list of the top 30 traffic bots available today.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">30 Best Traffic Bots</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Nov 15, 2024",
-        "read_time": "12 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["traffic bots", "best", "2024"],
-        "seo_description": "Comprehensive list of the top 30 traffic bots available today.",
-    },
-    {
-        "slug": "5-mistakes-buy-website-traffic",
-        "title": "5 Mistakes to Avoid When Buying Website Traffic",
-        "excerpt": "Don't make these costly errors when purchasing traffic for your website.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">5 Mistakes Buying Traffic</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Nov 10, 2024",
-        "read_time": "5 min read",
-        "image": "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800",
-        "category": "Guides",
-        "tags": ["mistakes", "buying traffic", "guide"],
-        "seo_description": "Don't make these costly errors when purchasing traffic.",
-    },
-    {
-        "slug": "best-free-traffic-bot",
-        "title": "Best Free Traffic Bot: Top Free Solutions",
-        "excerpt": "Explore the best free traffic bot options available without spending a dime.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Best Free Traffic Bot</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Nov 5, 2024",
-        "read_time": "7 min read",
-        "image": "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=800",
-        "category": "Tools",
-        "tags": ["free", "traffic bot", "tools"],
-        "seo_description": "Explore the best free traffic bot options available.",
-    },
-    {
-        "slug": "buy-bulk-traffic",
-        "title": "How to Buy Bulk Traffic: Complete Guide",
-        "excerpt": "Everything you need to know about purchasing bulk traffic for your website.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Buy Bulk Traffic Guide</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Nov 1, 2024",
-        "read_time": "8 min read",
-        "image": "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800",
-        "category": "Guides",
-        "tags": ["bulk traffic", "buy", "guide"],
-        "seo_description": "Complete guide to buying bulk traffic for your website.",
-    },
-    {
-        "slug": "buy-seo-traffic",
-        "title": "Buy SEO Traffic: Strategies That Work",
-        "excerpt": "Learn how to buy SEO traffic that actually converts and improves rankings.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Buy SEO Traffic</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Oct 25, 2024",
-        "read_time": "7 min read",
-        "image": "https://images.unsplash.com/photo-1571786256017-aee7a0c009b6?w=800",
-        "category": "SEO",
-        "tags": ["seo", "traffic", "buy"],
-        "seo_description": "Learn how to buy SEO traffic that actually works.",
-    },
-    {
-        "slug": "comparison-sample",
-        "title": "Traffic Services Comparison Sample",
-        "excerpt": "Sample comparison between different traffic services.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Traffic Comparison</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Oct 20, 2024",
-        "read_time": "5 min read",
-        "image": "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800",
-        "category": "Comparison",
-        "tags": ["comparison", "sample"],
-        "seo_description": "Sample comparison between different traffic services.",
-    },
-    {
-        "slug": "generate-website-traffic-free",
-        "title": "How to Generate Website Traffic Free",
-        "excerpt": "Proven methods to generate free traffic to your website.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Generate Free Traffic</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Oct 15, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1432888622747-4eb9a8efeb07?w=800",
-        "category": "Guides",
-        "tags": ["free", "traffic", "generate"],
-        "seo_description": "Proven methods to generate free traffic to your website.",
-    },
-    {
-        "slug": "journal",
-        "title": "Traffic Journal: Daily Tips & Strategies",
-        "excerpt": "Daily journal with tips and strategies for traffic generation.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Traffic Journal</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Oct 10, 2024",
-        "read_time": "3 min read",
-        "image": "https://images.unsplash.com/photo-1455390582262-044cdead277a?w=800",
-        "category": "Blog",
-        "tags": ["journal", "tips", "daily"],
-        "seo_description": "Daily journal with tips and strategies for traffic generation.",
-    },
-    {
-        "slug": "learn-about-bot-traffic",
-        "title": "Learn About Bot Traffic: Complete Guide",
-        "excerpt": "Everything you need to know about bot traffic and how to use it effectively.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Learn About Bot Traffic</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Oct 5, 2024",
-        "read_time": "8 min read",
-        "image": "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800",
-        "category": "Guides",
-        "tags": ["bot traffic", "learn", "guide"],
-        "seo_description": "Complete guide to understanding bot traffic.",
-    },
-    {
-        "slug": "newsroom",
-        "title": "Traffic Newsroom: Latest Updates",
-        "excerpt": "Stay updated with the latest news in the traffic industry.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Traffic Newsroom</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Oct 1, 2024",
-        "read_time": "4 min read",
-        "image": "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800",
-        "category": "News",
-        "tags": ["news", "updates", "industry"],
-        "seo_description": "Latest updates from the traffic industry.",
-    },
-    {
-        "slug": "smm-panels",
-        "title": "SMM Panels: Social Media Marketing Guide",
-        "excerpt": "Everything about SMM panels and how they can boost your traffic.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">SMM Panels Guide</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Sep 25, 2024",
-        "read_time": "7 min read",
-        "image": "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=800",
-        "category": "Marketing",
-        "tags": ["smm", "panels", "social media"],
-        "seo_description": "Complete guide to SMM panels and social media marketing.",
-    },
-    {
-        "slug": "tips-tricks-utm",
-        "title": "Tips & Tricks: UTM Tracking Mastery",
-        "excerpt": "Master UTM tracking to measure your traffic sources effectively.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">UTM Tracking Tips</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Sep 20, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800",
-        "category": "Guides",
-        "tags": ["utm", "tracking", "tips"],
-        "seo_description": "Master UTM tracking to measure your traffic sources.",
-    },
-    {
-        "slug": "traffic-bot-comparisons",
-        "title": "Traffic Bot Comparisons: Find the Best",
-        "excerpt": "Detailed comparisons of top traffic bots in the market.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Traffic Bot Comparisons</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Sep 15, 2024",
-        "read_time": "10 min read",
-        "image": "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=800",
-        "category": "Comparison",
-        "tags": ["traffic bot", "comparison"],
-        "seo_description": "Detailed comparisons of top traffic bots.",
-    },
-    {
-        "slug": "traffic-bot-guides",
-        "title": "Traffic Bot Guides: Complete Tutorials",
-        "excerpt": "Step-by-step guides for using traffic bots effectively.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Traffic Bot Guides</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Sep 10, 2024",
-        "read_time": "8 min read",
-        "image": "https://images.unsplash.com/photo-1432888622747-4eb9a8efeb07?w=800",
-        "category": "Guides",
-        "tags": ["traffic bot", "guides", "tutorials"],
-        "seo_description": "Step-by-step guides for using traffic bots.",
-    },
-    {
-        "slug": "traffic-bot-reviews",
-        "title": "Traffic Bot Reviews: Honest Ratings",
-        "excerpt": "Honest reviews and ratings of the best traffic bots.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Traffic Bot Reviews</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Sep 5, 2024",
-        "read_time": "9 min read",
-        "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800",
-        "category": "Reviews",
-        "tags": ["traffic bot", "reviews"],
-        "seo_description": "Honest reviews and ratings of traffic bots.",
-    },
-    {
-        "slug": "traffic-bot-tips",
-        "title": "Traffic Bot Tips for Maximum Results",
-        "excerpt": "Pro tips to get the most out of your traffic bot campaigns.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Traffic Bot Tips</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Sep 1, 2024",
-        "read_time": "5 min read",
-        "image": "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800",
-        "category": "Tips",
-        "tags": ["traffic bot", "tips"],
-        "seo_description": "Pro tips for maximum traffic bot results.",
-    },
-    {
-        "slug": "trafficbot-vs-fiverr-15-keybenefits",
-        "title": "TrafficBot vs Fiverr: 15 Key Benefits",
-        "excerpt": "Compare TrafficBot with Fiverr services and discover 15 key benefits.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">TrafficBot vs Fiverr</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Aug 25, 2024",
-        "read_time": "7 min read",
-        "image": "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800",
-        "category": "Comparison",
-        "tags": ["trafficbot", "fiverr", "comparison"],
-        "seo_description": "Compare TrafficBot with Fiverr: 15 key benefits.",
-    },
-    {
-        "slug": "what-is-bot-traffic",
-        "title": "What is Bot Traffic? Complete Explanation",
-        "excerpt": "Understand what bot traffic is and how it affects your website.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">What is Bot Traffic?</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Aug 20, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800",
-        "category": "Guides",
-        "tags": ["bot traffic", "what is"],
-        "seo_description": "Complete explanation of what bot traffic is.",
-    },
-    {
-        "slug": "what-is-seo-traffic",
-        "title": "What is SEO Traffic? A Complete Guide",
-        "excerpt": "Learn everything about SEO traffic and how to generate it.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">What is SEO Traffic?</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Aug 15, 2024",
-        "read_time": "7 min read",
-        "image": "https://images.unsplash.com/photo-1571786256017-aee7a0c009b6?w=800",
-        "category": "SEO",
-        "tags": ["seo", "traffic", "what is"],
-        "seo_description": "Complete guide to SEO traffic.",
-    },
-    {
-        "slug": "where-to-buy-seo-traffic",
-        "title": "Where to Buy SEO Traffic: Top Sources",
-        "excerpt": "Discover the best places to buy high-quality SEO traffic.",
-        "content": """<div class="premium-article">
-      <div class="article-hero" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 60px 0; border-radius: 24px; margin-bottom: 40px; text-align: center; border: 1px solid #e5e7eb;">
-        <h1 style="color: #fff; font-size: 3rem; font-weight: 800;">Where to Buy SEO Traffic</h1>
-      </div>
-    </div>""",
-        "author": "Martin Freiwald",
-        "role": "Traffic Expert",
-        "date": "Aug 10, 2024",
-        "read_time": "6 min read",
-        "image": "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800",
-        "category": "Guides",
-        "tags": ["seo", "traffic", "buy"],
-        "seo_description": "Best places to buy high-quality SEO traffic.",
-    },
-]
-
-
-IMPORT_SECRET_KEY = "tc-blog-import-2025"
-
-
-@app.get("/import-blog-seed-data-v1")
-async def import_blog_articles(
-    secret: str = None,
-    db: Session = Depends(get_db),
-):
-    from fastapi.responses import JSONResponse
-
-    # Allow access via secret key for easy triggering
-    if secret != IMPORT_SECRET_KEY:
-        raise HTTPException(status_code=403, detail="Invalid secret key")
-
-    try:
-        db.query(models.BlogArticle).delete()
-        db.commit()
-
-        imported_count = 0
-        for article_data in BLOG_ARTICLES_SEED_DATA:
-            article = models.BlogArticle(
-                slug=article_data["slug"],
-                title=article_data["title"],
-                excerpt=article_data["excerpt"],
-                content=article_data["content"],
-                author=article_data["author"],
-                role=article_data["role"],
-                date=article_data["date"],
-                read_time=article_data["read_time"],
-                image=article_data["image"],
-                category=article_data["category"],
-                tags=article_data["tags"],
-                seo_description=article_data["seo_description"],
-                is_published=True,
-            )
-            db.add(article)
-            imported_count += 1
-
-        db.commit()
-        return JSONResponse(
-            content={
-                "success": True,
-                "imported": imported_count,
-                "message": f"Successfully imported {imported_count} blog articles",
-            },
-            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
-        )
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 ADMIN_RESET_SECRET = "tc-admin-reset-2025"
 
 
@@ -10704,28 +8058,6 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             db.commit()
 
     return {"received": True}
-
-
-# --- Blog API ---
-
-
-class BlogArticleMetadata(BaseModel):
-    id: int
-    slug: str
-    title: str
-    excerpt: Optional[str] = None
-    author: str
-    role: str
-    date: str
-    readTime: Optional[str] = None
-    image: Optional[str] = None
-    category: str
-    tags: List[str] = []
-    seoDescription: Optional[str] = None
-
-
-class BlogArticleFull(BlogArticleMetadata):
-    content: str
 
 
 class ProxyProviderConfig(BaseModel):
@@ -11310,269 +8642,6 @@ async def get_proxy_log_stats(
         "success_rate": round((successful / total * 100) if total > 0 else 0, 1),
         "avg_latency_ms": round(avg_latency, 0),
     }
-
-
-@app.get("/api/blog/articles", response_model=List[BlogArticleMetadata])
-def get_blog_articles(db: Session = Depends(get_db)):
-    articles = (
-        db.query(models.BlogArticle)
-        .filter(models.BlogArticle.is_published == True)
-        .order_by(models.BlogArticle.id.desc())
-        .all()
-    )
-    return [
-        BlogArticleMetadata(
-            id=a.id,
-            slug=a.slug,
-            title=a.title,
-            excerpt=a.excerpt,
-            author=a.author,
-            role=a.role,
-            date=a.date,
-            readTime=a.read_time,
-            image=a.image,
-            category=a.category,
-            tags=a.tags if isinstance(a.tags, list) else [],
-            seoDescription=a.seo_description,
-        )
-        for a in articles
-    ]
-
-
-@app.get("/api/blog/articles/{slug}", response_model=BlogArticleFull)
-def get_blog_article(slug: str, db: Session = Depends(get_db)):
-    article = (
-        db.query(models.BlogArticle)
-        .filter(
-            models.BlogArticle.slug == slug, models.BlogArticle.is_published == True
-        )
-        .first()
-    )
-    if not article:
-        raise HTTPException(status_code=404, detail="Article not found")
-
-    return BlogArticleFull(
-        id=article.id,
-        slug=article.slug,
-        title=article.title,
-        excerpt=article.excerpt,
-        content=article.content,
-        author=article.author,
-        role=article.role,
-        date=article.date,
-        readTime=article.read_time,
-        image=article.image,
-        category=article.category,
-        tags=article.tags if isinstance(article.tags, list) else [],
-        seoDescription=article.seo_description,
-    )
-
-
-# --- Internal API Endpoints for Workers ---
-
-INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "dev-internal-key-change-in-prod")
-
-
-def verify_internal_api_key(request: Request):
-    api_key = request.headers.get("X-Internal-API-Key")
-    if api_key != INTERNAL_API_KEY:
-        raise HTTPException(status_code=403, detail="Invalid internal API key")
-    return True
-
-
-class InternalProjectConfig(BaseModel):
-    id: str
-    name: str
-    status: str
-    url: str
-    daily_limit: int
-    total_target: int
-    total_hits: int
-    hits_today: int
-    settings: Dict[str, Any]
-    plan_type: str
-
-
-class InternalTrafficLog(BaseModel):
-    project_id: str
-    url: str
-    event_type: str
-    status: str
-    proxy_session_id: Optional[str] = None
-
-
-class InternalProjectStats(BaseModel):
-    project_id: str
-    hits_increment: int = 1
-
-
-class InternalProxySessionRequest(BaseModel):
-    country_code: Optional[str] = None
-    country_name: Optional[str] = None
-    state: Optional[str] = None
-    city: Optional[str] = None
-
-
-class InternalProxySessionResponse(BaseModel):
-    session_id: str
-    proxy_url: str
-    country: Optional[str]
-    country_code: Optional[str]
-    state: Optional[str]
-    city: Optional[str]
-    ip_address: Optional[str]
-    is_active: bool
-
-
-@app.get("/internal/project/{project_id}", response_model=InternalProjectConfig)
-def internal_get_project(
-    project_id: str,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    verify_internal_api_key(request)
-    project = db.query(models.Project).filter(models.Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    settings = project.settings or {}
-    return InternalProjectConfig(
-        id=project.id,
-        name=project.name,
-        status=project.status,
-        url=settings.get("url", ""),
-        daily_limit=project.daily_limit,
-        total_target=project.total_target,
-        total_hits=project.total_hits,
-        hits_today=project.hits_today,
-        settings=settings,
-        plan_type=project.plan_type,
-    )
-
-
-@app.post("/internal/traffic-log")
-def internal_traffic_log(
-    data: InternalTrafficLog,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    verify_internal_api_key(request)
-    try:
-        log_entry = models.TrafficLog(
-            project_id=data.project_id,
-            url=data.url,
-            event_type=data.event_type,
-            status=data.status,
-            proxy_session_id=data.proxy_session_id,
-        )
-        db.add(log_entry)
-        db.commit()
-        return {"status": "ok"}
-    except Exception as e:
-        logger.error(f"Failed to log traffic: {e}")
-        return {"status": "error", "message": str(e)}
-
-
-@app.post("/internal/project-stats")
-def internal_update_project_stats(
-    data: InternalProjectStats,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    verify_internal_api_key(request)
-    project = (
-        db.query(models.Project).filter(models.Project.id == data.project_id).first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    project.total_hits = (project.total_hits or 0) + data.hits_increment
-    project.hits_today = (project.hits_today or 0) + data.hits_increment
-
-    user = db.query(models.User).filter(models.User.id == project.user_id).first()
-    if user and project.plan_type:
-        if project.plan_type == "economy":
-            user.balance_economy = max(
-                0, (user.balance_economy or 0) - data.hits_increment
-            )
-        elif project.plan_type == "professional":
-            user.balance_professional = max(
-                0, (user.balance_professional or 0) - data.hits_increment
-            )
-        elif project.plan_type == "expert":
-            user.balance_expert = max(
-                0, (user.balance_expert or 0) - data.hits_increment
-            )
-
-    db.commit()
-    return {"status": "ok", "total_hits": project.total_hits}
-
-
-@app.post("/internal/proxy-session", response_model=InternalProxySessionResponse)
-async def internal_get_proxy_session(
-    data: InternalProxySessionRequest,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    verify_internal_api_key(request)
-    from proxy_service import get_or_create_session
-
-    proxy_session = await get_or_create_session(
-        db=db,
-        country_code=data.country_code,
-        country_name=data.country_name,
-        state=data.state,
-        city=data.city,
-    )
-
-    if not proxy_session:
-        raise HTTPException(status_code=503, detail="No proxy session available")
-
-    return InternalProxySessionResponse(
-        session_id=proxy_session.session_id,
-        proxy_url=proxy_session.proxy_url,
-        country=proxy_session.country,
-        country_code=proxy_session.country_code,
-        state=proxy_session.state,
-        city=proxy_session.city,
-        ip_address=proxy_session.ip_address,
-        is_active=proxy_session.is_active,
-    )
-
-
-@app.get("/internal/proxy-provider")
-async def internal_get_proxy_provider(
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    verify_internal_api_key(request)
-    from proxy_service import get_active_provider
-
-    provider = await get_active_provider(db)
-    if not provider:
-        return {"active": False}
-    return {
-        "active": provider.is_active,
-        "name": provider.name,
-        "api_key": provider.api_key[:8] + "..." if provider.api_key else None,
-    }
-
-
-@app.get("/internal/custom-proxies")
-def internal_get_custom_proxies(
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    verify_internal_api_key(request)
-    proxies = db.query(models.Proxy).filter(models.Proxy.is_active == True).all()
-    return [
-        {
-            "url": p.url,
-            "country": p.country,
-            "state": p.state,
-            "city": p.city,
-        }
-        for p in proxies
-    ]
 
 
 # --- SPA Catch-All Route (must be last) ---

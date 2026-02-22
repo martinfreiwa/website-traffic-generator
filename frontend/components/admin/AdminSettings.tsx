@@ -1,8 +1,7 @@
-
 import React, { useState } from 'react';
 import { SystemSettings } from '../../types';
 import { db } from '../../services/db';
-import { Save, Key } from 'lucide-react';
+import { Save, Key, Shield } from 'lucide-react';
 
 interface AdminSettingsProps {
     initialSettings: SystemSettings;
@@ -72,6 +71,21 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ initialSettings, onSave }
                     >
                         <div className={`w-4 h-4 bg-white shadow-sm transform transition-transform duration-300 ${settings.allowRegistrations ? 'translate-x-6' : 'translate-x-0'}`}></div>
                     </button>
+                </div>
+                <div className="pt-4 border-t border-gray-100">
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-2 flex items-center gap-1">
+                        <Shield size={12} /> Blocked Domains (Free Tier)
+                    </label>
+                    <textarea
+                        value={(settings.blockedDomainsForFree || []).join('\n')}
+                        onChange={(e) => setSettings({
+                            ...settings,
+                            blockedDomainsForFree: e.target.value.split('\n').map(d => d.trim()).filter(Boolean)
+                        })}
+                        className="w-full bg-[#f9fafb] border border-gray-200 p-3 text-sm font-mono text-gray-900 focus:border-[#ff4d00] outline-none h-32 resize-y"
+                        placeholder="competitor1.com&#10;spammy-site.net&#10;malware-domain.xyz"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">One domain per line. These domains will be blocked for free tier users (in addition to URL shorteners, free subdomain services, and rotating link services which are blocked by default).</p>
                 </div>
                 <div className="pt-4 border-t border-gray-100">
                         <button 

@@ -7,6 +7,7 @@ import time
 import hashlib
 import aiohttp
 from typing import Dict, Any, Optional, List
+import threading
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -68,6 +69,8 @@ ORGANIC_REFERRERS = {
     "DuckDuckGo": "https://duckduckgo.com/?q=",
 }
 
+MAX_CONCURRENT_VISITORS = int(os.getenv("MAX_CONCURRENT_VISITORS", "10"))
+
 
 class TaskProcessor:
     def __init__(self):
@@ -75,6 +78,7 @@ class TaskProcessor:
         self.api_client = APIClient(api_url)
         self.cid_pool: Dict[str, List[str]] = {}
         self.max_cid_pool = 100
+        self._cid_lock = threading.Lock()
 
     async def process(self, task_data: Dict[str, Any]) -> bool:
         try:
@@ -107,7 +111,7 @@ class TaskProcessor:
                 )
                 return True
 
-            await self._run_traffic(project, visitor_count)
+            await self._run_traffic_concurrent(project, visitor_count)
 
             logger.info(f"Task {task_id} completed successfully")
             return True
@@ -116,7 +120,9 @@ class TaskProcessor:
             logger.error(f"Error processing task: {e}", exc_info=True)
             return False
 
-    async def _run_traffic(self, project: Dict[str, Any], visitor_count: int):
+    async def _run_traffic_concurrent(
+        self, project: Dict[str, Any], visitor_count: int
+    ):
         settings = project.get("settings", {}) or {}
         proxy_mode = settings.get("proxyMode", "auto")
         geo_targets = settings.get("geoTargets", [])
@@ -134,69 +140,83 @@ class TaskProcessor:
             custom_proxies = await self.api_client.get_custom_proxies()
 
         logger.info(
-            f"Engine dispatching {visitor_count} visitors for {project.get('name')} (proxy_mode={proxy_mode})"
+            f"Engine dispatching {visitor_count} visitors CONCURRENTLY for {project.get('name')} (proxy_mode={proxy_mode}, max_concurrent={MAX_CONCURRENT_VISITORS})"
         )
 
         async with aiohttp.ClientSession() as session:
-            proxy_failures = 0
-            max_proxy_failures = 5
             successful_hits = 0
+            proxy_failures = 0
+            max_proxy_failures = 10
+            semaphore = asyncio.Semaphore(MAX_CONCURRENT_VISITORS)
+            hits_lock = threading.Lock()
+            proxy_failures_lock = threading.Lock()
 
-            for i in range(visitor_count):
-                await asyncio.sleep(random.uniform(0.5, 2.0))
+            async def process_single_visitor(idx: int):
+                nonlocal successful_hits, proxy_failures
 
-                proxy_url = None
-                if use_geonode:
-                    selected_geo = None
-                    if geo_targets:
+                async with semaphore:
+                    await asyncio.sleep(random.uniform(0.1, 0.5))
+
+                    proxy_url = None
+                    if use_geonode:
+                        selected_geo = None
+                        if geo_targets:
+                            try:
+                                weights = [g.get("percent", 1) for g in geo_targets]
+                                selected_geo = random.choices(
+                                    geo_targets, weights=weights, k=1
+                                )[0]
+                            except Exception:
+                                selected_geo = (
+                                    random.choice(geo_targets) if geo_targets else None
+                                )
+
+                        country_code = None
+                        country_name = None
+                        if selected_geo:
+                            country_code = selected_geo.get(
+                                "countryCode"
+                            ) or selected_geo.get("country")
+                            country_name = selected_geo.get("country")
+
                         try:
-                            weights = [g.get("percent", 1) for g in geo_targets]
-                            selected_geo = random.choices(
-                                geo_targets, weights=weights, k=1
-                            )[0]
-                        except Exception:
-                            selected_geo = (
-                                random.choice(geo_targets) if geo_targets else None
+                            proxy_session = await self.api_client.get_proxy_session(
+                                country_code=country_code,
+                                country_name=country_name,
                             )
 
-                    country_code = None
-                    country_name = None
-                    if selected_geo:
-                        country_code = selected_geo.get(
-                            "countryCode"
-                        ) or selected_geo.get("country")
-                        country_name = selected_geo.get("country")
+                            if proxy_session:
+                                proxy_url = proxy_session.get("proxy_url")
+                            else:
+                                logger.debug(
+                                    f"Proxy session unavailable, continuing without proxy"
+                                )
+                        except Exception as e:
+                            logger.warning(
+                                f"Proxy session error: {e}, continuing without proxy"
+                            )
 
-                    proxy_session = await self.api_client.get_proxy_session(
-                        country_code=country_code,
-                        country_name=country_name,
+                    elif custom_proxies:
+                        proxy = random.choice(custom_proxies)
+                        proxy_url = proxy.get("url")
+
+                    success = await self._send_visitor(
+                        session=session,
+                        project=project,
+                        proxy_url=proxy_url,
+                        settings=settings,
                     )
 
-                    if not proxy_session:
-                        proxy_failures += 1
-                        logger.warning(
-                            f"Proxy session failed ({proxy_failures}/{max_proxy_failures})"
-                        )
-                        if proxy_failures >= max_proxy_failures:
-                            logger.error("Too many proxy failures, stopping")
-                            break
-                        continue
+                    if success:
+                        with hits_lock:
+                            successful_hits += 1
+                        try:
+                            await self.api_client.update_project_stats(project_id, 1)
+                        except Exception as e:
+                            logger.warning(f"Failed to update stats: {e}")
 
-                    proxy_url = proxy_session.get("proxy_url")
-                elif custom_proxies:
-                    proxy = random.choice(custom_proxies)
-                    proxy_url = proxy.get("url")
-
-                success = await self._send_visitor(
-                    session=session,
-                    project=project,
-                    proxy_url=proxy_url,
-                    settings=settings,
-                )
-
-                if success:
-                    successful_hits += 1
-                    await self.api_client.update_project_stats(project_id, 1)
+            tasks = [process_single_visitor(i) for i in range(visitor_count)]
+            await asyncio.gather(*tasks, return_exceptions=True)
 
             logger.info(f"Completed: {successful_hits}/{visitor_count} successful hits")
 
@@ -209,7 +229,8 @@ class TaskProcessor:
     ) -> bool:
         project_id = project.get("id")
         url = project.get("url")
-        tid = settings.get("tid") or settings.get("ga4Tid")
+        settings = project.get("settings", {}) or {}
+        tid = settings.get("tid") or settings.get("ga4Tid") or settings.get("gaId")
 
         if not tid:
             logger.warning(f"Project {project_id}: No GA4 TID configured")
@@ -283,7 +304,7 @@ class TaskProcessor:
 
             for page in additional_pages:
                 await asyncio.sleep(
-                    random.uniform(time_on_page * 0.5, time_on_page * 1.5)
+                    random.uniform(time_on_page * 0.3, time_on_page * 0.7)
                 )
 
                 page_url = f"{url.rstrip('/')}{page}" if page.startswith("/") else page
@@ -363,25 +384,31 @@ class TaskProcessor:
                 "https://www.google-analytics.com/g/collect",
                 params=params,
                 headers=headers,
-                timeout=aiohttp.ClientTimeout(total=15),
+                timeout=aiohttp.ClientTimeout(total=10),
                 **proxy_kwargs,
             ) as response:
                 status = "success" if response.status in [200, 204, 302] else "failed"
+                try:
+                    await self.api_client.log_traffic(
+                        project_id=project_id,
+                        url=url,
+                        event_type="page_view",
+                        status=status,
+                    )
+                except Exception:
+                    pass
+                return status == "success"
+        except Exception as e:
+            logger.debug(f"GA hit error: {e}")
+            try:
                 await self.api_client.log_traffic(
                     project_id=project_id,
                     url=url,
                     event_type="page_view",
-                    status=status,
+                    status="error",
                 )
-                return status == "success"
-        except Exception as e:
-            logger.error(f"GA hit error: {e}")
-            await self.api_client.log_traffic(
-                project_id=project_id,
-                url=url,
-                event_type="page_view",
-                status="error",
-            )
+            except Exception:
+                pass
             return False
 
     def _select_device_type(self, settings: Dict[str, Any]) -> str:
@@ -420,24 +447,25 @@ class TaskProcessor:
             "returningVisitorPct", 0
         )
 
-        if project_id not in self.cid_pool:
-            self.cid_pool[project_id] = []
+        with self._cid_lock:
+            if project_id not in self.cid_pool:
+                self.cid_pool[project_id] = []
 
-        is_returning = (
-            random.randint(1, 100) <= returning_pct and self.cid_pool[project_id]
-        )
+            is_returning = (
+                random.randint(1, 100) <= returning_pct and self.cid_pool[project_id]
+            )
 
-        if is_returning:
-            return random.choice(self.cid_pool[project_id])
+            if is_returning:
+                return random.choice(self.cid_pool[project_id])
 
-        cid = hashlib.md5(
-            f"{project_id}{time.time()}{random.random()}".encode()
-        ).hexdigest()[:16]
+            cid = hashlib.md5(
+                f"{project_id}{time.time()}{random.random()}".encode()
+            ).hexdigest()[:16]
 
-        if len(self.cid_pool[project_id]) < self.max_cid_pool:
-            self.cid_pool[project_id].append(cid)
+            if len(self.cid_pool[project_id]) < self.max_cid_pool:
+                self.cid_pool[project_id].append(cid)
 
-        return cid
+            return cid
 
     def _generate_sid(self) -> str:
         return str(int(time.time()))

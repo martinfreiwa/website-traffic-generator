@@ -469,7 +469,7 @@ class GAEmuEngine:
 
         try:
             async with session.get(
-                base_url_ga, params=params, headers=headers, timeout=5, proxy=proxy
+                base_url_ga, params=params, headers=headers, timeout=25, proxy=proxy
             ) as response:
                 status = "success" if response.status in [200, 204] else "failure"
 
@@ -505,7 +505,7 @@ class GAEmuEngine:
 
                 return status == "success"
         except Exception as e:
-            logger.error(f"GA Hit error: {e}")
+            logger.error(f"GA Hit error in send_hit: {type(e).__name__} - {str(e)}")
             if project_id:
                 await self._db_log_hit_async(
                     project_id,
